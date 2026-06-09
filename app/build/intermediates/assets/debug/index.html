@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>클럽 비용 정산기 - 실시간 모바일 최적화 정산 시스템</title>
+    <meta name="description" content="동아리/클럽 행사 비용의 실시간 정산 및 회비 규정 자동 계산, 한도액 검증 및 자동 경고 알림 서비스">
+
+    <!-- PWA -->
+    <link rel="manifest" href="./manifest.json">
+    <meta name="theme-color" content="#8b5cf6">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="정산기">
+
+    <!-- Premium Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+    <!-- Vanilla CSS stylesheet -->
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- 업데이트 알림 배너 -->
+    <div id="update-banner" class="update-banner hidden">
+        <span>🔄 새 버전이 있습니다!</span>
+        <button id="update-reload-btn">지금 업데이트</button>
+        <button id="update-dismiss-btn" aria-label="닫기">✕</button>
+    </div>
+
+    <div class="background-decor">
+        <div class="blur-circle circle-1"></div>
+        <div class="blur-circle circle-2"></div>
+    </div>
+    
+    <main class="app-container">
+        <!-- App Header -->
+        <header class="app-header">
+            <div class="logo-area">
+                <span class="logo-icon">📊</span>
+                <h1>클럽 비용 정산기</h1>
+            </div>
+            <div class="club-name-wrapper">
+                <input type="text" id="club-name-input" class="club-name-input" placeholder="클럽명을 입력하세요" maxlength="40" autocomplete="off">
+            </div>
+            <p class="subtitle">엑셀 정산 양식의 핵심 계산 및 한도 검증을 모바일 웹으로 단순화</p>
+        </header>
+
+        <!-- Tab Navigation -->
+        <nav class="tab-nav">
+            <button class="tab-btn active" data-tab="tab-settlement">📊 비용 정산</button>
+            <button class="tab-btn" data-tab="tab-attendees">👥 현재 참석자 (<span id="attendee-badge-count">0</span>명)</button>
+            <button class="tab-btn" data-tab="tab-directory">🗂️ 누적 사원 명부 (<span id="directory-badge-count">0</span>명)</button>
+            <button class="tab-btn" data-tab="tab-history">📋 정산 이력</button>
+        </nav>
+
+        <!-- Tab Content 1: Settlement Calculator -->
+        <div id="tab-settlement" class="tab-pane active">
+            <div class="layout-grid">
+                <!-- Left Panel: Inputs -->
+                <section class="panel-left">
+                    <!-- 1. Attendance Info Card -->
+                    <div class="card" id="attendance-card">
+                        <div class="card-header">
+                            <span class="card-icon">👥</span>
+                            <h2>참석자 및 기존 누적 정보</h2>
+                            <label for="event-photo-input" class="btn-secondary" style="margin-left:auto; cursor:pointer; padding:0.35rem 0.75rem; font-size:0.8rem; border-radius:8px; display:inline-flex; align-items:center; gap:0.3rem;">📷 참석자 사진 첨부</label>
+                            <input type="file" id="event-photo-input" accept="image/*" style="display:none;">
+                        </div>
+                        <div id="event-photo-preview" class="hidden" style="margin-bottom:0.75rem; border-radius:12px; overflow:hidden; max-height:180px; position:relative;">
+                            <img id="event-photo-img" src="" alt="행사 사진" style="width:100%; object-fit:cover; max-height:180px; display:block; border-radius:12px;">
+                            <button id="delete-event-photo-btn" style="position:absolute; top:6px; right:6px; background:rgba(239,68,68,0.9); border:none; color:white; border-radius:50%; width:24px; height:24px; font-size:14px; cursor:pointer; display:flex; align-items:center; justify-content:center; font-weight:bold;">&times;</button>
+                        </div>
+                        <div class="card-body">
+                            <div class="input-group">
+                                <label for="member-count-input">정회원 참석자 수 (명)</label>
+                                <input type="number" id="member-count-input" min="0" placeholder="예: 20" value="0" readonly class="readonly-input">
+                                <small class="input-hint">💡 '참석자 명부' 탭에서 인원을 관리하면 자동 반영됩니다.</small>
+                            </div>
+                            <div class="input-group">
+                                <label for="prev-prize-input">기존 상품비 누적액 (원)</label>
+                                <input type="number" id="prev-prize-input" min="0" step="1000" placeholder="예: 450000" value="0">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 2. Add Expense Item Card -->
+                    <div class="card" id="add-expense-card">
+                        <div class="card-header">
+                            <span class="card-icon">➕</span>
+                            <h2>비용 항목 추가</h2>
+                        </div>
+                        <div class="card-body">
+                            <form id="expense-form" onsubmit="return false;">
+                                <div class="input-group">
+                                    <label for="expense-desc-input">내역 (항목명)</label>
+                                    <input type="text" id="expense-desc-input" placeholder="예: 저녁 식대, 대관료 등" required>
+                                </div>
+                                <div class="input-row">
+                                    <div class="input-group flex-2">
+                                        <label for="expense-amount-input">금액 (원)</label>
+                                        <input type="number" id="expense-amount-input" min="0" step="100" placeholder="예: 150000" required>
+                                    </div>
+                                    <div class="input-group flex-3">
+                                        <label for="expense-category-select">구분 (카테고리)</label>
+                                        <select id="expense-category-select">
+                                            <option value="EVENT">행사비</option>
+                                            <option value="FACILITY">시설 및 장비 이용료</option>
+                                            <option value="PRIZE">상품</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="input-group">
+                                    <label for="expense-receipt-input">영수증 첨부 (이미지 파일)</label>
+                                    <input type="file" id="expense-receipt-input" accept="image/*">
+                                    <div style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap;">
+                                        <small id="receipt-preview-status" class="input-hint hidden" style="color: var(--color-secondary); font-weight: 500;">✓ 영수증 대기 완료</small>
+                                        <button type="button" id="delete-receipt-btn" class="btn-text-danger hidden" style="font-size:0.78rem; padding:0.15rem 0.5rem;">× 영수증 삭제</button>
+                                    </div>
+                                </div>
+                                <div class="form-actions">
+                                    <button type="submit" id="add-expense-btn" class="btn-primary">
+                                        <span class="btn-icon">✨</span> 항목 추가
+                                    </button>
+                                    <button type="button" id="cancel-edit-btn" class="btn-secondary hidden">
+                                        수정 취소
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Right Panel: List & Results -->
+                <section class="panel-right">
+                    <!-- 3. Expenses List Card -->
+                    <div class="card" id="list-card">
+                        <div class="card-header">
+                            <div class="header-split">
+                                <div class="header-left">
+                                    <span class="card-icon">📋</span>
+                                    <h2>비용 목록</h2>
+                                </div>
+                                <button id="clear-all-btn" class="btn-text-danger">모두 삭제</button>
+                            </div>
+                        </div>
+                        <div class="card-body scroll-y">
+                            <div id="expenses-list" class="expense-items-container">
+                                <!-- Dynamically populated rows -->
+                                <div class="empty-state">
+                                    <span class="empty-icon">💨</span>
+                                    <p>등록된 비용 항목이 없습니다. 항목을 추가해 주세요.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 4. Calculation Results Card -->
+                    <div class="card result-card" id="result-card">
+                        <div class="card-header">
+                            <div class="header-split">
+                                <div class="header-left">
+                                    <span class="card-icon">⚡</span>
+                                    <h2>자동 정산 결과</h2>
+                                </div>
+                                <button id="toggle-settings-btn" class="btn-icon-only" title="정산 구간 설정">⚙️</button>
+                            </div>
+                        </div>
+                        
+                        <!-- Collapsible Settings Panel -->
+                        <div id="settings-panel" class="settings-panel hidden">
+                            <h3 class="settings-title">⚙️ 정산 구간 및 비율 설정</h3>
+                            <div class="settings-grid">
+                                <div class="input-group">
+                                    <label for="setting-limit1">가. 지원 한도 (원 이하 자부담 0%)</label>
+                                    <input type="number" id="setting-limit1" min="0" step="1000" value="30000">
+                                </div>
+                                <div class="settings-row">
+                                    <div class="input-group">
+                                        <label for="setting-limit2">나. 구간 한도 (원)</label>
+                                        <input type="number" id="setting-limit2" min="0" step="1000" value="60000">
+                                    </div>
+                                    <div class="input-group">
+                                        <label for="setting-rate2">나. 자부담 비율 (%)</label>
+                                        <input type="number" id="setting-rate2" min="0" max="100" step="1" value="20">
+                                    </div>
+                                </div>
+                                <div class="settings-row">
+                                    <div class="input-group">
+                                        <label for="setting-limit3">다. 구간 한도 (원)</label>
+                                        <input type="number" id="setting-limit3" min="0" step="1000" value="120000">
+                                    </div>
+                                    <div class="input-group">
+                                        <label for="setting-rate3">다. 자부담 비율 (%)</label>
+                                        <input type="number" id="setting-rate3" min="0" max="100" step="1" value="40">
+                                    </div>
+                                </div>
+                                <div class="input-group">
+                                    <label for="setting-deduction4">라. 초과 시 자부담 공제액 (원)</label>
+                                    <input type="number" id="setting-deduction4" min="0" step="1000" value="85000">
+                                </div>
+                                <div class="divider"></div>
+                                <div class="input-group">
+                                    <label for="setting-email">📤 수신 이메일 주소 (정산서 제출용)</label>
+                                    <input type="email" id="setting-email" placeholder="example@email.com" value="finance@club.com">
+                                </div>
+                                <div class="divider"></div>
+                                <p class="settings-title" style="font-size:0.88rem; margin-bottom:0.1rem;">💰 연간 예산 관리</p>
+                                <div class="input-group">
+                                    <label for="setting-annual-budget">올해 클럽 지원 총예산 (원)</label>
+                                    <input type="number" id="setting-annual-budget" min="0" step="10000" value="0">
+                                </div>
+                                <div class="input-group">
+                                    <label for="setting-used-budget">현재까지 사용한 금액 (원)</label>
+                                    <input type="number" id="setting-used-budget" min="0" step="1000" value="0">
+                                </div>
+                                <div style="display:flex; justify-content:space-between; align-items:center; padding:0.35rem 0 0;">
+                                    <span style="font-size:0.82rem; color:var(--text-secondary);">→ 현재 잔여 예산</span>
+                                    <strong id="setting-remaining-display" style="font-size:0.95rem; color:var(--color-secondary);">미설정</strong>
+                                </div>
+                            </div>
+                            <div class="settings-actions">
+                                <button id="save-settings-btn" class="btn-primary-sm">설정 저장</button>
+                                <button id="reset-settings-btn" class="btn-text">기본값 복원</button>
+                            </div>
+                            <div class="divider"></div>
+                        </div>
+                        <div class="card-body">
+                            <div class="result-summary">
+                                <div class="summary-item main">
+                                    <span class="summary-label">최종 지원금 (지원 한도 내)</span>
+                                    <span class="summary-value highlight" id="result-final-support">0원</span>
+                                </div>
+                                <div class="summary-item" style="flex-wrap: wrap; gap: 0.4rem;">
+                                    <span class="summary-label">총 자부담 금액 (수정 가능)</span>
+                                    <div style="display: inline-flex; align-items: center; gap: 0.4rem;">
+                                        <input type="number" id="result-total-self-pay-input" style="width: 130px; padding: 0.35rem 0.5rem; text-align: right; font-weight: 600; font-size: 1rem; border-radius: 8px; background: rgba(15, 23, 42, 0.5); border: 1px solid var(--card-border); color: var(--text-primary);" placeholder="0" />
+                                        <span style="font-size: 0.95rem; font-weight: 600; color: var(--text-primary);">원</span>
+                                    </div>
+                                </div>
+                                <div class="summary-item">
+                                    <span class="summary-label">└ 인당 자부담 비용</span>
+                                    <span class="summary-value" id="result-per-person-self-pay">0원</span>
+                                </div>
+                                <div class="summary-item">
+                                    <span class="summary-label">자부담 비율</span>
+                                    <span class="summary-value" id="result-self-pay-ratio">0.0%</span>
+                                </div>
+                            </div>
+                            
+                            <div class="divider"></div>
+
+                            <div class="result-details">
+                                <div class="detail-row">
+                                    <span>총 소요 비용</span>
+                                    <strong id="result-total-cost">0원</strong>
+                                </div>
+                                <div class="detail-row sub">
+                                    <span>└ 행사비 총합</span>
+                                    <span id="result-event-cost">0원</span>
+                                </div>
+                                <div class="detail-row sub">
+                                    <span>└ 시설 및 장비 이용료</span>
+                                    <span id="result-facility-cost">0원</span>
+                                </div>
+                                <div class="detail-row sub">
+                                    <span>└ 상품비 총합</span>
+                                    <span id="result-prize-cost">0원</span>
+                                </div>
+                                <div class="detail-row sub-highlight">
+                                    <span>└ 인당 행사비 (행사비 / 참석자)</span>
+                                    <span id="result-per-person-event-cost">0원</span>
+                                </div>
+                            </div>
+
+                            <div id="budget-result-section" class="hidden">
+                                <div class="divider"></div>
+                                <div class="result-details">
+                                    <div class="detail-row">
+                                        <span>이전 잔여 예산</span>
+                                        <strong id="result-prev-remaining">-</strong>
+                                    </div>
+                                    <div class="detail-row sub">
+                                        <span>└ 이번 최종 지원금 (-)</span>
+                                        <span id="result-this-support-sub">0원</span>
+                                    </div>
+                                    <div class="detail-row sub-highlight">
+                                        <span>└ 이후 남은 잔여 금액</span>
+                                        <strong id="result-after-remaining">-</strong>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="divider"></div>
+                            <button id="send-email-btn" class="btn-primary" style="width: 100%; margin-top: 0.5rem;">
+                                <span class="btn-icon">📧</span> 이메일 정산서 작성
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 5. Warnings Card (Hidden by default, shown dynamically) -->
+                    <div class="card warning-card hidden" id="warnings-card">
+                        <div class="card-header">
+                            <span class="card-icon">⚠️</span>
+                            <h2>주의사항 및 한도 경고</h2>
+                        </div>
+                        <div class="card-body">
+                            <ul id="warnings-list" class="warnings-list-el">
+                                <!-- Dynamically populated warnings -->
+                            </ul>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </div>
+
+        <!-- Tab Content 2: Attendee Management -->
+        <div id="tab-attendees" class="tab-pane hidden">
+            <div class="layout-grid">
+                <!-- Left Panel: Add Attendee Form -->
+                <section class="panel-left">
+                    <div class="card" id="add-attendee-card">
+                        <div class="card-header">
+                            <span class="card-icon">👤</span>
+                            <h2>참석자 추가</h2>
+                        </div>
+                        <div class="card-body">
+                            <form id="attendee-form" onsubmit="return false;">
+                                <div class="input-group">
+                                    <label for="attendee-name-input">이름</label>
+                                    <input type="text" id="attendee-name-input" list="member-suggestions" placeholder="예: 홍길동" required autocomplete="off">
+                                    <datalist id="member-suggestions">
+                                        <!-- Dynamically populated from directory -->
+                                    </datalist>
+                                </div>
+                                <div class="input-group">
+                                    <label for="attendee-id-input">사번</label>
+                                    <input type="text" id="attendee-id-input" placeholder="예: 12345" required>
+                                </div>
+                                <div class="form-actions">
+                                    <button type="submit" id="add-attendee-btn" class="btn-primary" style="flex: 1;">
+                                        <span class="btn-icon">👥</span> 참석 추가
+                                    </button>
+                                    <button type="button" id="cancel-edit-attendee-btn" class="btn-secondary hidden" style="flex: 1;">
+                                        수정 취소
+                                    </button>
+                                </div>
+                                <div id="attendee-error-msg" class="form-error-msg hidden"></div>
+                            </form>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Right Panel: Attendee List -->
+                <section class="panel-right">
+                    <div class="card" id="attendee-list-card">
+                        <div class="card-header">
+                            <div class="header-split">
+                                <div class="header-left">
+                                    <span class="card-icon">👥</span>
+                                    <h2>현재 참석자 명단 (<span id="attendee-list-count">0</span>명)</h2>
+                                </div>
+                                <button id="clear-attendees-btn" class="btn-text-danger">전체 비우기</button>
+                            </div>
+                        </div>
+                        <div class="card-body scroll-y" style="max-height: 400px;">
+                            <div id="attendees-container" class="expense-items-container">
+                                <!-- Dynamically populated list of attendees -->
+                                <div class="empty-state">
+                                    <span class="empty-icon">👥</span>
+                                    <p>현재 등록된 참석자가 없습니다. 왼쪽에서 사번과 이름을 기입하여 추가해 주세요.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </div>
+
+        <!-- Tab Content 3: Cumulative Directory Management -->
+        <div id="tab-directory" class="tab-pane hidden">
+            <div class="layout-grid">
+                <!-- Left Panel: Register Employee Form -->
+                <section class="panel-left">
+                    <div class="card" id="add-dir-card">
+                        <div class="card-header">
+                            <span class="card-icon">🗂️</span>
+                            <h2>누적 사원 등록</h2>
+                        </div>
+                        <div class="card-body">
+                            <form id="dir-form" onsubmit="return false;">
+                                <div class="input-group">
+                                    <label for="dir-name-input">이름</label>
+                                    <input type="text" id="dir-name-input" placeholder="예: 홍길동" required autocomplete="off">
+                                </div>
+                                <div class="input-group">
+                                    <label for="dir-id-input">사번</label>
+                                    <input type="text" id="dir-id-input" placeholder="예: 12345" required>
+                                </div>
+                                <div class="form-actions">
+                                    <button type="submit" id="add-dir-btn" class="btn-primary" style="flex: 1;">
+                                        <span class="btn-icon">🗂️</span> 사원 등록
+                                    </button>
+                                    <button type="button" id="cancel-edit-dir-btn" class="btn-secondary hidden" style="flex: 1;">
+                                        수정 취소
+                                    </button>
+                                </div>
+                                <div id="dir-error-msg" class="form-error-msg hidden"></div>
+                            </form>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Right Panel: Cumulative Employee List -->
+                <section class="panel-right">
+                    <div class="card" id="dir-list-card">
+                        <div class="card-header">
+                            <div class="header-split">
+                                <div class="header-left">
+                                    <span class="card-icon">🗂️</span>
+                                    <h2>누적 사원 명부 (<span id="directory-count">0</span>명)</h2>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="card-body scroll-y" style="max-height: 400px;">
+                            <div id="directory-container" class="expense-items-container">
+                                <!-- Dynamically populated list of cumulative employees -->
+                                <div class="empty-state">
+                                    <p>누적된 사원 정보가 없습니다. 왼쪽에서 사원을 등록해 주세요.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </div>
+
+        <!-- Tab Content 4: Settlement History -->
+        <div id="tab-history" class="tab-pane hidden">
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-icon">📋</span>
+                    <h2>정산 이력</h2>
+                </div>
+                <div class="card-body">
+                    <div id="history-container"></div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Lightbox Modal for Receipt Images -->
+    <div id="receipt-modal" class="modal hidden">
+        <span class="modal-close">&times;</span>
+        <img class="modal-content" id="modal-img" alt="영수증 원본 이미지">
+        <div id="modal-caption"></div>
+    </div>
+
+    <!-- Email Report Modal -->
+    <div id="email-report-modal" class="modal hidden">
+        <div class="modal-content-card card" style="max-width: 600px; width: 95%; background: var(--bg-dark); border: 1px solid var(--card-border); margin: auto;">
+            <div class="card-header">
+                <span class="card-icon">📧</span>
+                <h2>이메일 정산서 초안</h2>
+                <span class="modal-close" id="close-email-modal" style="position: static; font-size: 28px; cursor: pointer; margin-left: auto; color: var(--text-secondary);">&times;</span>
+            </div>
+            <div class="card-body">
+                <div class="input-group">
+                    <label for="email-to-field">수신자</label>
+                    <input type="text" id="email-to-field" readonly class="readonly-input">
+                </div>
+                <div class="input-group">
+                    <label for="email-subject-field">제목</label>
+                    <input type="text" id="email-subject-field" readonly class="readonly-input">
+                </div>
+                <div class="input-group">
+                    <label for="email-body-field">본문 내용 (복사 가능)</label>
+                    <textarea id="email-body-field" rows="10" style="background: rgba(15, 23, 42, 0.6); border: 1px solid var(--card-border); color: var(--text-primary); border-radius: 12px; padding: 0.75rem 1rem; font-size: 0.9rem; font-family: monospace; resize: vertical;" readonly></textarea>
+                </div>
+                <div class="form-actions" style="margin-top: 0.5rem; display: flex; gap: 0.75rem;">
+                    <button id="copy-email-btn" class="btn-primary" style="flex: 1;">
+                        <span class="btn-icon">📋</span> 본문 복사
+                    </button>
+                    <button id="trigger-mailto-btn" class="btn-secondary" style="flex: 1;">
+                        <span class="btn-icon">✉️</span> 메일 앱 열기
+                    </button>
+                </div>
+                <div style="margin-top: 0.75rem;">
+                    <button id="finalize-settlement-btn" class="btn-primary" style="width:100%; background: linear-gradient(135deg, hsl(152,70%,40%), hsl(190,95%,40%));">
+                        <span class="btn-icon">✅</span> 정산 확정 — 이력 저장 &amp; 초기화
+                    </button>
+                    <p style="font-size:0.75rem; color:var(--text-muted); text-align:center; margin-top:0.4rem;">누적 카운트 반영 후 현재 데이터가 초기화됩니다</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Diff Popup Notification -->
+    <div id="diff-popup" class="diff-popup hidden">
+        <span class="diff-popup-label">자부담 변경 내역</span>
+        <span class="diff-popup-formula" id="diff-popup-formula"></span>
+    </div>
+
+    <!-- App JavaScript -->
+    <script src="app.js" defer></script>
+
+    <!-- Service Worker 등록 & 업데이트 처리 -->
+    <script>
+    if ('serviceWorker' in navigator) {
+        let pendingWorker = null;
+
+        navigator.serviceWorker.register('./sw.js').then(reg => {
+            // 새 서비스 워커가 발견되면
+            reg.addEventListener('updatefound', () => {
+                const newWorker = reg.installing;
+                newWorker.addEventListener('statechange', () => {
+                    if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                        pendingWorker = newWorker;
+                        document.getElementById('update-banner').classList.remove('hidden');
+                    }
+                });
+            });
+        });
+
+        // 서비스 워커에서 SW_UPDATED 메시지 수신 (activate 직후)
+        navigator.serviceWorker.addEventListener('message', event => {
+            if (event.data?.type === 'SW_UPDATED') {
+                document.getElementById('update-banner').classList.remove('hidden');
+            }
+        });
+
+        // 업데이트 버튼 → skipWaiting 후 새로고침
+        document.getElementById('update-reload-btn').addEventListener('click', () => {
+            if (pendingWorker) {
+                pendingWorker.postMessage({ action: 'skipWaiting' });
+            }
+            navigator.serviceWorker.addEventListener('controllerchange', () => {
+                window.location.reload();
+            });
+            window.location.reload();
+        });
+
+        // 닫기 버튼
+        document.getElementById('update-dismiss-btn').addEventListener('click', () => {
+            document.getElementById('update-banner').classList.add('hidden');
+        });
+    }
+    </script>
+</body>
+</html>
