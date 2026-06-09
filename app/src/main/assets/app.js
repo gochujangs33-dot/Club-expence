@@ -2,6 +2,30 @@
  * Club Expense Settlement App - Main JavaScript Logic
  */
 
+// --- Firebase Config & Initialization ---
+// 구글 Firebase 콘솔에서 발급받은 실제 설정 키값들을 아래에 입력하시면 클라우드 연동이 활성화됩니다.
+const firebaseConfig = {
+    apiKey: "YOUR_API_KEY",
+    authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+    databaseURL: "https://YOUR_PROJECT_ID-default-rtdb.firebaseio.com",
+    projectId: "YOUR_PROJECT_ID",
+    storageBucket: "YOUR_PROJECT_ID.appspot.com",
+    messagingSenderId: "YOUR_SENDER_ID",
+    appId: "YOUR_APP_ID"
+};
+
+let firebaseDb = null;
+try {
+    // 플레이스홀더 상태가 아닌 경우에만 Firebase 초기화 실행
+    if (firebaseConfig.apiKey && firebaseConfig.apiKey !== "YOUR_API_KEY") {
+        firebase.initializeApp(firebaseConfig);
+        firebaseDb = firebase.database();
+        console.log("Firebase Realtime Database initialized successfully.");
+    }
+} catch (error) {
+    console.error("Firebase initialization failed:", error);
+}
+
 // --- 1. Expense Category Definitions & Rules ---
 const ExpenseCategory = {
     EVENT: 'EVENT',
@@ -98,6 +122,11 @@ const SettlementCalculator = {
 
 // --- 3. App State Management ---
 const AppState = {
+    // 로그인 상태 관련
+    isLoggedIn: false,
+    currentPin: null,
+    firebaseDb: firebaseDb,
+
     memberCount: 0,
     previousPrizeTotal: 0,
     expenseItems: [],
@@ -168,6 +197,7 @@ const AppState = {
     },
 
     save() {
+        // 1. 로컬 백업 저장 (오프라인 상태 대비)
         try {
             localStorage.setItem('club_expense_items', JSON.stringify(this.expenseItems));
             localStorage.setItem('club_expense_members', this.memberCount.toString());
@@ -187,7 +217,69 @@ const AppState = {
         } catch (e) {
             console.error("Local storage save failed:", e);
         }
+
+        // 2. Firebase 온라인 실시간 클라우드 동기화
+        if (this.isLoggedIn && this.firebaseDb && this.currentPin) {
+            const dataToSync = {
+                memberCount: this.memberCount,
+                previousPrizeTotal: this.previousPrizeTotal,
+                expenseItems: this.expenseItems,
+                attendees: this.attendees,
+                directory: this.directory,
+                rules: this.rules,
+                annualBudget: this.annualBudget,
+                usedBudget: this.usedBudget,
+                clubName: this.clubName,
+                settlementHistory: this.settlementHistory,
+                eventPhoto: this.eventPhoto || null,
+                lastUpdated: Date.now()
+            };
+            this.firebaseDb.ref(`settlements/${this.currentPin}`).set(dataToSync)
+                .catch(err => console.error("Firebase sync failed:", err));
+        }
     },
+
+    // Firebase로부터 데이터 가져오기
+    loadFromFirebase(pin) {
+        return new Promise((resolve, reject) => {
+            if (!this.firebaseDb) {
+                reject(new Error("Firebase가 초기화되지 않았습니다."));
+                return;
+            }
+            this.firebaseDb.ref(`settlements/${pin}`).once('value')
+                .then(snapshot => {
+                    const data = snapshot.val();
+                    if (data) {
+                        // Firebase 데이터가 있을 경우 덮어쓰기
+                        if (data.expenseItems) this.expenseItems = data.expenseItems;
+                        if (data.memberCount !== undefined) this.memberCount = data.memberCount;
+                        if (data.previousPrizeTotal !== undefined) this.previousPrizeTotal = data.previousPrizeTotal;
+                        if (data.rules) this.rules = data.rules;
+                        if (data.attendees) this.attendees = data.attendees;
+                        if (data.directory) this.directory = data.directory;
+                        if (data.annualBudget !== undefined) this.annualBudget = data.annualBudget;
+                        if (data.usedBudget !== undefined) this.usedBudget = data.usedBudget;
+                        if (data.clubName !== undefined) this.clubName = data.clubName;
+                        if (data.settlementHistory) this.settlementHistory = data.settlementHistory;
+                        if (data.eventPhoto) this.eventPhoto = data.eventPhoto;
+                        console.log(`Firebase data loaded successfully for PIN: ${pin}`);
+                    } else {
+                        // Firebase에 데이터가 없을 경우 현재의 로컬 상태를 클라우드에 생성
+                        console.log(`No existing data on Firebase for PIN: ${pin}. Uploading current local state.`);
+                        this.isLoggedIn = true;
+                        this.currentPin = pin;
+                        this.save();
+                    }
+                    this.isLoggedIn = true;
+                    this.currentPin = pin;
+                    resolve(true);
+                })
+                .catch(err => {
+                    reject(err);
+                });
+        });
+    },
+
 
     addExpense(description, amount, category) {
         if (this.editingItemId !== null) {
@@ -1484,9 +1576,152 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Initial render
-    AppState.render();
+    // --- Firebase PIN Login UI Logic ---
+    const pinModal = document.getElementById('pin-login-modal');
+    const pinDots = document.querySelectorAll('.pin-dot');
+    const pinErrorText = document.getElementById('pin-error-text');
+    const pinOfflineBtn = document.getElementById('pin-offline-btn');
+    const statusBadge = document.getElementById('login-status-badge');
+    const logoutBtn = document.getElementById('header-logout-btn');
+    const loginBtn = document.getElementById('header-login-btn');
+    
+    let pinInputBuffer = "";
+
+    function updatePinDots() {
+        pinDots.forEach((dot, idx) => {
+            if (idx < pinInputBuffer.length) {
+                dot.classList.add('active');
+            } else {
+                dot.classList.remove('active');
+            }
+        });
+    }
+
+    function resetPinInput() {
+        pinInputBuffer = "";
+        updatePinDots();
+    }
+
+    function handlePinKeyPress(val) {
+        if (val === 'clear') {
+            resetPinInput();
+            pinErrorText.classList.add('hidden');
+        } else if (val === 'back') {
+            if (pinInputBuffer.length > 0) {
+                pinInputBuffer = pinInputBuffer.slice(0, -1);
+                updatePinDots();
+                pinErrorText.classList.add('hidden');
+            }
+        } else {
+            if (pinInputBuffer.length < 4) {
+                pinInputBuffer += val;
+                updatePinDots();
+                pinErrorText.classList.add('hidden');
+                
+                if (pinInputBuffer.length === 4) {
+                    const pin = pinInputBuffer;
+                    if (!firebaseDb) {
+                        pinErrorText.textContent = "Firebase 설정 키가 누락되었습니다. app.js에서 설정을 기입해 주세요.";
+                        pinErrorText.classList.remove('hidden');
+                        setTimeout(() => {
+                            switchToOfflineMode();
+                        }, 2500);
+                        return;
+                    }
+                    
+                    pinOfflineBtn.disabled = true;
+                    pinOfflineBtn.textContent = "연결 중...";
+                    
+                    AppState.loadFromFirebase(pin).then(() => {
+                        pinModal.classList.add('hidden');
+                        statusBadge.className = 'badge-online';
+                        statusBadge.innerHTML = `🌐 온라인 (PIN: ${pin})`;
+                        logoutBtn.style.display = 'inline-block';
+                        loginBtn.style.display = 'none';
+                        pinOfflineBtn.disabled = false;
+                        pinOfflineBtn.textContent = "오프라인(기기저장) 모드로 시작";
+                        resetPinInput();
+                        
+                        // Sync values to form fields
+                        clubNameInput.value = AppState.clubName || '';
+                        memberInput.value = AppState.memberCount || 0;
+                        prizeInput.value = AppState.previousPrizeTotal || 0;
+                        setSettingsFormValues(AppState.rules);
+                        AppState.render();
+                    }).catch(err => {
+                        console.error(err);
+                        pinErrorText.textContent = "서버 연결에 실패했습니다. 오프라인 모드로 자동 진입합니다.";
+                        pinErrorText.classList.remove('hidden');
+                        setTimeout(() => {
+                            switchToOfflineMode();
+                        }, 2000);
+                    });
+                }
+            }
+        }
+    }
+
+    // Keypad event listeners
+    document.querySelectorAll('.pin-key').forEach(key => {
+        key.addEventListener('click', () => {
+            const val = key.getAttribute('data-value');
+            handlePinKeyPress(val);
+        });
+    });
+
+    // Keyboard support for PIN entry
+    document.addEventListener('keydown', (e) => {
+        if (pinModal.classList.contains('hidden')) return;
+        if (e.key >= '0' && e.key <= '9') {
+            handlePinKeyPress(e.key);
+        } else if (e.key === 'Backspace') {
+            handlePinKeyPress('back');
+        } else if (e.key === 'Escape') {
+            handlePinKeyPress('clear');
+        }
+    });
+
+    function switchToOfflineMode() {
+        pinModal.classList.add('hidden');
+        statusBadge.className = 'badge-offline';
+        statusBadge.innerHTML = `📴 오프라인 모드 (기기 저장)`;
+        logoutBtn.style.display = 'none';
+        loginBtn.style.display = 'inline-block';
+        AppState.isLoggedIn = false;
+        AppState.currentPin = null;
+        resetPinInput();
+        AppState.load(); // Load local storage
+        clubNameInput.value = AppState.clubName || '';
+        memberInput.value = AppState.memberCount || 0;
+        prizeInput.value = AppState.previousPrizeTotal || 0;
+        setSettingsFormValues(AppState.rules);
+        AppState.render();
+    }
+
+    pinOfflineBtn.addEventListener('click', () => {
+        switchToOfflineMode();
+    });
+
+    logoutBtn.addEventListener('click', () => {
+        if (confirm("로그아웃 하시겠습니까? (로컬 기기 모드로 전환됩니다)")) {
+            switchToOfflineMode();
+        }
+    });
+
+    loginBtn.addEventListener('click', () => {
+        pinErrorText.classList.add('hidden');
+        resetPinInput();
+        pinModal.classList.remove('hidden');
+    });
+
+    // 만약 Firebase DB가 초기화되어 있지 않으면 로그인 버튼 숨기고 기본 오프라인 모드로 설정
+    if (!firebaseDb) {
+        switchToOfflineMode();
+    } else {
+        pinModal.classList.remove('hidden');
+    }
 });
+
 
 // Diff popup notification helper
 function showDiffPopup(formula, diff) {

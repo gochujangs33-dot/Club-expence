@@ -1232,3 +1232,101 @@ body:has(.update-banner:not(.hidden)) {
     transform: scale(1.1);
     background: rgba(239, 68, 68, 1) !important;
 }
+
+/* --- Firebase PIN Login UI Styles --- */
+.pin-modal-card {
+    border-radius: 24px !important;
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6) !important;
+    animation: zoomIn 0.3s ease;
+}
+
+.pin-display-container {
+    display: flex;
+    justify-content: center;
+    gap: 1.25rem;
+    margin: 1rem 0 1.5rem;
+}
+
+.pin-dot {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    background: transparent;
+    transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.pin-dot.active {
+    background: var(--color-secondary);
+    border-color: var(--color-secondary);
+    box-shadow: 0 0 10px var(--color-secondary);
+    transform: scale(1.15);
+}
+
+.pin-keypad {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.75rem;
+    max-width: 280px;
+    margin: 0 auto;
+}
+
+.pin-key {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: var(--text-primary);
+    font-size: 1.35rem;
+    font-weight: 600;
+    font-family: var(--font-heading);
+    border-radius: 50%;
+    width: 62px;
+    height: 62px;
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: var(--transition-smooth);
+    user-select: none;
+    touch-action: manipulation;
+}
+
+.pin-key:hover {
+    background: rgba(255, 255, 255, 0.12);
+    border-color: rgba(255, 255, 255, 0.2);
+}
+
+.pin-key:active {
+    transform: scale(0.9);
+    background: var(--color-primary);
+    border-color: transparent;
+    color: white;
+}
+
+/* Status Badges */
+.badge-online {
+    background: rgba(16, 185, 129, 0.15);
+    color: #34d399;
+    border: 1px solid rgba(16, 185, 129, 0.3);
+    padding: 0.25rem 0.6rem;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.badge-offline {
+    background: rgba(239, 68, 68, 0.15);
+    color: #f87171;
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    padding: 0.25rem 0.6rem;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
