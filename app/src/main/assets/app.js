@@ -141,6 +141,7 @@ const AppState = {
     lastCalculatedSelfPay: 0,
     annualBudget: 0,
     usedBudget: 0,
+    reportEmail: 'finance@club.com',
     eventPhoto: null,
     clubName: '',
     settlementHistory: [],
@@ -185,6 +186,8 @@ const AppState = {
             if (savedAnnualBudget) this.annualBudget = parseInt(savedAnnualBudget, 10) || 0;
             const savedUsedBudget = localStorage.getItem('club_used_budget');
             if (savedUsedBudget) this.usedBudget = parseInt(savedUsedBudget, 10) || 0;
+            const savedReportEmail = localStorage.getItem('club_report_email');
+            if (savedReportEmail) this.reportEmail = savedReportEmail;
             const savedEventPhoto = localStorage.getItem('club_event_photo');
             if (savedEventPhoto) this.eventPhoto = savedEventPhoto;
             const savedClubName = localStorage.getItem('club_name');
@@ -253,6 +256,7 @@ const AppState = {
             localStorage.setItem('club_expense_directory', JSON.stringify(this.directory));
             localStorage.setItem('club_annual_budget', this.annualBudget.toString());
             localStorage.setItem('club_used_budget', this.usedBudget.toString());
+            localStorage.setItem('club_report_email', this.reportEmail || '');
             localStorage.setItem('club_name', this.clubName);
             try { localStorage.setItem('club_settlement_history', JSON.stringify(this.settlementHistory)); } catch(_) {}
             if (this.eventPhoto) {
@@ -1185,7 +1189,7 @@ const AppState = {
             this.rules
         );
         
-        const emailReceiver = document.getElementById('setting-email')?.value || 'finance@club.com';
+        const emailReceiver = document.getElementById('setting-email')?.value || this.reportEmail || 'finance@club.com';
         
         // Build email subject
         const dateStr = new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' });
@@ -1358,7 +1362,7 @@ const AppState = {
     },
 
     // 엑셀 + 사진(참석자/영수증)을 묶어 공유 시트로 전달
-    async shareSettlementReport() {
+    async shareSettlementReport(receiver, subject, body) {
         const statusEl = document.getElementById('share-report-status');
         const setStatus = (msg) => { if (statusEl) statusEl.textContent = msg; };
 
@@ -1382,8 +1386,8 @@ const AppState = {
 
             const dateStr = new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' });
             const shareData = {
-                title: `[동아리 정산] ${dateStr} 클럽 비용 정산 보고서`,
-                text: `${dateStr} 클럽 비용 정산 보고서와 참석자/영수증 사진을 첨부합니다.`,
+                title: subject || `[동아리 정산] ${dateStr} 클럽 비용 정산 보고서`,
+                text: body || `${dateStr} 클럽 비용 정산 보고서와 참석자/영수증 사진을 첨부합니다.`,
                 files: files
             };
 
@@ -1393,7 +1397,7 @@ const AppState = {
                     mimeType: f.type || 'application/octet-stream',
                     base64: await this.fileToBase64(f)
                 })));
-                window.AndroidShare.shareFiles(JSON.stringify(filesPayload), shareData.title, shareData.text);
+                window.AndroidShare.shareFiles(JSON.stringify(filesPayload), shareData.title, shareData.text, receiver || '');
                 setStatus('공유 시트가 열렸습니다. 메일 앱을 선택해 전송해주세요.');
             } else if (navigator.canShare && navigator.canShare(shareData)) {
                 await navigator.share(shareData);
@@ -1559,6 +1563,7 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('setting-limit3').value = rules.limit3;
         document.getElementById('setting-rate3').value = Math.round(rules.rate3 * 100);
         document.getElementById('setting-deduction4').value = rules.deduction4;
+        document.getElementById('setting-email').value = AppState.reportEmail || '';
     };
     setSettingsFormValues(AppState.rules);
 
@@ -1746,6 +1751,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const usedBudget = parseInt(document.getElementById('setting-used-budget').value, 10) || 0;
         AppState.usedBudget = usedBudget;
+        AppState.reportEmail = document.getElementById('setting-email').value.trim();
+        AppState.save();
         AppState.updateRules({ limit1, limit2, rate2, limit3, rate3, deduction4 });
 
         // Hide panel after saving
@@ -1954,9 +1961,13 @@ document.addEventListener('DOMContentLoaded', () => {
             const receiver = document.getElementById('email-to-field').value;
             const subject = document.getElementById('email-subject-field').value;
             const body = document.getElementById('email-body-field').value;
-            
-            const mailtoUrl = `mailto:${encodeURIComponent(receiver)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-            window.location.href = mailtoUrl;
+
+            if (window.AndroidShare && typeof window.AndroidShare.shareFiles === 'function') {
+                AppState.shareSettlementReport(receiver, subject, body);
+            } else {
+                const mailtoUrl = `mailto:${encodeURIComponent(receiver)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+                window.location.href = mailtoUrl;
+            }
         });
     }
 

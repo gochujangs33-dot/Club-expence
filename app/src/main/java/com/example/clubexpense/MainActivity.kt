@@ -79,7 +79,7 @@ class MainActivity : AppCompatActivity() {
     inner class WebAppInterface(private val activity: AppCompatActivity) {
 
         @JavascriptInterface
-        fun shareFiles(filesJson: String, title: String, text: String) {
+        fun shareFiles(filesJson: String, title: String, text: String, to: String) {
             activity.runOnUiThread {
                 try {
                     val sharedDir = File(activity.cacheDir, "shared").apply { mkdirs() }
@@ -124,6 +124,9 @@ class MainActivity : AppCompatActivity() {
                     }
                     intent.putExtra(Intent.EXTRA_SUBJECT, title)
                     intent.putExtra(Intent.EXTRA_TEXT, text)
+                    if (to.isNotBlank()) {
+                        intent.putExtra(Intent.EXTRA_EMAIL, arrayOf(to))
+                    }
                     intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
 
                     activity.startActivity(Intent.createChooser(intent, title))
