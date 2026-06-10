@@ -329,7 +329,13 @@ const AppState = {
                             }
                             this.isLoggedIn = true;
                             this.currentPin = pin;
-                            resolve(true);
+
+                            // 번들된 전사원 데이터 중 누락된 사람을 클라우드 명부에도 병합
+                            fetch('./lib/employee_directory.json')
+                                .then(res => res.json())
+                                .then(list => this.bulkImportDirectory(list))
+                                .catch(err => console.error("전사원 명부 자동 등록 실패:", err))
+                                .finally(() => resolve(true));
                         })
                         .catch(err => reject(err));
                 })
