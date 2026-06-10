@@ -1294,10 +1294,12 @@ const AppState = {
         let sheet2 = await zip.file('xl/worksheets/sheet2.xml').async('string');
 
         // D5부터 정회원 참석자 이름 입력 (최대 120명, K4=COUNTA(D5:D124), E열 수식이 D열을 Global ID 명단과 대조)
-        this.attendees.slice(0, 120).forEach((att, idx) => {
+        for (let idx = 0; idx < 120; idx++) {
             const row = 5 + idx;
-            sheet2 = setCellValue(sheet2, `D${row}`, att.name, true);
-        });
+            const att = this.attendees[idx];
+            sheet2 = setCellValue(sheet2, `C${row}`, att ? att.employeeId : '', true);
+            sheet2 = setCellValue(sheet2, `D${row}`, att ? att.name : '', true);
+        }
 
         // 5행부터 입력 (서식상 최대 20건)
         this.expenseItems.slice(0, 20).forEach((item, idx) => {
