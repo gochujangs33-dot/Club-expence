@@ -2038,15 +2038,23 @@ document.addEventListener('DOMContentLoaded', () => {
     const downloadExcelBtn = document.getElementById('download-excel-btn');
     const triggerMailtoBtn = document.getElementById('trigger-mailto-btn');
 
-    if (sendEmailBtn && emailReportModal) {
-        sendEmailBtn.addEventListener('click', () => {
-            const report = AppState.generateEmailReport();
-            
-            document.getElementById('email-to-field').value = report.receiver;
-            document.getElementById('email-subject-field').value = report.subject;
-            document.getElementById('email-body-field').value = report.body;
-            
-            emailReportModal.classList.remove('hidden');
+    if (sendEmailBtn) {
+        sendEmailBtn.addEventListener('click', async () => {
+            const originalText = sendEmailBtn.innerHTML;
+            sendEmailBtn.innerHTML = "<span class='btn-icon'>⏳</span> 생성 중...";
+            sendEmailBtn.disabled = true;
+            try {
+                await AppState.downloadExcelOnly();
+                sendEmailBtn.innerHTML = "<span class='btn-icon'>✓</span> 다운로드 완료!";
+            } catch (err) {
+                console.error(err);
+                sendEmailBtn.innerHTML = "<span class='btn-icon'>❌</span> 다운로드 실패";
+            } finally {
+                setTimeout(() => {
+                    sendEmailBtn.innerHTML = originalText;
+                    sendEmailBtn.disabled = false;
+                }, 2000);
+            }
         });
     }
 
@@ -2061,26 +2069,37 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    function runFinalizeSettlement() {
+        AppState.finalizeSettlement();
+        if (emailReportModal) emailReportModal.classList.add('hidden');
+        // Reset form UI state
+        document.getElementById('expense-desc-input').value = '';
+        document.getElementById('expense-amount-input').value = '';
+        document.getElementById('expense-category-select').selectedIndex = 0;
+        document.getElementById('expense-corp-check').checked = true;
+        document.getElementById('expense-personal-check').checked = false;
+        document.getElementById('expense-corporate-amount-input').value = '';
+        document.getElementById('expense-personal-amount-input').value = '';
+        updateCardTypeUI();
+        document.getElementById('prev-prize-input').value = 0;
+        // Switch to history tab
+        document.querySelectorAll('.tab-nav .tab-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.tab-pane').forEach(p => p.classList.add('hidden'));
+        const histTab = document.querySelector('[data-tab="tab-history"]');
+        if (histTab) { histTab.classList.add('active'); document.getElementById('tab-history').classList.remove('hidden'); }
+    }
+
     const finalizeBtn = document.getElementById('finalize-settlement-btn');
     if (finalizeBtn) {
-        finalizeBtn.addEventListener('click', () => {
-            AppState.finalizeSettlement();
-            emailReportModal.classList.add('hidden');
-            // Reset form UI state
-            document.getElementById('expense-desc-input').value = '';
-            document.getElementById('expense-amount-input').value = '';
-            document.getElementById('expense-category-select').selectedIndex = 0;
-            document.getElementById('expense-corp-check').checked = true;
-            document.getElementById('expense-personal-check').checked = false;
-            document.getElementById('expense-corporate-amount-input').value = '';
-            document.getElementById('expense-personal-amount-input').value = '';
-            updateCardTypeUI();
-            document.getElementById('prev-prize-input').value = 0;
-            // Switch to history tab
-            document.querySelectorAll('.tab-nav .tab-btn').forEach(b => b.classList.remove('active'));
-            document.querySelectorAll('.tab-pane').forEach(p => p.classList.add('hidden'));
-            const histTab = document.querySelector('[data-tab="tab-history"]');
-            if (histTab) { histTab.classList.add('active'); document.getElementById('tab-history').classList.remove('hidden'); }
+        finalizeBtn.addEventListener('click', runFinalizeSettlement);
+    }
+
+    const finalizeMainBtn = document.getElementById('finalize-settlement-main-btn');
+    if (finalizeMainBtn) {
+        finalizeMainBtn.addEventListener('click', () => {
+            if (confirm('정산을 확정하고 이력에 저장한 뒤 현재 데이터를 초기화할까요?')) {
+                runFinalizeSettlement();
+            }
         });
     }
 
