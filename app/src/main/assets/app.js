@@ -1570,12 +1570,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function updateDirNameHint() {
         const name = dirNameInput.value.trim();
+        const id = dirIdInput.value.trim();
         const existingId = name ? getExistingId(name) : null;
         if (existingId !== null) {
             dirExistingIdHint.textContent = `등록된 EMP ID: ${existingId}`;
             dirExistingIdHint.classList.remove('hidden');
+            const showWarning = AppState.editingDirName === null && id !== '' && id !== existingId;
+            dirSamePersonWarning.classList.toggle('hidden', !showWarning);
         } else {
             dirExistingIdHint.classList.add('hidden');
+            dirSamePersonWarning.classList.add('hidden');
         }
     }
 
@@ -1584,18 +1588,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const id = dirIdInput.value.trim();
         if (!name || !id) return;
 
-        dirSamePersonWarning.classList.add('hidden');
-
         if (AppState.editingDirName === null) {
             const existingId = getExistingId(name);
-            if (existingId !== null) {
-                if (existingId === id) {
-                    showDirError(`이미 동일한 이름과 EMP ID로 등록되어 있습니다: ${name} (${id})`);
-                    return;
-                } else {
-                    dirSamePersonWarning.classList.remove('hidden');
-                    return;
-                }
+            if (existingId !== null && existingId === id) {
+                showDirError(`이미 동일한 이름과 EMP ID로 등록되어 있습니다: ${name} (${id})`);
+                return;
             }
         }
         AppState.addDirectoryEntry(name, id);
@@ -1619,13 +1616,8 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         });
 
-        dirNameInput.addEventListener('input', () => {
-            updateDirNameHint();
-            dirSamePersonWarning.classList.add('hidden');
-        });
-        dirIdInput.addEventListener('input', () => {
-            dirSamePersonWarning.classList.add('hidden');
-        });
+        dirNameInput.addEventListener('input', updateDirNameHint);
+        dirIdInput.addEventListener('input', updateDirNameHint);
     }
 
     const cancelEditDirBtn = document.getElementById('cancel-edit-dir-btn');
