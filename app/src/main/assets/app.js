@@ -1361,6 +1361,43 @@ const AppState = {
         });
     },
 
+    // 엑셀(수정된 정산서) + 참석자/영수증 사진 파일 목록 생성
+    async collectReportFiles() {
+        const files = [];
+        files.push(await this.generateExcelFile());
+
+        if (this.eventPhoto) {
+            files.push(await this.dataUrlToFile(this.eventPhoto, '참석자_사진'));
+        }
+
+        for (let i = 0; i < this.expenseItems.length; i++) {
+            const item = this.expenseItems[i];
+            if (item.receiptImage) {
+                const label = `영수증_${i + 1}_${categoryNameMap[item.category] || item.category}`;
+                files.push(await this.dataUrlToFile(item.receiptImage, label));
+            }
+        }
+        return files;
+    },
+
+    // 파일들을 브라우저 다운로드로 저장 (메일에 수동 첨부용)
+    async downloadReportFiles() {
+        const files = await this.collectReportFiles();
+        files.forEach(file => {
+            const url = URL.createObjectURL(file);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = file.name;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        });
+        if (files.length > 0) {
+            alert('정산서/사진 파일이 다운로드되었습니다. 메일 앱에서 직접 첨부해주세요.');
+        }
+    },
+
     // 엑셀 + 사진(참석자/영수증)을 묶어 공유 시트로 전달
     async shareSettlementReport(receiver, subject, body) {
         const statusEl = document.getElementById('share-report-status');
@@ -1369,20 +1406,7 @@ const AppState = {
         try {
             setStatus('파일을 준비하는 중입니다...');
 
-            const files = [];
-            files.push(await this.generateExcelFile());
-
-            if (this.eventPhoto) {
-                files.push(await this.dataUrlToFile(this.eventPhoto, '참석자_사진'));
-            }
-
-            for (let i = 0; i < this.expenseItems.length; i++) {
-                const item = this.expenseItems[i];
-                if (item.receiptImage) {
-                    const label = `영수증_${i + 1}_${categoryNameMap[item.category] || item.category}`;
-                    files.push(await this.dataUrlToFile(item.receiptImage, label));
-                }
-            }
+            const files = await this.collectReportFiles();
 
             const dateStr = new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' });
             const shareData = {
@@ -1957,17 +1981,33 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     if (triggerMailtoBtn) {
-        triggerMailtoBtn.addEventListener('click', () => {
+        triggerMailtoBtn.addEventListener('click', async () => {
             const receiver = document.getElementById('email-to-field').value;
             const subject = document.getElementById('email-subject-field').value;
             const body = document.getElementById('email-body-field').value;
+            const mailtoUrl = `mailto:${encodeURIComponent(receiver)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 
             if (window.AndroidShare && typeof window.AndroidShare.shareFiles === 'function') {
                 AppState.shareSettlementReport(receiver, subject, body);
-            } else {
-                const mailtoUrl = `mailto:${encodeURIComponent(receiver)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-                window.location.href = mailtoUrl;
+                return;
             }
+
+            // 웹: navigator.share로 파일 첨부를 시도하고, 안 되면 파일 다운로드 후 mailto로 본문만 전달
+            if (navigator.canShare) {
+                try {
+                    const files = await AppState.collectReportFiles();
+                    if (files.length > 0 && navigator.canShare({ title: subject, text: body, files })) {
+                        await navigator.share({ title: subject, text: body, files });
+                        return;
+                    }
+                } catch (err) {
+                    if (err.name === 'AbortError') return;
+                    console.error(err);
+                }
+            }
+
+            await AppState.downloadReportFiles();
+            window.location.href = mailtoUrl;
         });
     }
 
