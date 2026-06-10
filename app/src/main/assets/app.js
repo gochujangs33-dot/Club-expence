@@ -1559,16 +1559,48 @@ document.addEventListener('DOMContentLoaded', () => {
         el._timer = setTimeout(() => el.classList.add('hidden'), 3500);
     }
 
+    const dirExistingIdHint = document.getElementById('dir-existing-id-hint');
+    const dirSamePersonWarning = document.getElementById('dir-same-person-warning');
+
+    function getExistingId(name) {
+        const entry = AppState.directory[name];
+        if (entry === undefined) return null;
+        return typeof entry === 'object' ? entry.id : entry;
+    }
+
+    function updateDirNameHint() {
+        const name = dirNameInput.value.trim();
+        const existingId = name ? getExistingId(name) : null;
+        if (existingId !== null) {
+            dirExistingIdHint.textContent = `등록된 EMP ID: ${existingId}`;
+            dirExistingIdHint.classList.remove('hidden');
+        } else {
+            dirExistingIdHint.classList.add('hidden');
+        }
+    }
+
     function trySubmitDir() {
         const name = dirNameInput.value.trim();
         const id = dirIdInput.value.trim();
         if (!name || !id) return;
 
-        if (AppState.editingDirName === null && AppState.directory[name] !== undefined) {
-            showDirError(`이미 명부에 존재하는 이름입니다: ${name}`);
-            return;
+        dirSamePersonWarning.classList.add('hidden');
+
+        if (AppState.editingDirName === null) {
+            const existingId = getExistingId(name);
+            if (existingId !== null) {
+                if (existingId === id) {
+                    showDirError(`이미 동일한 이름과 EMP ID로 등록되어 있습니다: ${name} (${id})`);
+                    return;
+                } else {
+                    dirSamePersonWarning.classList.remove('hidden');
+                    return;
+                }
+            }
         }
         AppState.addDirectoryEntry(name, id);
+        dirSamePersonWarning.classList.add('hidden');
+        dirExistingIdHint.classList.add('hidden');
     }
 
 
@@ -1585,6 +1617,14 @@ document.addEventListener('DOMContentLoaded', () => {
                     trySubmitDir();
                 }
             });
+        });
+
+        dirNameInput.addEventListener('input', () => {
+            updateDirNameHint();
+            dirSamePersonWarning.classList.add('hidden');
+        });
+        dirIdInput.addEventListener('input', () => {
+            dirSamePersonWarning.classList.add('hidden');
         });
     }
 

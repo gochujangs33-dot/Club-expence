@@ -431,10 +431,12 @@
                                 <div class="input-group">
                                     <label for="dir-name-input">이름</label>
                                     <input type="text" id="dir-name-input" placeholder="예: 홍길동" required autocomplete="off">
+                                    <small id="dir-existing-id-hint" class="input-hint hidden"></small>
                                 </div>
                                 <div class="input-group">
                                     <label for="dir-id-input">EMP ID</label>
                                     <input type="text" id="dir-id-input" placeholder="예: 1234" required>
+                                    <small id="dir-same-person-warning" class="input-hint hidden" style="color: var(--warning-text, #ff6b6b);">동일인입니다. 이름뒤에 (부서)를 기입해주세요.</small>
                                 </div>
                                 <div class="form-actions">
                                     <button type="submit" id="add-dir-btn" class="btn-primary" style="flex: 1;">
