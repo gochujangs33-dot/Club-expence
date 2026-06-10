@@ -295,6 +295,22 @@ select.club-name-input option {
     color: var(--text-primary);
 }
 
+.new-club-input-row {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+}
+
+.new-club-input-row input {
+    flex: 1;
+}
+
+.new-club-input-row .btn-secondary {
+    width: auto;
+    padding: 0.6rem 1rem;
+    white-space: nowrap;
+}
+
 /* Layout Grid */
 .layout-grid {
     display: grid;

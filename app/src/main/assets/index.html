@@ -45,7 +45,12 @@
             <div class="club-name-wrapper">
                 <select id="club-name-select" class="club-name-input">
                     <option value="">클럽을 선택하세요</option>
+                    <option value="__new__">+ 새 클럽 직접 등록</option>
                 </select>
+                <div id="new-club-input-row" class="new-club-input-row hidden">
+                    <input type="text" id="new-club-name-input" placeholder="클럽명 입력" autocomplete="off">
+                    <button type="button" id="register-new-club-btn" class="btn-secondary">등록</button>
+                </div>
             </div>
             <p class="subtitle">엑셀 정산 양식의 핵심 계산 및 한도 검증을 모바일 웹으로 단순화</p>
             <div class="login-status-wrapper" id="login-status-wrapper" style="margin-top: 0.75rem; display: flex; align-items: center; justify-content: center; gap: 0.5rem;">

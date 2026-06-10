@@ -1553,12 +1553,26 @@ document.addEventListener('DOMContentLoaded', () => {
             opt.textContent = current;
             clubNameInput.appendChild(opt);
         }
+        const newOpt = document.createElement('option');
+        newOpt.value = '__new__';
+        newOpt.textContent = '+ 새 클럽 직접 등록';
+        clubNameInput.appendChild(newOpt);
         clubNameInput.value = current;
     }
+
+    const newClubInputRow = document.getElementById('new-club-input-row');
+    const newClubNameInput = document.getElementById('new-club-name-input');
+    const registerNewClubBtn = document.getElementById('register-new-club-btn');
 
     if (clubNameInput) {
         renderClubOptions();
         clubNameInput.addEventListener('change', () => {
+            if (clubNameInput.value === '__new__') {
+                if (newClubInputRow) newClubInputRow.classList.remove('hidden');
+                if (newClubNameInput) newClubNameInput.focus();
+                return;
+            }
+            if (newClubInputRow) newClubInputRow.classList.add('hidden');
             AppState.clubName = clubNameInput.value;
             AppState.syncBudgetFromClub(AppState.clubName);
             AppState.save();
@@ -1570,6 +1584,36 @@ document.addEventListener('DOMContentLoaded', () => {
                 renderClubOptions();
             });
         }
+    }
+
+    if (registerNewClubBtn) {
+        registerNewClubBtn.addEventListener('click', () => {
+            const name = (newClubNameInput.value || '').trim();
+            if (!name) {
+                alert('클럽명을 입력해주세요.');
+                return;
+            }
+            const exists = Object.values(AppState.clubRegistry || {}).some(c => c.name === name);
+            if (!exists) {
+                const clubId = 'club_' + Date.now();
+                AppState.addOrUpdateClub(clubId, name, 0);
+            }
+            AppState.clubName = name;
+            AppState.syncBudgetFromClub(name);
+            AppState.save();
+            newClubNameInput.value = '';
+            newClubInputRow.classList.add('hidden');
+
+            const finish = () => {
+                renderClubOptions();
+                updateRemainingDisplay();
+            };
+            if (AppState.firebaseDb) {
+                AppState.loadClubRegistry().then(finish);
+            } else {
+                finish();
+            }
+        });
     }
 
     // Set form input fields default values
