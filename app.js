@@ -2111,6 +2111,9 @@ document.addEventListener('DOMContentLoaded', () => {
                         const adminTabBtn = document.getElementById('admin-tab-btn');
                         if (pin === "000000") {
                             adminTabBtn.classList.remove('hidden');
+                            setTimeout(() => {
+                                adminTabBtn.click();
+                            }, 50);
                         } else {
                             adminTabBtn.classList.add('hidden');
                         }
@@ -2261,6 +2264,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     AppState.currentPin = pin;
                     AppState.userName = name;
                     
+                    document.getElementById('admin-tab-btn').classList.add('hidden');
                     pinModal.classList.add('hidden');
                     statusBadge.className = 'badge-online';
                     statusBadge.innerHTML = `🌐 온라인 (${name} / PIN: ${pin})`;

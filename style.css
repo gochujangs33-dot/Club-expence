@@ -373,6 +373,7 @@ select.club-name-input option {
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
+    min-width: 0;
 }
 
 .input-row {
@@ -400,6 +401,9 @@ input, select {
     font-family: var(--font-body);
     outline: none;
     transition: var(--transition-smooth);
+    width: 100%;
+    box-sizing: border-box;
+    min-width: 0;
 }
 
 input:focus, select:focus {
@@ -535,6 +539,11 @@ select {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 0.75rem;
+    min-width: 0;
+}
+
+.settings-row > .input-group {
+    min-width: 0;
 }
 
 .settings-actions {
