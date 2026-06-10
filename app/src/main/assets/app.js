@@ -222,14 +222,19 @@ const AppState = {
     // 전사원 명부 일괄 등록: 기존에 등록된 이름은 건드리지 않고, 새 이름만 추가
     bulkImportDirectory(list) {
         let added = 0;
+        let updated = 0;
         list.forEach(([name, employeeId]) => {
             if (!name || !employeeId) return;
-            if (this.directory[name] === undefined) {
+            const entry = this.directory[name];
+            if (entry === undefined) {
                 this.directory[name] = { id: employeeId, count: 0 };
                 added++;
+            } else if (typeof entry === 'object' && entry.id !== employeeId && /^[A-Za-z]/.test(String(entry.id))) {
+                entry.id = employeeId;
+                updated++;
             }
         });
-        this.save();
+        if (added || updated) this.save();
         this.render();
         this.updateDatalist();
         return added;
