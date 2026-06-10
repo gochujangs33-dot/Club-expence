@@ -2530,9 +2530,15 @@ function updateCardTypeUI() {
     personalAmountInput.readOnly = isSplit;
 
     if (isSplit) {
-        const total = parseInt(document.getElementById('expense-amount-input').value, 10) || 0;
-        const corp = parseInt(document.getElementById('expense-corporate-amount-input').value, 10) || 0;
-        personalAmountInput.value = Math.max(total - corp, 0);
+        const totalRaw = document.getElementById('expense-amount-input').value;
+        const corpRaw = document.getElementById('expense-corporate-amount-input').value;
+        if (totalRaw === '' && corpRaw === '') {
+            personalAmountInput.value = '';
+        } else {
+            const total = parseInt(totalRaw, 10) || 0;
+            const corp = parseInt(corpRaw, 10) || 0;
+            personalAmountInput.value = Math.max(total - corp, 0);
+        }
     }
 }
 
