@@ -1415,13 +1415,11 @@ document.addEventListener('DOMContentLoaded', () => {
     // Load state from local storage
     AppState.load();
 
-    // 전사원 명부가 비어있으면 번들된 전사원 데이터로 자동 등록
-    if (Object.keys(AppState.directory).length === 0) {
-        fetch('./lib/employee_directory.json')
-            .then(res => res.json())
-            .then(list => AppState.bulkImportDirectory(list))
-            .catch(err => console.error("전사원 명부 자동 등록 실패:", err));
-    }
+    // 번들된 전사원 데이터 중 아직 명부에 없는 사람을 자동 등록
+    fetch('./lib/employee_directory.json')
+        .then(res => res.json())
+        .then(list => AppState.bulkImportDirectory(list))
+        .catch(err => console.error("전사원 명부 자동 등록 실패:", err));
 
     // Club name input init
     const clubNameInput = document.getElementById('club-name-input');
