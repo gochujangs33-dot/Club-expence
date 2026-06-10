@@ -33,6 +33,8 @@ class MainActivity : AppCompatActivity() {
             domStorageEnabled = true           // localStorage 사용 허용
             allowFileAccess = true
             allowContentAccess = true
+            allowFileAccessFromFileURLs = true
+            allowUniversalAccessFromFileURLs = true
             cacheMode = WebSettings.LOAD_DEFAULT
             useWideViewPort = true
             loadWithOverviewMode = true
@@ -115,11 +117,17 @@ class MainActivity : AppCompatActivity() {
                         Intent(Intent.ACTION_SEND).apply {
                             type = mimeType
                             putExtra(Intent.EXTRA_STREAM, uris[0])
+                            clipData = android.content.ClipData.newRawUri("", uris[0])
                         }
                     } else {
                         Intent(Intent.ACTION_SEND_MULTIPLE).apply {
                             type = "*/*"
                             putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris)
+                            val clip = android.content.ClipData.newRawUri("", uris[0])
+                            for (j in 1 until uris.size) {
+                                clip.addItem(android.content.ClipData.Item(uris[j]))
+                            }
+                            clipData = clip
                         }
                     }
                     intent.putExtra(Intent.EXTRA_SUBJECT, title)
@@ -129,7 +137,9 @@ class MainActivity : AppCompatActivity() {
                     }
                     intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
 
-                    activity.startActivity(Intent.createChooser(intent, title))
+                    val chooser = Intent.createChooser(intent, title)
+                    chooser.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    activity.startActivity(chooser)
                 } catch (e: Exception) {
                     e.printStackTrace()
                 }

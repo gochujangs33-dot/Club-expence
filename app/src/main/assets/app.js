@@ -280,6 +280,7 @@ const AppState = {
                 annualBudget: this.annualBudget,
                 usedBudget: this.usedBudget,
                 clubName: this.clubName,
+                reportEmail: this.reportEmail || '',
                 settlementHistory: this.settlementHistory,
                 eventPhoto: this.eventPhoto || null,
                 lastUpdated: Date.now()
@@ -328,6 +329,7 @@ const AppState = {
                                 if (data.annualBudget !== undefined) this.annualBudget = data.annualBudget;
                                 if (data.usedBudget !== undefined) this.usedBudget = data.usedBudget;
                                 if (data.clubName !== undefined) this.clubName = data.clubName;
+                                if (data.reportEmail !== undefined) this.reportEmail = data.reportEmail;
                                 if (data.settlementHistory) this.settlementHistory = data.settlementHistory;
                                 if (data.eventPhoto) this.eventPhoto = data.eventPhoto;
                                 console.log(`Firebase data loaded successfully for PIN: ${pin} (${this.userName})`);
@@ -735,6 +737,29 @@ const AppState = {
         this.rules = { ...DefaultRules };
         this.save();
         this.render();
+    },
+
+    clearClubData() {
+        this.expenseItems = [];
+        this.attendees = [];
+        this.memberCount = 0;
+        this.previousPrizeTotal = 0;
+        this.eventPhoto = null;
+        this.tempCorpReceiptImage = null;
+        this.tempPersonalReceiptImage = null;
+        this.lastCalculatedSelfPay = 0;
+        this.editingItemId = null;
+        this.editingAttendeeId = null;
+        this.save();
+        this.render();
+
+        const memberInput = document.getElementById('member-count-input');
+        const prizeInput = document.getElementById('prev-prize-input');
+        if (memberInput) memberInput.value = 0;
+        if (prizeInput) prizeInput.value = 0;
+
+        this.cancelEdit();
+        this.cancelEditAttendee();
     },
 
     render() {
@@ -1361,6 +1386,25 @@ const AppState = {
         });
     },
 
+    // 엑셀 파일만 로컬 다운로드 폴더에 저장
+    async downloadExcelOnly() {
+        try {
+            const file = await this.generateExcelFile();
+            const url = URL.createObjectURL(file);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = file.name;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        } catch (err) {
+            console.error("엑셀 파일 다운로드 실패:", err);
+            alert("엑셀 파일 다운로드에 실패했습니다: " + err.message);
+            throw err;
+        }
+    },
+
     // 엑셀(수정된 정산서) + 참석자/영수증 사진 파일 목록 생성
     async collectReportFiles() {
         const files = [];
@@ -1372,7 +1416,16 @@ const AppState = {
 
         for (let i = 0; i < this.expenseItems.length; i++) {
             const item = this.expenseItems[i];
-            if (item.receiptImage) {
+            if (item.cardType === 'split') {
+                if (item.corporateReceiptImage) {
+                    const label = `영수증_${i + 1}_법인_${categoryNameMap[item.category] || item.category}`;
+                    files.push(await this.dataUrlToFile(item.corporateReceiptImage, label));
+                }
+                if (item.personalReceiptImage) {
+                    const label = `영수증_${i + 1}_개인_${categoryNameMap[item.category] || item.category}`;
+                    files.push(await this.dataUrlToFile(item.personalReceiptImage, label));
+                }
+            } else if (item.receiptImage) {
                 const label = `영수증_${i + 1}_${categoryNameMap[item.category] || item.category}`;
                 files.push(await this.dataUrlToFile(item.receiptImage, label));
             }
@@ -1573,10 +1626,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
             if (newClubInputRow) newClubInputRow.classList.add('hidden');
-            AppState.clubName = clubNameInput.value;
+            if (AppState.clubName !== clubNameInput.value) {
+                AppState.clubName = clubNameInput.value;
+                AppState.clearClubData();
+            }
             AppState.syncBudgetFromClub(AppState.clubName);
             AppState.save();
-            updateRemainingDisplay();
+            setSettingsFormValues(AppState.rules);
         });
 
         if (AppState.firebaseDb) {
@@ -1599,6 +1655,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 AppState.addOrUpdateClub(clubId, name, 0);
             }
             AppState.clubName = name;
+            AppState.clearClubData();
             AppState.syncBudgetFromClub(name);
             AppState.save();
             newClubNameInput.value = '';
@@ -1606,7 +1663,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const finish = () => {
                 renderClubOptions();
-                updateRemainingDisplay();
+                setSettingsFormValues(AppState.rules);
             };
             if (AppState.firebaseDb) {
                 AppState.loadClubRegistry().then(finish);
@@ -1632,6 +1689,14 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('setting-rate3').value = Math.round(rules.rate3 * 100);
         document.getElementById('setting-deduction4').value = rules.deduction4;
         document.getElementById('setting-email').value = AppState.reportEmail || '';
+
+        const annualInput = document.getElementById('setting-annual-budget');
+        const usedInput = document.getElementById('setting-used-budget');
+        if (annualInput) annualInput.value = AppState.annualBudget;
+        if (usedInput) usedInput.value = AppState.usedBudget;
+        if (typeof updateRemainingDisplay === 'function') {
+            updateRemainingDisplay();
+        }
     };
     setSettingsFormValues(AppState.rules);
 
@@ -1952,7 +2017,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const emailReportModal = document.getElementById('email-report-modal');
     const sendEmailBtn = document.getElementById('send-email-btn');
     const closeEmailModal = document.getElementById('close-email-modal');
-    const copyEmailBtn = document.getElementById('copy-email-btn');
+    const downloadExcelBtn = document.getElementById('download-excel-btn');
     const triggerMailtoBtn = document.getElementById('trigger-mailto-btn');
 
     if (sendEmailBtn && emailReportModal) {
@@ -2001,19 +2066,23 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    if (copyEmailBtn) {
-        copyEmailBtn.addEventListener('click', () => {
-            const bodyText = document.getElementById('email-body-field').value;
-            navigator.clipboard.writeText(bodyText).then(() => {
-                const originalText = copyEmailBtn.innerHTML;
-                copyEmailBtn.innerHTML = "✓ 복사 완료!";
-                setTimeout(() => {
-                    copyEmailBtn.innerHTML = originalText;
-                }, 2000);
-            }).catch(err => {
-                alert("클립보드 복사에 실패했습니다. 직접 복사해주세요.");
+    if (downloadExcelBtn) {
+        downloadExcelBtn.addEventListener('click', async () => {
+            const originalText = downloadExcelBtn.innerHTML;
+            downloadExcelBtn.innerHTML = "<span class='btn-icon'>⏳</span> 생성 중...";
+            downloadExcelBtn.disabled = true;
+            try {
+                await AppState.downloadExcelOnly();
+                downloadExcelBtn.innerHTML = "<span class='btn-icon'>✓</span> 다운로드 완료!";
+            } catch (err) {
                 console.error(err);
-            });
+                downloadExcelBtn.innerHTML = "<span class='btn-icon'>❌</span> 다운로드 실패";
+            } finally {
+                setTimeout(() => {
+                    downloadExcelBtn.innerHTML = originalText;
+                    downloadExcelBtn.disabled = false;
+                }, 2000);
+            }
         });
     }
 
@@ -2161,7 +2230,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const pinModal = document.getElementById('pin-login-modal');
     const pinDots = document.querySelectorAll('.pin-dot');
     const pinErrorText = document.getElementById('pin-error-text');
-    const pinOfflineBtn = document.getElementById('pin-offline-btn');
     const statusBadge = document.getElementById('login-status-badge');
     const logoutBtn = document.getElementById('header-logout-btn');
     const loginBtn = document.getElementById('header-login-btn');
@@ -2210,26 +2278,18 @@ document.addEventListener('DOMContentLoaded', () => {
                         return;
                     }
                     
-                    pinOfflineBtn.disabled = true;
-                    pinOfflineBtn.textContent = "연결 중...";
-                    
                     AppState.loadFromFirebase(pin).then(() => {
                         pinModal.classList.add('hidden');
                         statusBadge.className = 'badge-online';
                         statusBadge.innerHTML = `🌐 온라인 (${AppState.userName || '알 수 없음'} / PIN: ${pin})`;
                         logoutBtn.style.display = 'inline-block';
                         loginBtn.style.display = 'none';
-                        pinOfflineBtn.disabled = false;
-                        pinOfflineBtn.textContent = "오프라인(기기저장) 모드로 시작";
                         resetPinInput();
 
                         // Admin tab check
                         const adminTabBtn = document.getElementById('admin-tab-btn');
                         if (pin === "000000") {
                             adminTabBtn.classList.remove('hidden');
-                            setTimeout(() => {
-                                adminTabBtn.click();
-                            }, 50);
                         } else {
                             adminTabBtn.classList.add('hidden');
                         }
@@ -2244,8 +2304,6 @@ document.addEventListener('DOMContentLoaded', () => {
                         console.error(err);
                         pinErrorText.textContent = err.message || "서버 연결에 실패했습니다.";
                         pinErrorText.classList.remove('hidden');
-                        pinOfflineBtn.disabled = false;
-                        pinOfflineBtn.textContent = "오프라인(기기저장) 모드로 시작";
                         resetPinInput();
                     });
                 }
@@ -2302,10 +2360,6 @@ document.addEventListener('DOMContentLoaded', () => {
         setSettingsFormValues(AppState.rules);
         AppState.render();
     }
-
-    pinOfflineBtn.addEventListener('click', () => {
-        switchToOfflineMode();
-    });
 
     logoutBtn.addEventListener('click', () => {
         if (confirm("로그아웃 하시겠습니까? (로컬 기기 모드로 전환됩니다)")) {
