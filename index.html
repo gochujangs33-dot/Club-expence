@@ -92,9 +92,19 @@
 
                     <!-- 2. Add Expense Item Card -->
                     <div class="card" id="add-expense-card">
-                        <div class="card-header">
-                            <span class="card-icon">➕</span>
-                            <h2>비용 항목 추가</h2>
+                        <div class="card-header" style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:0.5rem;">
+                            <div style="display:flex; align-items:center; gap:0.5rem;">
+                                <span class="card-icon">➕</span>
+                                <h2>비용 항목 추가</h2>
+                            </div>
+                            <div style="display:flex; align-items:center; gap:1rem; font-size:0.9rem;">
+                                <label for="expense-corp-check" style="display:flex; align-items:center; gap:0.4rem; margin:0; cursor:pointer;">
+                                    <input type="checkbox" id="expense-corp-check" style="width:auto;" checked> 법인카드
+                                </label>
+                                <label for="expense-personal-check" style="display:flex; align-items:center; gap:0.4rem; margin:0; cursor:pointer;">
+                                    <input type="checkbox" id="expense-personal-check" style="width:auto;"> 개인카드
+                                </label>
+                            </div>
                         </div>
                         <div class="card-body">
                             <form id="expense-form" onsubmit="return false;">
@@ -114,16 +124,6 @@
                                             <option value="FACILITY">시설 및 장비 이용료</option>
                                             <option value="PRIZE">상품</option>
                                         </select>
-                                    </div>
-                                </div>
-                                <div class="input-row">
-                                    <div class="input-group flex-1" style="display:flex; align-items:center; gap:0.4rem;">
-                                        <input type="checkbox" id="expense-corp-check" style="width:auto;" checked>
-                                        <label for="expense-corp-check" style="margin:0;">법인카드</label>
-                                    </div>
-                                    <div class="input-group flex-1" style="display:flex; align-items:center; gap:0.4rem;">
-                                        <input type="checkbox" id="expense-personal-check" style="width:auto;">
-                                        <label for="expense-personal-check" style="margin:0;">개인카드</label>
                                     </div>
                                 </div>
                                 <div class="input-row">
