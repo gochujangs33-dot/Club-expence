@@ -285,6 +285,16 @@ button, input, select, label, a {
     background: transparent;
 }
 
+select.club-name-input {
+    cursor: pointer;
+    appearance: auto;
+}
+
+select.club-name-input option {
+    background: var(--bg-darker);
+    color: var(--text-primary);
+}
+
 /* Layout Grid */
 .layout-grid {
     display: grid;

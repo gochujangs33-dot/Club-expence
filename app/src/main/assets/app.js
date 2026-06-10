@@ -144,6 +144,8 @@ const AppState = {
     eventPhoto: null,
     clubName: '',
     settlementHistory: [],
+    clubRegistry: {},
+    clubTotalBudget: 0,
 
     // Load initial state if storage exists (optional local storage helper)
     load() {
@@ -348,6 +350,46 @@ const AppState = {
         });
     },
 
+    // ── 클럽 레지스트리 (관리자가 등록한 전체 클럽 목록 + 예산 분배) ──────────────
+    loadClubRegistry() {
+        if (!this.firebaseDb) return Promise.resolve();
+        return this.firebaseDb.ref('clubRegistry').once('value').then(snapshot => {
+            this.clubRegistry = snapshot.val() || {};
+        }).then(() => this.firebaseDb.ref('clubTotalBudget').once('value')).then(snapshot => {
+            this.clubTotalBudget = snapshot.val() || 0;
+        }).catch(err => console.error("클럽 레지스트리 로딩 실패:", err));
+    },
+
+    saveClubRegistry() {
+        if (!this.firebaseDb) return;
+        this.firebaseDb.ref('clubRegistry').set(this.clubRegistry).catch(err => console.error("클럽 레지스트리 저장 실패:", err));
+    },
+
+    saveClubTotalBudget(value) {
+        this.clubTotalBudget = Math.max(0, value || 0);
+        if (this.firebaseDb) {
+            this.firebaseDb.ref('clubTotalBudget').set(this.clubTotalBudget).catch(err => console.error("총 클럽비용 저장 실패:", err));
+        }
+    },
+
+    addOrUpdateClub(clubId, name, budget) {
+        this.clubRegistry[clubId] = { name: name.trim(), budget: Math.max(0, budget || 0) };
+        this.saveClubRegistry();
+    },
+
+    deleteClub(clubId) {
+        delete this.clubRegistry[clubId];
+        this.saveClubRegistry();
+    },
+
+    // 선택된 클럽의 배정 예산을 현재 사용자의 "올해 클럽 지원 총예산"에 동기화
+    syncBudgetFromClub(clubName) {
+        const club = Object.values(this.clubRegistry).find(c => c.name === clubName);
+        if (club) {
+            this.annualBudget = club.budget;
+            this.save();
+        }
+    },
 
     addExpense(description, amount, category, corpChecked, personalChecked, corporateAmountInput) {
         let cardType, corpAmount, personalAmount, receiptImage, corporateReceiptImage, personalReceiptImage;
@@ -1441,14 +1483,44 @@ document.addEventListener('DOMContentLoaded', () => {
         .then(list => AppState.bulkImportDirectory(list))
         .catch(err => console.error("전사원 명부 자동 등록 실패:", err));
 
-    // Club name input init
-    const clubNameInput = document.getElementById('club-name-input');
-    if (clubNameInput) {
-        clubNameInput.value = AppState.clubName;
-        clubNameInput.addEventListener('input', () => {
-            AppState.clubName = clubNameInput.value.trim();
-            AppState.save();
+    // Club name dropdown init
+    const clubNameInput = document.getElementById('club-name-select');
+
+    function renderClubOptions() {
+        if (!clubNameInput) return;
+        const current = AppState.clubName || '';
+        clubNameInput.innerHTML = '<option value="">클럽을 선택하세요</option>';
+        const clubs = Object.values(AppState.clubRegistry || {});
+        clubs.forEach(club => {
+            const opt = document.createElement('option');
+            opt.value = club.name;
+            opt.textContent = club.name;
+            clubNameInput.appendChild(opt);
         });
+        // 현재 클럽명이 레지스트리에 없으면 (예: 오프라인/마이그레이션 전) 임시로 추가
+        if (current && !clubs.some(c => c.name === current)) {
+            const opt = document.createElement('option');
+            opt.value = current;
+            opt.textContent = current;
+            clubNameInput.appendChild(opt);
+        }
+        clubNameInput.value = current;
+    }
+
+    if (clubNameInput) {
+        renderClubOptions();
+        clubNameInput.addEventListener('change', () => {
+            AppState.clubName = clubNameInput.value;
+            AppState.syncBudgetFromClub(AppState.clubName);
+            AppState.save();
+            updateRemainingDisplay();
+        });
+
+        if (AppState.firebaseDb) {
+            AppState.loadClubRegistry().then(() => {
+                renderClubOptions();
+            });
+        }
     }
 
     // Set form input fields default values
@@ -1651,9 +1723,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const rate3 = (parseInt(document.getElementById('setting-rate3').value, 10) || 0) / 100;
         const deduction4 = parseInt(document.getElementById('setting-deduction4').value, 10) || 0;
 
-        const annualBudget = parseInt(document.getElementById('setting-annual-budget').value, 10) || 0;
         const usedBudget = parseInt(document.getElementById('setting-used-budget').value, 10) || 0;
-        AppState.annualBudget = annualBudget;
         AppState.usedBudget = usedBudget;
         AppState.updateRules({ limit1, limit2, rate2, limit3, rate3, deduction4 });
 
@@ -2046,7 +2116,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         }
                         
                         // Sync values to form fields
-                        clubNameInput.value = AppState.clubName || '';
+                        AppState.loadClubRegistry().then(renderClubOptions);
                         memberInput.value = AppState.memberCount || 0;
                         prizeInput.value = AppState.previousPrizeTotal || 0;
                         setSettingsFormValues(AppState.rules);
@@ -2107,7 +2177,7 @@ document.addEventListener('DOMContentLoaded', () => {
         AppState.userName = null;
         resetPinInput();
         AppState.load(); // Load local storage
-        clubNameInput.value = AppState.clubName || '';
+        renderClubOptions();
         memberInput.value = AppState.memberCount || 0;
         prizeInput.value = AppState.previousPrizeTotal || 0;
         setSettingsFormValues(AppState.rules);
@@ -2198,7 +2268,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     loginBtn.style.display = 'none';
                     
                     // Sync values to form fields
-                    clubNameInput.value = AppState.clubName || '';
+                    AppState.loadClubRegistry().then(renderClubOptions);
                     memberInput.value = AppState.memberCount || 0;
                     prizeInput.value = AppState.previousPrizeTotal || 0;
                     setSettingsFormValues(AppState.rules);
@@ -2262,8 +2332,180 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('admin-total-spend').textContent = SettlementCalculator.formatCurrency(totalSpend);
             document.getElementById('admin-total-support').textContent = SettlementCalculator.formatCurrency(totalSupport);
             document.getElementById('admin-total-self-pay').textContent = SettlementCalculator.formatCurrency(totalSelfPay);
-            
+
             renderAdminHistory(historyList);
+            renderClubAnalysisChart(historyList);
+        });
+
+        // 3. Fetch Club Registry & Total Budget
+        AppState.loadClubRegistry().then(() => {
+            renderClubManagement();
+        });
+    }
+
+    // ── 클럽 관리 (관리자 대시보드) ───────────────────────────────────────
+    let clubAnalysisChartInstance = null;
+    let editingClubId = null;
+
+    const clubTotalBudgetInput = document.getElementById('club-total-budget-input');
+    const clubBudgetSummary = document.getElementById('club-budget-summary');
+    const clubForm = document.getElementById('club-form');
+    const clubNameFormInput = document.getElementById('club-name-form-input');
+    const clubBudgetFormInput = document.getElementById('club-budget-form-input');
+    const cancelEditClubBtn = document.getElementById('cancel-edit-club-btn');
+    const clubListContainer = document.getElementById('club-list-container');
+
+    function renderClubManagement() {
+        if (clubTotalBudgetInput) {
+            clubTotalBudgetInput.value = AppState.clubTotalBudget || 0;
+        }
+
+        const clubs = Object.entries(AppState.clubRegistry || {});
+        const allocated = clubs.reduce((sum, [, c]) => sum + (c.budget || 0), 0);
+        const remaining = (AppState.clubTotalBudget || 0) - allocated;
+        if (clubBudgetSummary) {
+            clubBudgetSummary.textContent = `${SettlementCalculator.formatCurrency(allocated)} / ${SettlementCalculator.formatCurrency(remaining)}`;
+            clubBudgetSummary.style.color = remaining < 0 ? 'var(--warning-text, #ff6b6b)' : 'var(--color-secondary)';
+        }
+
+        if (!clubListContainer) return;
+        clubListContainer.innerHTML = '';
+        if (clubs.length === 0) {
+            clubListContainer.innerHTML = `<div class="empty-state"><span class="empty-icon">🏷️</span><p>등록된 클럽이 없습니다.</p></div>`;
+            return;
+        }
+        clubs.sort((a, b) => a[1].name.localeCompare(b[1].name)).forEach(([clubId, club]) => {
+            const row = document.createElement('div');
+            row.className = 'expense-row';
+            row.style.padding = '0.5rem 0.75rem';
+            row.innerHTML = `
+                <div class="expense-row-left">
+                    <span class="expense-row-title" style="font-size:0.9rem;">${AppState.escapeHtml(club.name)}</span>
+                    <span style="font-size:0.78rem; color:var(--text-secondary);">배정 예산: ${SettlementCalculator.formatCurrency(club.budget || 0)}</span>
+                </div>
+                <div class="expense-row-right" style="gap:0.4rem;">
+                    <button class="btn-edit-club btn-secondary" data-id="${AppState.escapeHtml(clubId)}" style="padding:0.3rem 0.6rem; font-size:0.78rem;">수정</button>
+                    <button class="btn-delete-club btn-text-danger" data-id="${AppState.escapeHtml(clubId)}" style="padding:0.3rem 0.6rem; font-size:0.78rem;">삭제</button>
+                </div>
+            `;
+            clubListContainer.appendChild(row);
+        });
+
+        clubListContainer.querySelectorAll('.btn-edit-club').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const clubId = btn.getAttribute('data-id');
+                const club = AppState.clubRegistry[clubId];
+                if (!club) return;
+                editingClubId = clubId;
+                clubNameFormInput.value = club.name;
+                clubBudgetFormInput.value = club.budget || 0;
+                document.getElementById('add-club-btn').innerHTML = `<span class="btn-icon">💾</span> 수정 완료`;
+                cancelEditClubBtn.classList.remove('hidden');
+                clubNameFormInput.focus();
+            });
+        });
+        clubListContainer.querySelectorAll('.btn-delete-club').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const clubId = btn.getAttribute('data-id');
+                const club = AppState.clubRegistry[clubId];
+                if (!club) return;
+                if (confirm(`'${club.name}' 클럽을 삭제하시겠습니까?`)) {
+                    AppState.deleteClub(clubId);
+                    renderClubManagement();
+                }
+            });
+        });
+    }
+
+    function resetClubForm() {
+        editingClubId = null;
+        clubNameFormInput.value = '';
+        clubBudgetFormInput.value = '';
+        document.getElementById('add-club-btn').innerHTML = `<span class="btn-icon">➕</span> 클럽 추가`;
+        cancelEditClubBtn.classList.add('hidden');
+    }
+
+    if (clubTotalBudgetInput) {
+        clubTotalBudgetInput.addEventListener('change', () => {
+            AppState.saveClubTotalBudget(parseInt(clubTotalBudgetInput.value, 10) || 0);
+            renderClubManagement();
+        });
+    }
+
+    if (clubForm) {
+        clubForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const name = clubNameFormInput.value.trim();
+            const budget = parseInt(clubBudgetFormInput.value, 10) || 0;
+            if (!name) return;
+            const clubId = editingClubId || ('club_' + Date.now());
+            AppState.addOrUpdateClub(clubId, name, budget);
+            resetClubForm();
+            renderClubManagement();
+        });
+    }
+
+    if (cancelEditClubBtn) {
+        cancelEditClubBtn.addEventListener('click', resetClubForm);
+    }
+
+    // ── 클럽별 지출 분석 차트 ─────────────────────────────────────────────
+    function renderClubAnalysisChart(historyList) {
+        const canvas = document.getElementById('club-analysis-chart');
+        if (!canvas || typeof Chart === 'undefined') return;
+
+        const spendByClub = {};
+        historyList.forEach(entry => {
+            const club = entry.clubName || '기본 클럽';
+            spendByClub[club] = (spendByClub[club] || 0) + (entry.totalCost || 0);
+        });
+
+        // 클럽 레지스트리에 등록된 클럽도 (지출 0이라도) 표시
+        Object.values(AppState.clubRegistry || {}).forEach(club => {
+            if (spendByClub[club.name] === undefined) spendByClub[club.name] = 0;
+        });
+
+        const labels = Object.keys(spendByClub);
+        const spendData = labels.map(name => spendByClub[name]);
+        const budgetData = labels.map(name => {
+            const club = Object.values(AppState.clubRegistry || {}).find(c => c.name === name);
+            return club ? (club.budget || 0) : 0;
+        });
+
+        if (clubAnalysisChartInstance) {
+            clubAnalysisChartInstance.destroy();
+        }
+        clubAnalysisChartInstance = new Chart(canvas.getContext('2d'), {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: '배정 예산',
+                        data: budgetData,
+                        backgroundColor: 'rgba(139, 92, 246, 0.35)',
+                        borderColor: 'rgba(139, 92, 246, 0.9)',
+                        borderWidth: 1
+                    },
+                    {
+                        label: '지출액',
+                        data: spendData,
+                        backgroundColor: 'rgba(56, 189, 248, 0.45)',
+                        borderColor: 'rgba(56, 189, 248, 0.9)',
+                        borderWidth: 1
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: { labels: { color: '#cbd5e1' } }
+                },
+                scales: {
+                    x: { ticks: { color: '#cbd5e1' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+                    y: { ticks: { color: '#cbd5e1' }, grid: { color: 'rgba(255,255,255,0.05)' }, beginAtZero: true }
+                }
+            }
         });
     }
 

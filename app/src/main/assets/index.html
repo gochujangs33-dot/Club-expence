@@ -43,7 +43,9 @@
                 <h1>클럽 비용 정산기</h1>
             </div>
             <div class="club-name-wrapper">
-                <input type="text" id="club-name-input" class="club-name-input" placeholder="클럽명을 입력하세요" maxlength="40" autocomplete="off">
+                <select id="club-name-select" class="club-name-input">
+                    <option value="">클럽을 선택하세요</option>
+                </select>
             </div>
             <p class="subtitle">엑셀 정산 양식의 핵심 계산 및 한도 검증을 모바일 웹으로 단순화</p>
             <div class="login-status-wrapper" id="login-status-wrapper" style="margin-top: 0.75rem; display: flex; align-items: center; justify-content: center; gap: 0.5rem;">
@@ -247,7 +249,8 @@
                                 <p class="settings-title" style="font-size:0.88rem; margin-bottom:0.1rem;">💰 연간 예산 관리</p>
                                 <div class="input-group">
                                     <label for="setting-annual-budget">올해 클럽 지원 총예산 (원)</label>
-                                    <input type="number" id="setting-annual-budget" min="0" step="10000" value="0">
+                                    <input type="number" id="setting-annual-budget" min="0" step="10000" value="0" readonly class="readonly-input">
+                                    <small class="input-hint">💡 관리자 대시보드의 클럽 관리에서 선택한 클럽에 배정한 예산이 자동으로 표시됩니다.</small>
                                 </div>
                                 <div class="input-group">
                                     <label for="setting-used-budget">현재까지 사용한 금액 (원)</label>
@@ -509,6 +512,57 @@
                 </div>
             </div>
 
+            <div class="card" id="club-management-card">
+                <div class="card-header">
+                    <span class="card-icon">🏷️</span>
+                    <h2>클럽 관리</h2>
+                </div>
+                <div class="card-body">
+                    <div class="input-row" style="align-items:flex-end;">
+                        <div class="input-group flex-2">
+                            <label for="club-total-budget-input">올해 사용 가능한 총 클럽비용 (원)</label>
+                            <input type="number" id="club-total-budget-input" min="0" step="10000" placeholder="예: 50000000">
+                        </div>
+                        <div class="input-group flex-1" style="margin:0;">
+                            <span style="font-size:0.82rem; color:var(--text-secondary);">배정 합계 / 미배정</span>
+                            <strong id="club-budget-summary" style="display:block; font-size:0.95rem; color:var(--color-secondary);">0원 / 0원</strong>
+                        </div>
+                    </div>
+                    <div class="divider"></div>
+                    <form id="club-form">
+                        <div class="input-row">
+                            <div class="input-group flex-2">
+                                <label for="club-name-form-input">클럽명</label>
+                                <input type="text" id="club-name-form-input" placeholder="예: 동탄 All balls" required autocomplete="off">
+                            </div>
+                            <div class="input-group flex-1">
+                                <label for="club-budget-form-input">배정 예산 (원)</label>
+                                <input type="number" id="club-budget-form-input" min="0" step="10000" placeholder="예: 5000000" required>
+                            </div>
+                        </div>
+                        <div class="form-actions">
+                            <button type="submit" id="add-club-btn" class="btn-primary" style="flex:1;">
+                                <span class="btn-icon">➕</span> 클럽 추가
+                            </button>
+                            <button type="button" id="cancel-edit-club-btn" class="btn-secondary hidden" style="flex:1;">수정 취소</button>
+                        </div>
+                    </form>
+                    <div id="club-list-container" class="scroll-y" style="max-height: 320px; margin-top: 0.75rem; display:flex; flex-direction:column; gap:0.5rem;">
+                        <!-- Populated dynamically -->
+                    </div>
+                </div>
+            </div>
+
+            <div class="card" id="club-analysis-card">
+                <div class="card-header">
+                    <span class="card-icon">📈</span>
+                    <h2>클럽별 지출 분석</h2>
+                </div>
+                <div class="card-body">
+                    <canvas id="club-analysis-chart" height="120"></canvas>
+                </div>
+            </div>
+
             <div class="layout-grid">
                 <!-- Left Panel: User list -->
                 <section class="panel-left">
@@ -685,6 +739,7 @@
     <!-- 엑셀(.xlsx) 생성 라이브러리 (오프라인 번들) -->
     <script src="./lib/xlsx.mini.min.js"></script>
     <script src="./lib/jszip.min.js"></script>
+    <script src="./lib/chart.min.js"></script>
 
     <!-- App JavaScript -->
     <script src="app.js" defer></script>
