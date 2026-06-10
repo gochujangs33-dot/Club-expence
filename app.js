@@ -601,6 +601,10 @@ const AppState = {
     },
 
     deleteFromDirectory(name) {
+        if (this.userName !== '관리자' && this.currentPin !== '002531') {
+            alert("명부 삭제는 관리자 또는 개발자만 가능합니다.");
+            return;
+        }
         try {
             delete this.directory[name];
             if (this.editingDirName === name) {
@@ -988,21 +992,26 @@ const AppState = {
                     row.style.padding = '0.5rem 0.75rem';
                     row.style.cursor = 'pointer';
                     
-                    const addBtnHtml = isAdded 
+                    const addBtnHtml = isAdded
                         ? `<button class="btn-primary-sm" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; background: var(--text-muted); cursor: not-allowed;" disabled>✓ 추가됨</button>`
                         : `<button class="btn-add-to-current btn-primary-sm" data-name="${this.escapeHtml(name)}" data-id="${this.escapeHtml(idValue)}" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">추가</button>`;
-                    
+
+                    const canDeleteDir = (this.userName === '관리자' || this.currentPin === '002531');
+                    const deleteDirBtnHtml = canDeleteDir
+                        ? `<button class="btn-delete-from-directory btn-delete btn-text-danger" data-name="${this.escapeHtml(name)}" style="padding: 0.5rem; font-size: 1.1rem; width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; background: rgba(239, 68, 68, 0.1); margin-left: 0.5rem;" title="명부에서 삭제">&times;</button>`
+                        : '';
+
                     row.innerHTML = `
                         <div class="expense-row-left">
                             <span class="expense-row-title" style="font-size: 0.88rem;">
                                 ${this.escapeHtml(name)}
                                 <span style="font-size: 0.72rem; color: var(--color-secondary); font-weight: 600; margin-left: 0.3rem;">(올해 누적: <input type="number" class="dir-count-input" data-name="${this.escapeHtml(name)}" value="${countValue}" min="0" style="width:34px; padding:0 2px; font-size:0.72rem; font-weight:700; color:var(--color-secondary); background:transparent; border:none; border-bottom:1px dashed var(--color-secondary); outline:none; text-align:center; -moz-appearance:textfield; appearance:textfield;">회)</span>
                             </span>
-                            <span style="font-size: 0.75rem; color: var(--text-secondary);">사번: ${this.escapeHtml(idValue)}</span>
+                            <span style="font-size: 0.75rem; color: var(--text-secondary);">EMP ID: ${this.escapeHtml(idValue)}</span>
                         </div>
                         <div class="expense-row-right" style="gap: 0.4rem;">
                             ${addBtnHtml}
-                            <button class="btn-delete-from-directory btn-delete btn-text-danger" data-name="${this.escapeHtml(name)}" style="padding: 0.5rem; font-size: 1.1rem; width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; background: rgba(239, 68, 68, 0.1); margin-left: 0.5rem;" title="명부에서 삭제">&times;</button>
+                            ${deleteDirBtnHtml}
                         </div>
                     `;
                     directoryContainer.appendChild(row);
