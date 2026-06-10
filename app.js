@@ -1693,6 +1693,11 @@ document.addEventListener('DOMContentLoaded', () => {
     memberInput.value = AppState.memberCount;
     prizeInput.value = AppState.previousPrizeTotal;
 
+    // Settings panel: init budget fields from saved state
+    const annualBudgetInput = document.getElementById('setting-annual-budget');
+    const usedBudgetInput = document.getElementById('setting-used-budget');
+    const remainingDisplay = document.getElementById('setting-remaining-display');
+
     // Set settings form input values
     const setSettingsFormValues = (rules) => {
         document.getElementById('setting-limit1').value = rules.limit1;
@@ -2136,11 +2141,6 @@ document.addEventListener('DOMContentLoaded', () => {
             window.location.href = mailtoUrl;
         });
     }
-
-    // Settings panel: init budget fields from saved state
-    const annualBudgetInput = document.getElementById('setting-annual-budget');
-    const usedBudgetInput = document.getElementById('setting-used-budget');
-    const remainingDisplay = document.getElementById('setting-remaining-display');
 
     function updateRemainingDisplay() {
         const annual = parseInt(annualBudgetInput.value, 10) || 0;
