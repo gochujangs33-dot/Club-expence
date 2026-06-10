@@ -1347,6 +1347,16 @@ const AppState = {
         return new File([blob], `${fileName}.${ext}`, { type: blob.type });
     },
 
+    // File 객체를 base64 문자열로 변환 (data URL 접두어 제외)
+    fileToBase64(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result.split(',')[1]);
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+        });
+    },
+
     // 엑셀 + 사진(참석자/영수증)을 묶어 공유 시트로 전달
     async shareSettlementReport() {
         const statusEl = document.getElementById('share-report-status');
@@ -1377,7 +1387,15 @@ const AppState = {
                 files: files
             };
 
-            if (navigator.canShare && navigator.canShare(shareData)) {
+            if (window.AndroidShare && typeof window.AndroidShare.shareFiles === 'function') {
+                const filesPayload = await Promise.all(files.map(async f => ({
+                    name: f.name,
+                    mimeType: f.type || 'application/octet-stream',
+                    base64: await this.fileToBase64(f)
+                })));
+                window.AndroidShare.shareFiles(JSON.stringify(filesPayload), shareData.title, shareData.text);
+                setStatus('공유 시트가 열렸습니다. 메일 앱을 선택해 전송해주세요.');
+            } else if (navigator.canShare && navigator.canShare(shareData)) {
                 await navigator.share(shareData);
                 setStatus('공유 시트가 열렸습니다. 메일 앱을 선택해 전송해주세요.');
             } else if (navigator.canShare && navigator.canShare({ files: [files[0]] })) {
