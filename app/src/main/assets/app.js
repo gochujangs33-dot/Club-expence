@@ -1576,6 +1576,19 @@ const AppState = {
 
 // --- 4. Event Listeners & Initialization ---
 document.addEventListener('DOMContentLoaded', () => {
+    // PIN 키패드 클릭이 항상 동작하도록 가장 먼저 위임 방식으로 등록
+    // (이후 초기화 코드에서 오류가 발생해도 키패드 입력은 막히지 않음)
+    document.addEventListener('click', (e) => {
+        const key = e.target.closest && e.target.closest('.pin-key');
+        if (key) {
+            try {
+                handlePinKeyPress(key.getAttribute('data-value'));
+            } catch (err) {
+                console.error('PIN 키패드 처리 오류:', err);
+            }
+        }
+    });
+
     // Load state from local storage
     AppState.load();
 
@@ -2310,14 +2323,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
     }
-
-    // Keypad event listeners
-    document.querySelectorAll('.pin-key').forEach(key => {
-        key.addEventListener('click', () => {
-            const val = key.getAttribute('data-value');
-            handlePinKeyPress(val);
-        });
-    });
 
     // Keyboard support for PIN entry
     document.addEventListener('keydown', (e) => {
