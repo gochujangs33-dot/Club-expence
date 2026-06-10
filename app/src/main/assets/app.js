@@ -5,13 +5,13 @@
 // --- Firebase Config & Initialization ---
 // 구글 Firebase 콘솔에서 발급받은 실제 설정 키값들을 아래에 입력하시면 클라우드 연동이 활성화됩니다.
 const firebaseConfig = {
-    apiKey: "YOUR_API_KEY",
-    authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-    databaseURL: "https://YOUR_PROJECT_ID-default-rtdb.firebaseio.com",
-    projectId: "YOUR_PROJECT_ID",
-    storageBucket: "YOUR_PROJECT_ID.appspot.com",
-    messagingSenderId: "YOUR_SENDER_ID",
-    appId: "YOUR_APP_ID"
+    apiKey: "AIzaSyA_vDZaJvmPiiWTmFxJju6rWuv7g5g9Jk",
+    authDomain: "club-expence.firebaseapp.com",
+    databaseURL: "https://club-expence-default-rtdb.asia-southeast1.firebasedatabase.app",
+    projectId: "club-expence",
+    storageBucket: "club-expence.firebasestorage.app",
+    messagingSenderId: "679102443088",
+    appId: "1:679102443088:web:ef82b35806569c5b2aab55"
 };
 
 let firebaseDb = null;
@@ -137,6 +137,8 @@ const AppState = {
     editingDirName: null,
     rules: { ...DefaultRules },
     tempReceiptImage: null,
+    tempCorpReceiptImage: null,
+    tempPersonalReceiptImage: null,
     lastCalculatedSelfPay: 0,
     annualBudget: 0,
     usedBudget: 0,
@@ -191,9 +193,47 @@ const AppState = {
                 const parsed = JSON.parse(savedHistory);
                 if (Array.isArray(parsed)) this.settlementHistory = parsed;
             }
+            const savedCountYear = localStorage.getItem('club_directory_count_year');
+            this.directoryCountYear = savedCountYear ? parseInt(savedCountYear, 10) : new Date().getFullYear();
         } catch (e) {
             console.error("Local storage load failed:", e);
         }
+
+        this.resetDirectoryCountsIfNewYear();
+    },
+
+    // 누적 사원 명부의 "올해 누적 참석 횟수"는 연 단위 카운트 - 새해가 되면 0으로 초기화
+    resetDirectoryCountsIfNewYear() {
+        const currentYear = new Date().getFullYear();
+        if (this.directoryCountYear !== currentYear) {
+            Object.keys(this.directory).forEach(name => {
+                const entry = this.directory[name];
+                if (typeof entry === 'object') {
+                    entry.count = 0;
+                } else {
+                    this.directory[name] = { id: entry, count: 0 };
+                }
+            });
+            this.directoryCountYear = currentYear;
+            localStorage.setItem('club_directory_count_year', currentYear.toString());
+            this.save();
+        }
+    },
+
+    // 전사원 명부 일괄 등록: 기존에 등록된 이름은 건드리지 않고, 새 이름만 추가
+    bulkImportDirectory(list) {
+        let added = 0;
+        list.forEach(([name, employeeId]) => {
+            if (!name || !employeeId) return;
+            if (this.directory[name] === undefined) {
+                this.directory[name] = { id: employeeId, count: 0 };
+                added++;
+            }
+        });
+        this.save();
+        this.render();
+        this.updateDatalist();
+        return added;
     },
 
     save() {
@@ -246,49 +286,77 @@ const AppState = {
                 reject(new Error("Firebase가 초기화되지 않았습니다."));
                 return;
             }
-            this.firebaseDb.ref(`settlements/${pin}`).once('value')
-                .then(snapshot => {
-                    const data = snapshot.val();
-                    if (data) {
-                        // Firebase 데이터가 있을 경우 덮어쓰기
-                        if (data.expenseItems) this.expenseItems = data.expenseItems;
-                        if (data.memberCount !== undefined) this.memberCount = data.memberCount;
-                        if (data.previousPrizeTotal !== undefined) this.previousPrizeTotal = data.previousPrizeTotal;
-                        if (data.rules) this.rules = data.rules;
-                        if (data.attendees) this.attendees = data.attendees;
-                        if (data.directory) this.directory = data.directory;
-                        if (data.annualBudget !== undefined) this.annualBudget = data.annualBudget;
-                        if (data.usedBudget !== undefined) this.usedBudget = data.usedBudget;
-                        if (data.clubName !== undefined) this.clubName = data.clubName;
-                        if (data.settlementHistory) this.settlementHistory = data.settlementHistory;
-                        if (data.eventPhoto) this.eventPhoto = data.eventPhoto;
-                        console.log(`Firebase data loaded successfully for PIN: ${pin}`);
-                    } else {
-                        // Firebase에 데이터가 없을 경우 현재의 로컬 상태를 클라우드에 생성
-                        console.log(`No existing data on Firebase for PIN: ${pin}. Uploading current local state.`);
-                        this.isLoggedIn = true;
-                        this.currentPin = pin;
-                        this.save();
+
+            if (pin === "000000") {
+                this.isLoggedIn = true;
+                this.currentPin = pin;
+                this.userName = "관리자";
+                resolve(true);
+                return;
+            }
+
+            this.firebaseDb.ref(`users/${pin}`).once('value')
+                .then(userSnapshot => {
+                    const userData = userSnapshot.val();
+                    if (!userData) {
+                        reject(new Error("가입되지 않은 PIN 번호입니다. 신규 회원 등록을 진행해 주세요."));
+                        return;
                     }
-                    this.isLoggedIn = true;
-                    this.currentPin = pin;
-                    resolve(true);
+                    this.userName = userData.name;
+
+                    this.firebaseDb.ref(`settlements/${pin}`).once('value')
+                        .then(snapshot => {
+                            const data = snapshot.val();
+                            if (data) {
+                                // Firebase 데이터가 있을 경우 덮어쓰기
+                                if (data.expenseItems) this.expenseItems = data.expenseItems;
+                                if (data.memberCount !== undefined) this.memberCount = data.memberCount;
+                                if (data.previousPrizeTotal !== undefined) this.previousPrizeTotal = data.previousPrizeTotal;
+                                if (data.rules) this.rules = data.rules;
+                                if (data.attendees) this.attendees = data.attendees;
+                                if (data.directory) this.directory = data.directory;
+                                if (data.annualBudget !== undefined) this.annualBudget = data.annualBudget;
+                                if (data.usedBudget !== undefined) this.usedBudget = data.usedBudget;
+                                if (data.clubName !== undefined) this.clubName = data.clubName;
+                                if (data.settlementHistory) this.settlementHistory = data.settlementHistory;
+                                if (data.eventPhoto) this.eventPhoto = data.eventPhoto;
+                                console.log(`Firebase data loaded successfully for PIN: ${pin} (${this.userName})`);
+                            } else {
+                                // Firebase에 데이터가 없을 경우 현재의 로컬 상태를 클라우드에 생성
+                                console.log(`No existing data on Firebase for PIN: ${pin}. Uploading current local state.`);
+                                this.isLoggedIn = true;
+                                this.currentPin = pin;
+                                this.save();
+                            }
+                            this.isLoggedIn = true;
+                            this.currentPin = pin;
+                            resolve(true);
+                        })
+                        .catch(err => reject(err));
                 })
-                .catch(err => {
-                    reject(err);
-                });
+                .catch(err => reject(err));
         });
     },
 
 
-    addExpense(description, amount, category) {
+    addExpense(description, amount, category, cardType, corporateAmount) {
+        const isSplit = cardType === 'split';
+        const corpAmount = isSplit ? Math.min(Math.max(corporateAmount || 0, 0), amount) : null;
+        const personalAmount = isSplit ? amount - corpAmount : null;
+
         if (this.editingItemId !== null) {
             const index = this.expenseItems.findIndex(item => item.id === this.editingItemId);
             if (index !== -1) {
-                this.expenseItems[index].description = description;
-                this.expenseItems[index].amount = amount;
-                this.expenseItems[index].category = category;
-                this.expenseItems[index].receiptImage = this.tempReceiptImage;
+                const item = this.expenseItems[index];
+                item.description = description;
+                item.amount = amount;
+                item.category = category;
+                item.cardType = cardType;
+                item.corporateAmount = corpAmount;
+                item.personalAmount = personalAmount;
+                item.receiptImage = isSplit ? null : this.tempReceiptImage;
+                item.corporateReceiptImage = isSplit ? this.tempCorpReceiptImage : null;
+                item.personalReceiptImage = isSplit ? this.tempPersonalReceiptImage : null;
             }
         } else {
             const item = {
@@ -296,7 +364,12 @@ const AppState = {
                 description,
                 amount,
                 category,
-                receiptImage: this.tempReceiptImage
+                cardType,
+                corporateAmount: corpAmount,
+                personalAmount: personalAmount,
+                receiptImage: isSplit ? null : this.tempReceiptImage,
+                corporateReceiptImage: isSplit ? this.tempCorpReceiptImage : null,
+                personalReceiptImage: isSplit ? this.tempPersonalReceiptImage : null
             };
             this.expenseItems.push(item);
         }
@@ -329,8 +402,17 @@ const AppState = {
             document.getElementById('expense-amount-input').value = item.amount;
             document.getElementById('expense-category-select').value = item.category;
 
+            // Card type / split payment
+            const cardType = item.cardType || 'corporate';
+            document.getElementById('expense-card-type-select').value = cardType;
+            document.getElementById('expense-corporate-amount-input').value = item.corporateAmount ?? '';
+            updateCardTypeUI();
+
             // Load receipt preview status
             this.tempReceiptImage = item.receiptImage || null;
+            this.tempCorpReceiptImage = item.corporateReceiptImage || null;
+            this.tempPersonalReceiptImage = item.personalReceiptImage || null;
+
             const statusEl = document.getElementById('receipt-preview-status');
             const deleteReceiptBtn = document.getElementById('delete-receipt-btn');
             if (this.tempReceiptImage) {
@@ -342,6 +424,30 @@ const AppState = {
                 if (deleteReceiptBtn) deleteReceiptBtn.classList.add('hidden');
             }
             document.getElementById('expense-receipt-input').value = '';
+
+            const corpStatusEl = document.getElementById('receipt-corp-status');
+            const deleteCorpBtn = document.getElementById('delete-receipt-corp-btn');
+            if (this.tempCorpReceiptImage) {
+                corpStatusEl.textContent = "✓ 영수증 첨부됨 (변경하려면 새 파일 선택)";
+                corpStatusEl.classList.remove('hidden');
+                if (deleteCorpBtn) deleteCorpBtn.classList.remove('hidden');
+            } else {
+                corpStatusEl.classList.add('hidden');
+                if (deleteCorpBtn) deleteCorpBtn.classList.add('hidden');
+            }
+            document.getElementById('expense-receipt-corp-input').value = '';
+
+            const personalStatusEl = document.getElementById('receipt-personal-status');
+            const deletePersonalBtn = document.getElementById('delete-receipt-personal-btn');
+            if (this.tempPersonalReceiptImage) {
+                personalStatusEl.textContent = "✓ 영수증 첨부됨 (변경하려면 새 파일 선택)";
+                personalStatusEl.classList.remove('hidden');
+                if (deletePersonalBtn) deletePersonalBtn.classList.remove('hidden');
+            } else {
+                personalStatusEl.classList.add('hidden');
+                if (deletePersonalBtn) deletePersonalBtn.classList.add('hidden');
+            }
+            document.getElementById('expense-receipt-personal-input').value = '';
 
             const submitBtn = document.getElementById('add-expense-btn');
             submitBtn.innerHTML = `<span class="btn-icon">💾</span> 수정 완료`;
@@ -362,6 +468,24 @@ const AppState = {
         document.getElementById('receipt-preview-status').classList.add('hidden');
         const deleteReceiptBtn = document.getElementById('delete-receipt-btn');
         if (deleteReceiptBtn) deleteReceiptBtn.classList.add('hidden');
+
+        document.getElementById('expense-card-type-select').selectedIndex = 0;
+        document.getElementById('expense-corporate-amount-input').value = '';
+        document.getElementById('split-personal-amount-display').textContent = '0';
+
+        document.getElementById('expense-receipt-corp-input').value = '';
+        this.tempCorpReceiptImage = null;
+        document.getElementById('receipt-corp-status').classList.add('hidden');
+        const deleteCorpBtn = document.getElementById('delete-receipt-corp-btn');
+        if (deleteCorpBtn) deleteCorpBtn.classList.add('hidden');
+
+        document.getElementById('expense-receipt-personal-input').value = '';
+        this.tempPersonalReceiptImage = null;
+        document.getElementById('receipt-personal-status').classList.add('hidden');
+        const deletePersonalBtn = document.getElementById('delete-receipt-personal-btn');
+        if (deletePersonalBtn) deletePersonalBtn.classList.add('hidden');
+
+        updateCardTypeUI();
 
         const submitBtn = document.getElementById('add-expense-btn');
         submitBtn.innerHTML = `<span class="btn-icon">✨</span> 항목 추가`;
@@ -497,6 +621,10 @@ const AppState = {
     },
 
     startEditDirectory(name) {
+        if (this.userName !== '관리자') {
+            alert("이름/사번 수정은 관리자만 가능합니다.");
+            return;
+        }
         const data = this.directory[name];
         if (data !== undefined) {
             this.editingDirName = name;
@@ -820,7 +948,12 @@ const AppState = {
         const directoryContainer = document.getElementById('directory-container');
         
         if (directoryCount && directoryContainer) {
-            const dirKeys = Object.keys(this.directory).sort((a, b) => a.localeCompare(b, 'ko'));
+            const dirKeys = Object.keys(this.directory).sort((a, b) => {
+                const countA = typeof this.directory[a] === 'object' ? (this.directory[a].count || 0) : 0;
+                const countB = typeof this.directory[b] === 'object' ? (this.directory[b].count || 0) : 0;
+                if (countB !== countA) return countB - countA;
+                return a.localeCompare(b, 'ko');
+            });
             directoryCount.textContent = dirKeys.length;
             
             directoryContainer.innerHTML = '';
@@ -828,7 +961,7 @@ const AppState = {
             if (dirKeys.length === 0) {
                 directoryContainer.innerHTML = `
                     <div class="empty-state" style="padding: 1rem 0;">
-                        <p style="font-size: 0.8rem;">누적된 사원 정보가 없습니다.</p>
+                        <p style="font-size: 0.8rem;">등록된 사원 정보가 없습니다.</p>
                     </div>
                 `;
             } else {
@@ -1038,6 +1171,163 @@ const AppState = {
         };
     },
 
+    // 공식 정산 양식(template.xlsx)을 불러와 입력 데이터로 채운 엑셀 파일(File 객체) 생성
+    async generateExcelFile() {
+        const dateStr = new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' });
+
+        const res = await fetch('./lib/template.xlsx');
+        const buf = await res.arrayBuffer();
+        const zip = await JSZip.loadAsync(buf);
+
+        // 셀 값을 직접 치환하면 캐시된 수식 결과(<v>)와 calcChain이 어긋나
+        // Excel에서 "복구" 경고가 뜨고 0/#DIV0! 으로 보일 수 있음.
+        // calcChain.xml을 제거하고 fullCalcOnLoad를 설정해 열 때 전체 재계산되도록 함.
+        zip.remove('xl/calcChain.xml');
+        let workbookXml = await zip.file('xl/workbook.xml').async('string');
+        if (/<calcPr[^>]*\/>/.test(workbookXml)) {
+            workbookXml = workbookXml.replace(/<calcPr[^>]*\/>/, '<calcPr calcId="191029" fullCalcOnLoad="1"/>');
+        } else {
+            workbookXml = workbookXml.replace('</workbook>', '<calcPr calcId="191029" fullCalcOnLoad="1"/></workbook>');
+        }
+        zip.file('xl/workbook.xml', workbookXml);
+        const ctXmlForCalc = await zip.file('[Content_Types].xml').async('string');
+        zip.file('[Content_Types].xml', ctXmlForCalc.replace(/<Override PartName="\/xl\/calcChain\.xml"[^>]*\/>/, ''));
+
+        // 비용내역 = sheet2.xml (수식 보존을 위해 셀 XML 직접 치환)
+        let sheet2 = await zip.file('xl/worksheets/sheet2.xml').async('string');
+
+        // D5부터 정회원 참석자 이름 입력 (최대 120명, K4=COUNTA(D5:D124), E열 수식이 D열을 Global ID 명단과 대조)
+        this.attendees.slice(0, 120).forEach((att, idx) => {
+            const row = 5 + idx;
+            sheet2 = setCellValue(sheet2, `D${row}`, att.name, true);
+        });
+
+        // 5행부터 입력 (서식상 최대 20건)
+        this.expenseItems.slice(0, 20).forEach((item, idx) => {
+            const row = 5 + idx;
+            sheet2 = setCellValue(sheet2, `F${row}`, item.description, true);
+            sheet2 = setCellValue(sheet2, `G${row}`, item.amount, false);
+            sheet2 = setCellValue(sheet2, `H${row}`, categoryNameMap[item.category] || item.category, true);
+        });
+
+        // K24(실제 자부담 비용): 앱에서 계산/수정된 총 자부담 금액을 그대로 입력
+        // (수정 없으면 자동 계산된 값, 수정했으면 수정된 값) — 나머지(L24 비율 등)는 서식 수식대로 자동 계산됨
+        const result = SettlementCalculator.calculate(
+            this.memberCount,
+            this.expenseItems,
+            this.previousPrizeTotal,
+            this.rules
+        );
+        sheet2 = setCellValue(sheet2, 'K24', result.totalSelfPay, false);
+
+        zip.file('xl/worksheets/sheet2.xml', sheet2);
+
+        // 사진 삽입 위치 구성
+        // 행사사진(sheet3): B3부터 좌/우 번갈아 배치
+        // 영수증(sheet4): B5부터 법인카드, D5부터 개인카드 영수증 순서대로 아래로 배치
+        const placements = [];
+        const PHOTO_W = 240, PHOTO_H = 180;     // 행사사진
+        const RECEIPT_W = 220, RECEIPT_H = 300; // 영수증
+        const RECEIPT_ROW_STEP = 16;
+
+        if (this.eventPhoto) {
+            placements.push({
+                sheetFile: 'sheet3.xml',
+                col: 1, row: 2,
+                blob: await this.dataUrlToFile(this.eventPhoto, 'event'),
+                widthPx: PHOTO_W, heightPx: PHOTO_H
+            });
+        }
+
+        let corpRow = 4, personalRow = 4;
+        for (const item of this.expenseItems) {
+            if (item.cardType === 'split') {
+                if (item.corporateReceiptImage) {
+                    placements.push({ sheetFile: 'sheet4.xml', col: 1, row: corpRow, blob: await this.dataUrlToFile(item.corporateReceiptImage, 'corp'), widthPx: RECEIPT_W, heightPx: RECEIPT_H });
+                    corpRow += RECEIPT_ROW_STEP;
+                }
+                if (item.personalReceiptImage) {
+                    placements.push({ sheetFile: 'sheet4.xml', col: 3, row: personalRow, blob: await this.dataUrlToFile(item.personalReceiptImage, 'personal'), widthPx: RECEIPT_W, heightPx: RECEIPT_H });
+                    personalRow += RECEIPT_ROW_STEP;
+                }
+            } else if (item.receiptImage) {
+                if (item.cardType === 'personal') {
+                    placements.push({ sheetFile: 'sheet4.xml', col: 3, row: personalRow, blob: await this.dataUrlToFile(item.receiptImage, 'personal'), widthPx: RECEIPT_W, heightPx: RECEIPT_H });
+                    personalRow += RECEIPT_ROW_STEP;
+                } else {
+                    // 법인카드(기본값)
+                    placements.push({ sheetFile: 'sheet4.xml', col: 1, row: corpRow, blob: await this.dataUrlToFile(item.receiptImage, 'corp'), widthPx: RECEIPT_W, heightPx: RECEIPT_H });
+                    corpRow += RECEIPT_ROW_STEP;
+                }
+            }
+        }
+
+        if (placements.length > 0) {
+            await embedImagesIntoXlsx(zip, placements);
+        }
+
+        const wbout = await zip.generateAsync({ type: 'arraybuffer' });
+        const fileName = `클럽비용정산_${dateStr.replace(/[^0-9]/g, '')}.xlsx`;
+        return new File([wbout], fileName, { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    },
+
+    // base64 데이터 URL을 File 객체로 변환
+    async dataUrlToFile(dataUrl, fileName) {
+        const res = await fetch(dataUrl);
+        const blob = await res.blob();
+        const ext = (blob.type.split('/')[1] || 'jpg').replace('jpeg', 'jpg');
+        return new File([blob], `${fileName}.${ext}`, { type: blob.type });
+    },
+
+    // 엑셀 + 사진(참석자/영수증)을 묶어 공유 시트로 전달
+    async shareSettlementReport() {
+        const statusEl = document.getElementById('share-report-status');
+        const setStatus = (msg) => { if (statusEl) statusEl.textContent = msg; };
+
+        try {
+            setStatus('파일을 준비하는 중입니다...');
+
+            const files = [];
+            files.push(await this.generateExcelFile());
+
+            if (this.eventPhoto) {
+                files.push(await this.dataUrlToFile(this.eventPhoto, '참석자_사진'));
+            }
+
+            for (let i = 0; i < this.expenseItems.length; i++) {
+                const item = this.expenseItems[i];
+                if (item.receiptImage) {
+                    const label = `영수증_${i + 1}_${categoryNameMap[item.category] || item.category}`;
+                    files.push(await this.dataUrlToFile(item.receiptImage, label));
+                }
+            }
+
+            const dateStr = new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' });
+            const shareData = {
+                title: `[동아리 정산] ${dateStr} 클럽 비용 정산 보고서`,
+                text: `${dateStr} 클럽 비용 정산 보고서와 참석자/영수증 사진을 첨부합니다.`,
+                files: files
+            };
+
+            if (navigator.canShare && navigator.canShare(shareData)) {
+                await navigator.share(shareData);
+                setStatus('공유 시트가 열렸습니다. 메일 앱을 선택해 전송해주세요.');
+            } else if (navigator.canShare && navigator.canShare({ files: [files[0]] })) {
+                await navigator.share({ title: shareData.title, text: shareData.text, files: [files[0]] });
+                setStatus('이 기기는 다중 파일 공유를 지원하지 않아 엑셀 파일만 공유되었습니다.');
+            } else {
+                setStatus('이 브라우저/기기는 파일 공유를 지원하지 않습니다. "메일 앱으로 본문 전송" 기능을 이용해주세요.');
+            }
+        } catch (err) {
+            if (err.name === 'AbortError') {
+                setStatus('공유가 취소되었습니다.');
+            } else {
+                console.error(err);
+                setStatus('공유 중 오류가 발생했습니다: ' + err.message);
+            }
+        }
+    },
+
     finalizeSettlement() {
         if (!confirm("정산을 확정하시겠습니까?\n확정하면 현재 비용 및 참석자 데이터가 초기화됩니다.")) return;
 
@@ -1050,11 +1340,12 @@ const AppState = {
         const finalPerPersonSelfPay = this.memberCount > 0 ? finalTotalSelfPay / this.memberCount : result.perPersonSelfPay;
         const finalSelfPayRatio = result.totalCost > 0 ? finalTotalSelfPay / result.totalCost : 0;
 
-        // Save to history
-        this.settlementHistory.unshift({
+        const newHistoryItem = {
             id: Date.now(),
             date: new Date().toISOString(),
-            clubName: this.clubName,
+            creatorPin: this.currentPin || "offline",
+            creatorName: this.userName || "오프라인 사용자",
+            clubName: this.clubName || "기본 클럽",
             memberCount: this.memberCount,
             totalCost: result.totalCost,
             finalSupportAmount: result.totalCost - finalTotalSelfPay,
@@ -1063,7 +1354,16 @@ const AppState = {
             selfPayRatio: finalSelfPayRatio,
             expenseItems: JSON.parse(JSON.stringify(this.expenseItems)),
             attendees: JSON.parse(JSON.stringify(this.attendees)),
-        });
+        };
+
+        // Save to local history
+        this.settlementHistory.unshift(newHistoryItem);
+
+        // Save to Firebase global history
+        if (this.isLoggedIn && this.firebaseDb) {
+            this.firebaseDb.ref(`globalHistory/${newHistoryItem.id}`).set(newHistoryItem)
+                .catch(err => console.error("Global history push failed:", err));
+        }
 
         // Increment directory count for all current attendees
         this.attendees.forEach(att => {
@@ -1109,6 +1409,14 @@ const AppState = {
 document.addEventListener('DOMContentLoaded', () => {
     // Load state from local storage
     AppState.load();
+
+    // 전사원 명부가 비어있으면 번들된 전사원 데이터로 자동 등록
+    if (Object.keys(AppState.directory).length === 0) {
+        fetch('./lib/employee_directory.json')
+            .then(res => res.json())
+            .then(list => AppState.bulkImportDirectory(list))
+            .catch(err => console.error("전사원 명부 자동 등록 실패:", err));
+    }
 
     // Club name input init
     const clubNameInput = document.getElementById('club-name-input');
@@ -1240,6 +1548,7 @@ document.addEventListener('DOMContentLoaded', () => {
         AppState.addDirectoryEntry(name, id);
     }
 
+
     if (dirForm) {
         dirForm.addEventListener('submit', (e) => {
             e.preventDefault();
@@ -1320,16 +1629,30 @@ document.addEventListener('DOMContentLoaded', () => {
 
     form.addEventListener('submit', (e) => {
         e.preventDefault();
-        
+
         const description = descInput.value.trim();
         const amount = parseInt(amountInput.value, 10);
         const category = catSelect.value;
+        const cardType = document.getElementById('expense-card-type-select').value;
+        const corporateAmount = parseInt(document.getElementById('expense-corporate-amount-input').value, 10) || 0;
 
         if (description && !isNaN(amount) && amount > 0) {
-            AppState.addExpense(description, amount, category);
+            AppState.addExpense(description, amount, category, cardType, corporateAmount);
             descInput.focus();
         }
     });
+
+    // Card type / split payment listeners
+    const cardTypeSelect = document.getElementById('expense-card-type-select');
+    const corporateAmountInput = document.getElementById('expense-corporate-amount-input');
+    if (cardTypeSelect) {
+        cardTypeSelect.addEventListener('change', updateCardTypeUI);
+    }
+    if (corporateAmountInput) {
+        corporateAmountInput.addEventListener('input', updateCardTypeUI);
+    }
+    amountInput.addEventListener('input', updateCardTypeUI);
+    updateCardTypeUI();
 
     // Cancel edit listener
     document.getElementById('cancel-edit-btn').addEventListener('click', () => {
@@ -1378,6 +1701,43 @@ document.addEventListener('DOMContentLoaded', () => {
             deleteReceiptBtn.classList.add('hidden');
         });
     }
+
+    // Split-payment receipt uploads (법인카드/개인카드)
+    const setupSplitReceiptInput = (inputId, statusId, deleteBtnId, stateKey) => {
+        const input = document.getElementById(inputId);
+        const status = document.getElementById(statusId);
+        const deleteBtn = document.getElementById(deleteBtnId);
+        if (!input || !status) return;
+
+        input.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                status.textContent = "⌛ 영수증 압축 중...";
+                status.classList.remove('hidden');
+                compressReceiptImage(file, (compressedBase64) => {
+                    AppState[stateKey] = compressedBase64;
+                    status.textContent = "✓ 영수증 대기 완료";
+                    if (deleteBtn) deleteBtn.classList.remove('hidden');
+                });
+            } else {
+                AppState[stateKey] = null;
+                status.classList.add('hidden');
+                if (deleteBtn) deleteBtn.classList.add('hidden');
+            }
+        });
+
+        if (deleteBtn) {
+            deleteBtn.addEventListener('click', () => {
+                AppState[stateKey] = null;
+                status.classList.add('hidden');
+                input.value = '';
+                deleteBtn.classList.add('hidden');
+            });
+        }
+    };
+
+    setupSplitReceiptInput('expense-receipt-corp-input', 'receipt-corp-status', 'delete-receipt-corp-btn', 'tempCorpReceiptImage');
+    setupSplitReceiptInput('expense-receipt-personal-input', 'receipt-personal-status', 'delete-receipt-personal-btn', 'tempPersonalReceiptImage');
 
     // Lightbox modal close handler
     const receiptModal = document.getElementById('receipt-modal');
@@ -1460,6 +1820,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 alert("클립보드 복사에 실패했습니다. 직접 복사해주세요.");
                 console.error(err);
             });
+        });
+    }
+
+    const shareReportBtn = document.getElementById('share-report-btn');
+    if (shareReportBtn) {
+        shareReportBtn.addEventListener('click', () => {
+            AppState.shareSettlementReport();
         });
     }
 
@@ -1613,12 +1980,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 pinErrorText.classList.add('hidden');
             }
         } else {
-            if (pinInputBuffer.length < 4) {
+            if (pinInputBuffer.length < 6) {
                 pinInputBuffer += val;
                 updatePinDots();
                 pinErrorText.classList.add('hidden');
                 
-                if (pinInputBuffer.length === 4) {
+                if (pinInputBuffer.length === 6) {
                     const pin = pinInputBuffer;
                     if (!firebaseDb) {
                         pinErrorText.textContent = "Firebase 설정 키가 누락되었습니다. app.js에서 설정을 기입해 주세요.";
@@ -1635,12 +2002,20 @@ document.addEventListener('DOMContentLoaded', () => {
                     AppState.loadFromFirebase(pin).then(() => {
                         pinModal.classList.add('hidden');
                         statusBadge.className = 'badge-online';
-                        statusBadge.innerHTML = `🌐 온라인 (PIN: ${pin})`;
+                        statusBadge.innerHTML = `🌐 온라인 (${AppState.userName || '알 수 없음'} / PIN: ${pin})`;
                         logoutBtn.style.display = 'inline-block';
                         loginBtn.style.display = 'none';
                         pinOfflineBtn.disabled = false;
                         pinOfflineBtn.textContent = "오프라인(기기저장) 모드로 시작";
                         resetPinInput();
+
+                        // Admin tab check
+                        const adminTabBtn = document.getElementById('admin-tab-btn');
+                        if (pin === "000000") {
+                            adminTabBtn.classList.remove('hidden');
+                        } else {
+                            adminTabBtn.classList.add('hidden');
+                        }
                         
                         // Sync values to form fields
                         clubNameInput.value = AppState.clubName || '';
@@ -1650,11 +2025,11 @@ document.addEventListener('DOMContentLoaded', () => {
                         AppState.render();
                     }).catch(err => {
                         console.error(err);
-                        pinErrorText.textContent = "서버 연결에 실패했습니다. 오프라인 모드로 자동 진입합니다.";
+                        pinErrorText.textContent = err.message || "서버 연결에 실패했습니다.";
                         pinErrorText.classList.remove('hidden');
-                        setTimeout(() => {
-                            switchToOfflineMode();
-                        }, 2000);
+                        pinOfflineBtn.disabled = false;
+                        pinOfflineBtn.textContent = "오프라인(기기저장) 모드로 시작";
+                        resetPinInput();
                     });
                 }
             }
@@ -1672,6 +2047,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Keyboard support for PIN entry
     document.addEventListener('keydown', (e) => {
         if (pinModal.classList.contains('hidden')) return;
+        if (document.activeElement && (document.activeElement.id === 'register-name-input' || document.activeElement.id === 'register-pin-input')) return;
         if (e.key >= '0' && e.key <= '9') {
             handlePinKeyPress(e.key);
         } else if (e.key === 'Backspace') {
@@ -1687,8 +2063,20 @@ document.addEventListener('DOMContentLoaded', () => {
         statusBadge.innerHTML = `📴 오프라인 모드 (기기 저장)`;
         logoutBtn.style.display = 'none';
         loginBtn.style.display = 'inline-block';
+        document.getElementById('admin-tab-btn').classList.add('hidden');
+        
+        // If we were on admin tab, switch back to settlement
+        if (document.getElementById('admin-tab-btn').classList.contains('active')) {
+            document.querySelectorAll('.tab-nav .tab-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.tab-pane').forEach(p => p.classList.add('hidden'));
+            const sTab = document.querySelector('[data-tab="tab-settlement"]');
+            if (sTab) sTab.classList.add('active');
+            document.getElementById('tab-settlement').classList.remove('hidden');
+        }
+
         AppState.isLoggedIn = false;
         AppState.currentPin = null;
+        AppState.userName = null;
         resetPinInput();
         AppState.load(); // Load local storage
         clubNameInput.value = AppState.clubName || '';
@@ -1711,7 +2099,281 @@ document.addEventListener('DOMContentLoaded', () => {
     loginBtn.addEventListener('click', () => {
         pinErrorText.classList.add('hidden');
         resetPinInput();
+        document.getElementById('login-mode-section').classList.remove('hidden');
+        document.getElementById('register-mode-section').classList.add('hidden');
         pinModal.classList.remove('hidden');
+    });
+
+    // Toggle to Register mode
+    document.getElementById('go-to-register').addEventListener('click', () => {
+        document.getElementById('login-mode-section').classList.add('hidden');
+        document.getElementById('register-mode-section').classList.remove('hidden');
+        document.getElementById('register-name-input').value = '';
+        document.getElementById('register-pin-input').value = '';
+        document.getElementById('register-error-text').classList.add('hidden');
+    });
+
+    // Toggle to Login mode
+    document.getElementById('go-to-login').addEventListener('click', () => {
+        document.getElementById('login-mode-section').classList.remove('hidden');
+        document.getElementById('register-mode-section').classList.add('hidden');
+        resetPinInput();
+        pinErrorText.classList.add('hidden');
+    });
+
+    // Submit Registration
+    document.getElementById('submit-register-btn').addEventListener('click', () => {
+        const name = document.getElementById('register-name-input').value.trim();
+        const pin = document.getElementById('register-pin-input').value.trim();
+        const regError = document.getElementById('register-error-text');
+
+        if (!name) {
+            regError.textContent = "이름을 입력해 주세요.";
+            regError.classList.remove('hidden');
+            return;
+        }
+        if (pin.length !== 6 || isNaN(pin)) {
+            regError.textContent = "6자리 숫자의 PIN 번호를 입력해 주세요.";
+            regError.classList.remove('hidden');
+            return;
+        }
+        if (pin === "000000") {
+            regError.textContent = "000000은 관리자용 PIN 번호이므로 등록할 수 없습니다.";
+            regError.classList.remove('hidden');
+            return;
+        }
+
+        regError.classList.add('hidden');
+
+        // Check if PIN already exists in Firebase
+        firebaseDb.ref(`users/${pin}`).once('value').then(snapshot => {
+            if (snapshot.exists()) {
+                regError.textContent = "이미 등록된 PIN 번호입니다. 다른 번호를 입력해 주세요.";
+                regError.classList.remove('hidden');
+            } else {
+                // Register User
+                firebaseDb.ref(`users/${pin}`).set({
+                    name: name,
+                    registeredAt: Date.now()
+                }).then(() => {
+                    alert(`${name}님, 회원 등록이 완료되었습니다!`);
+                    
+                    // Automatically log in
+                    AppState.isLoggedIn = true;
+                    AppState.currentPin = pin;
+                    AppState.userName = name;
+                    
+                    pinModal.classList.add('hidden');
+                    statusBadge.className = 'badge-online';
+                    statusBadge.innerHTML = `🌐 온라인 (${name} / PIN: ${pin})`;
+                    logoutBtn.style.display = 'inline-block';
+                    loginBtn.style.display = 'none';
+                    
+                    // Sync values to form fields
+                    clubNameInput.value = AppState.clubName || '';
+                    memberInput.value = AppState.memberCount || 0;
+                    prizeInput.value = AppState.previousPrizeTotal || 0;
+                    setSettingsFormValues(AppState.rules);
+                    AppState.render();
+                }).catch(err => {
+                    regError.textContent = "가입 등록에 실패했습니다. 네트워크를 확인해 주세요.";
+                    regError.classList.remove('hidden');
+                });
+            }
+        });
+    });
+
+    // Admin Dashboard Statistics and Searching
+    const adminSearchInput = document.getElementById('admin-search-input');
+    if (adminSearchInput) {
+        adminSearchInput.addEventListener('input', () => {
+            renderAdminDashboard();
+        });
+    }
+
+    function renderAdminDashboard() {
+        if (!firebaseDb) return;
+        
+        // 1. Fetch Users
+        firebaseDb.ref('users').once('value').then(snapshot => {
+            const users = snapshot.val() || {};
+            const tbody = document.getElementById('admin-users-list');
+            tbody.innerHTML = '';
+            
+            let userCount = 0;
+            Object.keys(users).forEach(pin => {
+                userCount++;
+                const user = users[pin];
+                const dateStr = user.registeredAt ? new Date(user.registeredAt).toLocaleDateString() : '-';
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td><strong>${AppState.escapeHtml(user.name)}</strong></td>
+                    <td><code>${AppState.escapeHtml(pin)}</code></td>
+                    <td><span style="font-size:0.8rem; color:var(--text-muted);">${dateStr}</span></td>
+                `;
+                tbody.appendChild(tr);
+            });
+            document.getElementById('admin-total-users').textContent = `${userCount}명`;
+        });
+        
+        // 2. Fetch Global History
+        firebaseDb.ref('globalHistory').once('value').then(snapshot => {
+            const historyData = snapshot.val() || {};
+            const historyList = Object.values(historyData).sort((a, b) => b.id - a.id);
+            
+            let totalSpend = 0;
+            let totalSupport = 0;
+            let totalSelfPay = 0;
+            
+            historyList.forEach(entry => {
+                totalSpend += entry.totalCost || 0;
+                totalSupport += entry.finalSupportAmount || 0;
+                totalSelfPay += entry.totalSelfPay || 0;
+            });
+            
+            document.getElementById('admin-total-spend').textContent = SettlementCalculator.formatCurrency(totalSpend);
+            document.getElementById('admin-total-support').textContent = SettlementCalculator.formatCurrency(totalSupport);
+            document.getElementById('admin-total-self-pay').textContent = SettlementCalculator.formatCurrency(totalSelfPay);
+            
+            renderAdminHistory(historyList);
+        });
+    }
+
+    function renderAdminHistory(historyList) {
+        const container = document.getElementById('admin-history-container');
+        const searchVal = (document.getElementById('admin-search-input').value || '').trim().toLowerCase();
+        container.innerHTML = '';
+        
+        const filtered = historyList.filter(entry => {
+            if (!searchVal) return true;
+            
+            // Search creator name
+            if (entry.creatorName && entry.creatorName.toLowerCase().includes(searchVal)) return true;
+            
+            // Search attendees list
+            if (entry.attendees && entry.attendees.some(att => att.name && att.name.toLowerCase().includes(searchVal))) return true;
+            
+            return false;
+        });
+        
+        if (filtered.length === 0) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <span class="empty-icon">💨</span>
+                    <p>일치하는 정산 내역이 없습니다.</p>
+                </div>
+            `;
+            return;
+        }
+        
+        filtered.forEach(entry => {
+            const div = document.createElement('div');
+            div.className = 'history-entry';
+            
+            let receiptHtml = '';
+            if (entry.expenseItems) {
+                entry.expenseItems.forEach(item => {
+                    if (item.receiptImage) {
+                        receiptHtml += `
+                            <div style="display:inline-block; margin-top:0.5rem; margin-right:0.5rem; position:relative; text-align:center;">
+                                <img src="${item.receiptImage}" class="receipt-thumbnail" alt="영수증 미리보기" data-desc="${AppState.escapeHtml(item.description)}">
+                                <span style="display:block; font-size:0.75rem; color:var(--text-muted); margin-top:0.2rem;">${AppState.escapeHtml(item.description)}</span>
+                            </div>
+                        `;
+                    }
+                });
+            }
+            
+            let attendeesHtml = '';
+            if (entry.attendees) {
+                attendeesHtml = entry.attendees.map(att => att.name).join(', ');
+            }
+            
+            let itemsHtml = '';
+            if (entry.expenseItems) {
+                itemsHtml = entry.expenseItems.map(item => `
+                    <li>
+                        <span>${AppState.escapeHtml(item.description)} (${categoryNameMap[item.category]})</span> 
+                        <strong>${SettlementCalculator.formatCurrency(item.amount)}</strong>
+                    </li>
+                `).join('');
+            }
+            
+            div.innerHTML = `
+                <div class="history-header">
+                    <div>
+                        <strong>${AppState.escapeHtml(entry.clubName || '기본 클럽')}</strong>
+                        <span class="history-club" style="color:var(--color-secondary);">정산인: ${AppState.escapeHtml(entry.creatorName || '오프라인')}</span>
+                    </div>
+                    <span class="history-date">${new Date(entry.id).toLocaleString()}</span>
+                </div>
+                <div class="history-summary">
+                    <div class="history-stat">
+                        <span>총 소요 비용</span>
+                        <strong>${SettlementCalculator.formatCurrency(entry.totalCost)}</strong>
+                    </div>
+                    <div class="history-stat">
+                        <span>회사 지원금</span>
+                        <strong>${SettlementCalculator.formatCurrency(entry.finalSupportAmount)}</strong>
+                    </div>
+                    <div class="history-stat">
+                        <span>총 자부담</span>
+                        <strong>${SettlementCalculator.formatCurrency(entry.totalSelfPay)}</strong>
+                    </div>
+                    <div class="history-stat">
+                        <span>인당 자부담 (인원: ${entry.memberCount}명)</span>
+                        <strong>${SettlementCalculator.formatCurrency(entry.perPersonSelfPay)}</strong>
+                    </div>
+                </div>
+                <div class="history-details" style="margin-top:0.5rem;">
+                    <details>
+                        <summary style="font-size:0.82rem; color:var(--color-secondary); cursor:pointer;">상세 지출 및 참석자 명단 보기</summary>
+                        <div style="padding:0.5rem 0; font-size:0.83rem; line-height:1.4;">
+                            <strong>참석자:</strong> <span style="color:var(--text-secondary);">${AppState.escapeHtml(attendeesHtml || '없음')}</span>
+                            <ul class="history-items" style="margin-top:0.5rem; border-top:1px solid rgba(255,255,255,0.05); padding-top:0.5rem; display:flex; flex-direction:column; gap:0.25rem;">
+                                ${itemsHtml}
+                            </ul>
+                            ${receiptHtml ? `<div style="margin-top:0.75rem; border-top:1px solid rgba(255,255,255,0.05); padding-top:0.5rem;"><strong>영수증:</strong><br>${receiptHtml}</div>` : ''}
+                        </div>
+                    </details>
+                </div>
+            `;
+            
+            container.appendChild(div);
+        });
+        
+        // Bind click handlers to receipt thumbnails in admin dashboard
+        container.querySelectorAll('.receipt-thumbnail').forEach(img => {
+            img.addEventListener('click', (e) => {
+                const src = e.target.getAttribute('src');
+                const desc = e.target.getAttribute('data-desc');
+                const modal = document.getElementById('receipt-modal');
+                const modalImg = document.getElementById('modal-img');
+                const captionText = document.getElementById('modal-caption');
+                
+                if (modal && modalImg && captionText) {
+                    modal.classList.remove('hidden');
+                    modalImg.src = src;
+                    captionText.textContent = desc ? `${desc} 영수증` : '영수증 원본';
+                }
+            });
+        });
+    }
+
+    // Tab navigation switching logic
+    document.querySelectorAll('.tab-nav .tab-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.tab-nav .tab-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.tab-pane').forEach(p => p.classList.add('hidden'));
+
+            btn.classList.add('active');
+            const tabId = btn.getAttribute('data-tab');
+            document.getElementById(tabId).classList.remove('hidden');
+
+            if (tabId === 'tab-admin') {
+                renderAdminDashboard();
+            }
+        });
     });
 
     // 만약 Firebase DB가 초기화되어 있지 않으면 로그인 버튼 숨기고 기본 오프라인 모드로 설정
@@ -1737,6 +2399,136 @@ function showDiffPopup(formula, diff) {
 }
 
 // Image compression helper using Canvas
+// xlsx(zip) 안에 이미지를 직접 삽입 (xdr drawing). placements: [{sheetFile:'sheet3.xml', col, row, blob, widthPx, heightPx}]
+// 셀 XML을 직접 치환 (기존 서식/스타일(s 속성) 보존, 수식(_xlfn 등) 손상 방지)
+function setCellValue(xml, ref, value, isString) {
+    const escaped = String(value).replace(/[<>&'"]/g, c => ({
+        '<': '&lt;', '>': '&gt;', '&': '&amp;', "'": '&apos;', '"': '&quot;'
+    }[c]));
+
+    // 자체 닫힘 빈 셀: <c r="REF" s="N"/>
+    const reSelf = new RegExp(`<c r="${ref}"([^>]*?)/>`);
+    const mSelf = xml.match(reSelf);
+    if (mSelf) {
+        const attrs = mSelf[1].replace(/\st="[^"]*"/, '');
+        const replacement = isString
+            ? `<c r="${ref}"${attrs} t="inlineStr"><is><t xml:space="preserve">${escaped}</t></is></c>`
+            : `<c r="${ref}"${attrs}><v>${value}</v></c>`;
+        return xml.replace(reSelf, replacement);
+    }
+
+    // 내용이 있는 셀(수식 등): <c r="REF" ...>...</c> — 수식을 제거하고 값으로 치환
+    const reFull = new RegExp(`<c r="${ref}"([^>]*?)>[\\s\\S]*?</c>`);
+    const mFull = xml.match(reFull);
+    if (mFull) {
+        const attrs = mFull[1].replace(/\st="[^"]*"/, '');
+        const replacement = isString
+            ? `<c r="${ref}"${attrs} t="inlineStr"><is><t xml:space="preserve">${escaped}</t></is></c>`
+            : `<c r="${ref}"${attrs}><v>${value}</v></c>`;
+        return xml.replace(reFull, replacement);
+    }
+
+    return xml;
+}
+
+async function embedImagesIntoXlsx(zip, placements) {
+    if (!placements || placements.length === 0) return;
+
+    const EMU_PER_PX = 9525;
+    let ctXml = await zip.file('[Content_Types].xml').async('string');
+
+    const bySheet = {};
+    placements.forEach(p => { (bySheet[p.sheetFile] = bySheet[p.sheetFile] || []).push(p); });
+
+    let mediaIndex = 1;
+    let drawingIndex = 1;
+    const extTypes = new Set();
+
+    for (const [sheetFile, items] of Object.entries(bySheet)) {
+        const drawingName = `drawing${drawingIndex}.xml`;
+        let anchorsXml = '';
+        let relsXml = '';
+
+        for (let i = 0; i < items.length; i++) {
+            const p = items[i];
+            const ext = (p.blob.type.split('/')[1] || 'png').replace('jpeg', 'jpg');
+            extTypes.add(ext);
+            const mediaName = `image${mediaIndex}.${ext}`;
+            zip.file(`xl/media/${mediaName}`, await p.blob.arrayBuffer());
+            const rId = `rId${i + 1}`;
+            relsXml += `<Relationship Id="${rId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/${mediaName}"/>`;
+
+            const cx = Math.round(p.widthPx * EMU_PER_PX);
+            const cy = Math.round(p.heightPx * EMU_PER_PX);
+            anchorsXml += `<xdr:oneCellAnchor><xdr:from><xdr:col>${p.col}</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>${p.row}</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from><xdr:ext cx="${cx}" cy="${cy}"/><xdr:pic><xdr:nvPicPr><xdr:cNvPr id="${i + 2}" name="Picture ${i + 1}"/><xdr:cNvPicPr/></xdr:nvPicPr><xdr:blipFill><a:blip r:embed="${rId}"/><a:stretch><a:fillRect/></a:stretch></xdr:blipFill><xdr:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr></xdr:pic><xdr:clientData/></xdr:oneCellAnchor>`;
+            mediaIndex++;
+        }
+
+        const drawingXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">${anchorsXml}</xdr:wsDr>`;
+        zip.file(`xl/drawings/${drawingName}`, drawingXml);
+        zip.file(`xl/drawings/_rels/${drawingName}.rels`, `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${relsXml}</Relationships>`);
+
+        const sheetPath = `xl/worksheets/${sheetFile}`;
+        let sheetXml = await zip.file(sheetPath).async('string');
+        const sheetRelsPath = `xl/worksheets/_rels/${sheetFile}.rels`;
+        let sheetRelsXml;
+        let sheetRelId = 'rId1';
+
+        if (zip.file(sheetRelsPath)) {
+            sheetRelsXml = await zip.file(sheetRelsPath).async('string');
+            const ids = [...sheetRelsXml.matchAll(/Id="rId(\d+)"/g)].map(m => parseInt(m[1], 10));
+            const max = ids.length ? Math.max(...ids) : 0;
+            sheetRelId = `rId${max + 1}`;
+            sheetRelsXml = sheetRelsXml.replace('</Relationships>', `<Relationship Id="${sheetRelId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/${drawingName}"/></Relationships>`);
+        } else {
+            sheetRelsXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="${sheetRelId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/${drawingName}"/></Relationships>`;
+        }
+        zip.file(sheetRelsPath, sheetRelsXml);
+
+        if (!sheetXml.includes('<drawing ')) {
+            sheetXml = sheetXml.replace('</worksheet>', `<drawing r:id="${sheetRelId}"/></worksheet>`);
+        }
+        zip.file(sheetPath, sheetXml);
+        drawingIndex++;
+    }
+
+    extTypes.forEach(ext => {
+        const ct = ext === 'png' ? 'image/png' : (ext === 'jpg' ? 'image/jpeg' : `image/${ext}`);
+        if (!ctXml.includes(`Extension="${ext}"`)) {
+            ctXml = ctXml.replace('</Types>', `<Default Extension="${ext}" ContentType="${ct}"/></Types>`);
+        }
+    });
+    for (let d = 1; d < drawingIndex; d++) {
+        const part = `/xl/drawings/drawing${d}.xml`;
+        if (!ctXml.includes(part)) {
+            ctXml = ctXml.replace('</Types>', `<Override PartName="${part}" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/></Types>`);
+        }
+    }
+    zip.file('[Content_Types].xml', ctXml);
+}
+
+// 결제 카드 종류에 따라 입력 폼의 영수증/분리결제 영역을 표시/숨김 처리하고
+// 분리 결제 시 개인카드 부담액(총금액 - 법인카드금액)을 자동 계산해 표시
+function updateCardTypeUI() {
+    const cardTypeSelect = document.getElementById('expense-card-type-select');
+    const splitAmountGroup = document.getElementById('split-amount-group');
+    const singleReceiptGroup = document.getElementById('single-receipt-group');
+    const splitReceiptGroup = document.getElementById('split-receipt-group');
+    if (!cardTypeSelect) return;
+
+    const isSplit = cardTypeSelect.value === 'split';
+    splitAmountGroup.classList.toggle('hidden', !isSplit);
+    singleReceiptGroup.classList.toggle('hidden', isSplit);
+    splitReceiptGroup.classList.toggle('hidden', !isSplit);
+
+    if (isSplit) {
+        const total = parseInt(document.getElementById('expense-amount-input').value, 10) || 0;
+        const corp = parseInt(document.getElementById('expense-corporate-amount-input').value, 10) || 0;
+        const personal = Math.max(total - corp, 0);
+        document.getElementById('split-personal-amount-display').textContent = personal.toLocaleString('ko-KR');
+    }
+}
+
 function compressReceiptImage(file, callback) {
     const reader = new FileReader();
     reader.onload = function(e) {

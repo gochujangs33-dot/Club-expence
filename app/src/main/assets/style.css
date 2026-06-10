@@ -236,6 +236,14 @@ button, input, select, label, a {
     display: grid;
     grid-template-columns: 1fr 1.2fr;
     gap: 1.5rem;
+    width: 100%;
+    overflow-x: hidden;
+}
+
+.panel-left,
+.panel-right {
+    min-width: 0;
+    width: 100%;
 }
 
 @media (max-width: 868px) {
@@ -256,6 +264,9 @@ button, input, select, label, a {
     box-shadow: var(--shadow-premium);
     transition: var(--transition-smooth);
     margin-bottom: 1.5rem;
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
 }
 
 .card:hover {
@@ -270,6 +281,8 @@ button, input, select, label, a {
     margin-bottom: 1.25rem;
     padding-bottom: 0.75rem;
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    flex-wrap: wrap;
+    min-width: 0;
 }
 
 .card-icon {
@@ -281,6 +294,8 @@ button, input, select, label, a {
     font-size: 1.05rem;
     font-weight: 600;
     letter-spacing: -0.01em;
+    flex: 1 1 auto;
+    min-width: 0;
 }
 
 /* Forms & Inputs */
@@ -524,12 +539,21 @@ select {
     justify-content: space-between;
     align-items: center;
     width: 100%;
+    min-width: 0;
+    gap: 0.5rem;
 }
 
 .header-left {
     display: flex;
     align-items: center;
-    gap: 0.75rem;
+    gap: 0.5rem;
+    min-width: 0;
+    flex: 1;
+}
+
+.header-left h2 {
+    min-width: 0;
+    flex: 1 1 auto;
 }
 
 /* Scroll Container */
@@ -876,6 +900,9 @@ select {
 
 .tab-pane {
     display: block;
+    width: 100%;
+    min-width: 0;
+    overflow-x: hidden;
 }
 
 .tab-pane.hidden {
@@ -1329,4 +1356,112 @@ body:has(.update-banner:not(.hidden)) {
     align-items: center;
     gap: 0.25rem;
 }
+
+/* --- Admin Dashboard & Registration Form Styles --- */
+.admin-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 1rem;
+    font-size: 0.88rem;
+}
+
+.admin-table th, .admin-table td {
+    padding: 0.75rem;
+    text-align: left;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.admin-table th {
+    font-weight: 600;
+    color: var(--text-secondary);
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.admin-table tr:hover td {
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.admin-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.stat-card {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--card-border);
+    border-radius: 16px;
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.stat-card .stat-label {
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+}
+
+.stat-card .stat-val {
+    font-size: 1.35rem;
+    font-weight: 800;
+    font-family: var(--font-heading);
+    color: var(--color-secondary);
+}
+
+.search-box {
+    width: 100%;
+    padding: 0.65rem 1rem;
+    background: rgba(15, 23, 42, 0.5);
+    border: 1px solid var(--card-border);
+    border-radius: 12px;
+    color: var(--text-primary);
+    font-size: 0.9rem;
+    margin-bottom: 1rem;
+}
+
+.search-box:focus {
+    outline: none;
+    border-color: var(--color-secondary);
+    box-shadow: 0 0 10px rgba(6, 182, 212, 0.25);
+}
+
+/* Auth toggle form in login modal */
+.auth-toggle-link {
+    font-size: 0.82rem;
+    color: var(--color-secondary);
+    text-align: center;
+    cursor: pointer;
+    text-decoration: underline;
+    margin-top: 0.5rem;
+}
+
+.auth-toggle-link:hover {
+    color: var(--color-primary-light);
+}
+
+.register-form-container {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    width: 100%;
+    animation: fadeIn 0.25s ease;
+}
+
+.register-form-container input {
+    width: 100%;
+    padding: 0.65rem 1rem;
+    background: rgba(15, 23, 42, 0.5);
+    border: 1px solid var(--card-border);
+    border-radius: 10px;
+    color: var(--text-primary);
+    font-size: 0.9rem;
+}
+
+.register-form-container input:focus {
+    outline: none;
+    border-color: var(--color-secondary);
+}
+
 

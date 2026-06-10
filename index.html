@@ -52,15 +52,14 @@
                 <button id="header-login-btn" class="btn-text" style="font-size: 0.78rem; padding: 0.2rem 0.5rem; border-radius: 6px; background: rgba(255, 255, 255, 0.05);">로그인</button>
             </div>
         </header>
-
         <!-- Tab Navigation -->
         <nav class="tab-nav">
             <button class="tab-btn active" data-tab="tab-settlement">📊 비용 정산</button>
             <button class="tab-btn" data-tab="tab-attendees">👥 현재 참석자 (<span id="attendee-badge-count">0</span>명)</button>
-            <button class="tab-btn" data-tab="tab-directory">🗂️ 누적 사원 명부 (<span id="directory-badge-count">0</span>명)</button>
+            <button class="tab-btn" data-tab="tab-directory">🗂️ 전사원 명부 (<span id="directory-badge-count">0</span>명)</button>
             <button class="tab-btn" data-tab="tab-history">📋 정산 이력</button>
+            <button id="admin-tab-btn" class="tab-btn hidden" data-tab="tab-admin" style="background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(239, 68, 68, 0.15)); border-color: rgba(245, 158, 11, 0.3); color: #fbbf24;">👑 관리자 대시보드</button>
         </nav>
-
         <!-- Tab Content 1: Settlement Calculator -->
         <div id="tab-settlement" class="tab-pane active">
             <div class="layout-grid">
@@ -117,12 +116,41 @@
                                         </select>
                                     </div>
                                 </div>
-                                <div class="input-group">
+                                <div class="input-row">
+                                    <div class="input-group flex-2">
+                                        <label for="expense-card-type-select">결제 카드</label>
+                                        <select id="expense-card-type-select">
+                                            <option value="corporate">법인카드</option>
+                                            <option value="personal">개인카드</option>
+                                            <option value="split">분리 결제</option>
+                                        </select>
+                                    </div>
+                                    <div class="input-group flex-3 hidden" id="split-amount-group">
+                                        <label for="expense-corporate-amount-input">법인카드 결제 금액 (원)</label>
+                                        <input type="number" id="expense-corporate-amount-input" min="0" step="100" placeholder="법인카드로 결제한 금액">
+                                        <small class="input-hint">개인카드 부담액: <span id="split-personal-amount-display">0</span>원 (총금액 - 법인카드 금액)</small>
+                                    </div>
+                                </div>
+                                <div class="input-group" id="single-receipt-group">
                                     <label for="expense-receipt-input">영수증 첨부 (이미지 파일)</label>
                                     <input type="file" id="expense-receipt-input" accept="image/*">
                                     <div style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap;">
                                         <small id="receipt-preview-status" class="input-hint hidden" style="color: var(--color-secondary); font-weight: 500;">✓ 영수증 대기 완료</small>
                                         <button type="button" id="delete-receipt-btn" class="btn-text-danger hidden" style="font-size:0.78rem; padding:0.15rem 0.5rem;">× 영수증 삭제</button>
+                                    </div>
+                                </div>
+                                <div class="input-group hidden" id="split-receipt-group">
+                                    <label for="expense-receipt-corp-input">법인카드 영수증</label>
+                                    <input type="file" id="expense-receipt-corp-input" accept="image/*">
+                                    <div style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap;">
+                                        <small id="receipt-corp-status" class="input-hint hidden" style="color: var(--color-secondary); font-weight: 500;">✓ 영수증 대기 완료</small>
+                                        <button type="button" id="delete-receipt-corp-btn" class="btn-text-danger hidden" style="font-size:0.78rem; padding:0.15rem 0.5rem;">× 영수증 삭제</button>
+                                    </div>
+                                    <label for="expense-receipt-personal-input" style="margin-top:0.5rem;">개인카드 영수증</label>
+                                    <input type="file" id="expense-receipt-personal-input" accept="image/*">
+                                    <div style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap;">
+                                        <small id="receipt-personal-status" class="input-hint hidden" style="color: var(--color-secondary); font-weight: 500;">✓ 영수증 대기 완료</small>
+                                        <button type="button" id="delete-receipt-personal-btn" class="btn-text-danger hidden" style="font-size:0.78rem; padding:0.15rem 0.5rem;">× 영수증 삭제</button>
                                     </div>
                                 </div>
                                 <div class="form-actions">
@@ -392,7 +420,7 @@
                     <div class="card" id="add-dir-card">
                         <div class="card-header">
                             <span class="card-icon">🗂️</span>
-                            <h2>누적 사원 등록</h2>
+                            <h2>전사원 등록</h2>
                         </div>
                         <div class="card-body">
                             <form id="dir-form" onsubmit="return false;">
@@ -425,7 +453,7 @@
                             <div class="header-split">
                                 <div class="header-left">
                                     <span class="card-icon">🗂️</span>
-                                    <h2>누적 사원 명부 (<span id="directory-count">0</span>명)</h2>
+                                    <h2>전사원 명부 (<span id="directory-count">0</span>명)</h2>
                                 </div>
                             </div>
                         </div>
@@ -433,7 +461,7 @@
                             <div id="directory-container" class="expense-items-container">
                                 <!-- Dynamically populated list of cumulative employees -->
                                 <div class="empty-state">
-                                    <p>누적된 사원 정보가 없습니다. 왼쪽에서 사원을 등록해 주세요.</p>
+                                    <p>등록된 사원 정보가 없습니다. 왼쪽에서 사원을 등록해 주세요.</p>
                                 </div>
                             </div>
                         </div>
@@ -451,7 +479,70 @@
                 </div>
                 <div class="card-body">
                     <div id="history-container"></div>
+            </div>
+        </div>
+
+        <!-- Tab Content 5: Admin Dashboard -->
+        <div id="tab-admin" class="tab-pane hidden">
+            <div class="admin-stats-grid">
+                <div class="stat-card">
+                    <span class="stat-label">👥 총 등록 가입자</span>
+                    <span class="stat-val" id="admin-total-users">0명</span>
                 </div>
+                <div class="stat-card">
+                    <span class="stat-label">💰 전체 누적 지출액</span>
+                    <span class="stat-val" id="admin-total-spend">0원</span>
+                </div>
+                <div class="stat-card">
+                    <span class="stat-label">🏢 전체 누적 지원금</span>
+                    <span class="stat-val" id="admin-total-support">0원</span>
+                </div>
+                <div class="stat-card">
+                    <span class="stat-label">👤 전체 누적 자부담</span>
+                    <span class="stat-val" id="admin-total-self-pay">0원</span>
+                </div>
+            </div>
+
+            <div class="layout-grid">
+                <!-- Left Panel: User list -->
+                <section class="panel-left">
+                    <div class="card">
+                        <div class="card-header">
+                            <span class="card-icon">👥</span>
+                            <h2>가입 회원 목록</h2>
+                        </div>
+                        <div class="card-body scroll-y" style="max-height: 400px; padding: 0;">
+                            <table class="admin-table">
+                                <thead>
+                                    <tr>
+                                        <th>이름</th>
+                                        <th>6자리 PIN</th>
+                                        <th>가입일</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="admin-users-list">
+                                    <!-- Populated dynamically -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Right Panel: Overall History & Query -->
+                <section class="panel-right">
+                    <div class="card">
+                        <div class="card-header">
+                            <span class="card-icon">🔍</span>
+                            <h2>전체 지출 이력 &amp; 회원 통계</h2>
+                        </div>
+                        <div class="card-body">
+                            <input type="text" id="admin-search-input" class="search-box" placeholder="회원 이름 검색 (예: 홍길동)...">
+                            <div id="admin-history-container" class="scroll-y" style="max-height: 450px; display: flex; flex-direction: column; gap: 1rem;">
+                                <!-- Populated dynamically -->
+                            </div>
+                        </div>
+                    </div>
+                </section>
             </div>
         </div>
     </main>
@@ -493,6 +584,12 @@
                     </button>
                 </div>
                 <div style="margin-top: 0.75rem;">
+                    <button id="share-report-btn" class="btn-primary" style="width:100%; background: linear-gradient(135deg, hsl(38,92%,50%), hsl(282,84%,61%));">
+                        <span class="btn-icon">📤</span> 엑셀+사진 첨부하여 공유
+                    </button>
+                    <p id="share-report-status" style="font-size:0.75rem; color:var(--text-muted); text-align:center; margin-top:0.4rem;">엑셀 정산표 + 참석자/영수증 사진을 묶어 공유 시트로 보냅니다 (메일 앱 선택 가능)</p>
+                </div>
+                <div style="margin-top: 0.75rem;">
                     <button id="finalize-settlement-btn" class="btn-primary" style="width:100%; background: linear-gradient(135deg, hsl(152,70%,40%), hsl(190,95%,40%));">
                         <span class="btn-icon">✅</span> 정산 확정 — 이력 저장 &amp; 초기화
                     </button>
@@ -511,35 +608,65 @@
     <!-- PIN 로그인 모달 -->
     <div id="pin-login-modal" class="modal">
         <div class="modal-content-card card pin-modal-card" style="max-width: 340px; width: 90%; background: var(--bg-dark); border: 1px solid var(--card-border); margin: auto;">
-            <div class="card-header" style="justify-content: center; text-align: center; flex-direction: column; gap: 0.5rem; border-bottom: none; padding-bottom: 0;">
-                <span class="card-icon" style="font-size: 2.2rem; margin: 0;">🔒</span>
-                <h2 style="font-size: 1.35rem; font-family: 'Outfit', sans-serif;">클럽 정산 로그인</h2>
-                <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.1rem; text-align: center;">데이터 저장 및 실시간 동기화를 위해<br>4자리 PIN 번호를 입력하세요.</p>
+            <!-- 로그인 모드 -->
+            <div id="login-mode-section">
+                <div class="card-header" style="justify-content: center; text-align: center; flex-direction: column; gap: 0.5rem; border-bottom: none; padding-bottom: 0;">
+                    <span class="card-icon" style="font-size: 2.2rem; margin: 0;">🔒</span>
+                    <h2 style="font-size: 1.35rem; font-family: 'Outfit', sans-serif;">클럽 정산 로그인</h2>
+                    <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.1rem; text-align: center;">데이터 저장 및 실시간 동기화를 위해<br>6자리 PIN 번호를 입력하세요.</p>
+                </div>
+                <div class="card-body" style="padding-top: 0.5rem; gap: 1rem;">
+                    <div class="pin-display-container">
+                        <div class="pin-dot"></div>
+                        <div class="pin-dot"></div>
+                        <div class="pin-dot"></div>
+                        <div class="pin-dot"></div>
+                        <div class="pin-dot"></div>
+                        <div class="pin-dot"></div>
+                    </div>
+                    <div id="pin-error-text" class="form-error-msg hidden" style="text-align: center; margin: 0 0 0.5rem; font-size: 0.8rem; padding: 0.35rem;">비밀번호가 올바르지 않거나 네트워크 오류입니다.</div>
+                    <div class="pin-keypad">
+                        <button type="button" class="pin-key" data-value="1">1</button>
+                        <button type="button" class="pin-key" data-value="2">2</button>
+                        <button type="button" class="pin-key" data-value="3">3</button>
+                        <button type="button" class="pin-key" data-value="4">4</button>
+                        <button type="button" class="pin-key" data-value="5">5</button>
+                        <button type="button" class="pin-key" data-value="6">6</button>
+                        <button type="button" class="pin-key" data-value="7">7</button>
+                        <button type="button" class="pin-key" data-value="8">8</button>
+                        <button type="button" class="pin-key" data-value="9">9</button>
+                        <button type="button" class="pin-key" data-value="clear">C</button>
+                        <button type="button" class="pin-key" data-value="0">0</button>
+                        <button type="button" class="pin-key" data-value="back">⌫</button>
+                    </div>
+                    <div style="margin-top: 0.5rem; display: flex; flex-direction: column; gap: 0.5rem; width: 100%;">
+                        <button id="pin-offline-btn" class="btn-secondary" style="width: 100%; font-size: 0.85rem; padding: 0.6rem 1rem; border-radius: 10px;">오프라인(기기저장) 모드로 시작</button>
+                        <div id="go-to-register" class="auth-toggle-link">처음 사용하시나요? 회원 등록하기</div>
+                    </div>
+                </div>
             </div>
-            <div class="card-body" style="padding-top: 0.5rem; gap: 1rem;">
-                <div class="pin-display-container">
-                    <div class="pin-dot"></div>
-                    <div class="pin-dot"></div>
-                    <div class="pin-dot"></div>
-                    <div class="pin-dot"></div>
+
+            <!-- 회원 등록 모드 -->
+            <div id="register-mode-section" class="hidden">
+                <div class="card-header" style="justify-content: center; text-align: center; flex-direction: column; gap: 0.5rem; border-bottom: none; padding-bottom: 0;">
+                    <span class="card-icon" style="font-size: 2.2rem; margin: 0;">📝</span>
+                    <h2 style="font-size: 1.35rem; font-family: 'Outfit', sans-serif;">신규 회원 등록</h2>
+                    <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.1rem; text-align: center;">이름과 로그인용 6자리 PIN 번호를 등록하세요.</p>
                 </div>
-                <div id="pin-error-text" class="form-error-msg hidden" style="text-align: center; margin: 0 0 0.5rem; font-size: 0.8rem; padding: 0.35rem;">비밀번호가 올바르지 않거나 네트워크 오류입니다.</div>
-                <div class="pin-keypad">
-                    <button type="button" class="pin-key" data-value="1">1</button>
-                    <button type="button" class="pin-key" data-value="2">2</button>
-                    <button type="button" class="pin-key" data-value="3">3</button>
-                    <button type="button" class="pin-key" data-value="4">4</button>
-                    <button type="button" class="pin-key" data-value="5">5</button>
-                    <button type="button" class="pin-key" data-value="6">6</button>
-                    <button type="button" class="pin-key" data-value="7">7</button>
-                    <button type="button" class="pin-key" data-value="8">8</button>
-                    <button type="button" class="pin-key" data-value="9">9</button>
-                    <button type="button" class="pin-key" data-value="clear">C</button>
-                    <button type="button" class="pin-key" data-value="0">0</button>
-                    <button type="button" class="pin-key" data-value="back">⌫</button>
-                </div>
-                <div style="margin-top: 0.5rem; display: flex; flex-direction: column; gap: 0.5rem; width: 100%;">
-                    <button id="pin-offline-btn" class="btn-secondary" style="width: 100%; font-size: 0.85rem; padding: 0.6rem 1rem; border-radius: 10px;">오프라인(기기저장) 모드로 시작</button>
+                <div class="card-body" style="padding-top: 0.5rem; gap: 1rem;">
+                    <div class="register-form-container">
+                        <div class="input-group">
+                            <label for="register-name-input">이름</label>
+                            <input type="text" id="register-name-input" placeholder="예: 홍길동" autocomplete="off">
+                        </div>
+                        <div class="input-group">
+                            <label for="register-pin-input">6자리 PIN 번호</label>
+                            <input type="password" id="register-pin-input" pattern="[0-9]*" inputmode="numeric" maxlength="6" placeholder="숫자 6자리 입력">
+                        </div>
+                        <div id="register-error-text" class="form-error-msg hidden" style="text-align: center; margin: 0; font-size: 0.8rem; padding: 0.35rem;"></div>
+                        <button id="submit-register-btn" class="btn-primary" style="width:100%; padding:0.65rem; border-radius:10px; font-weight:600;">회원 등록 완료</button>
+                        <div id="go-to-login" class="auth-toggle-link">이미 가입하셨나요? 로그인하기</div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -548,6 +675,10 @@
     <!-- Firebase SDK -->
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
+
+    <!-- 엑셀(.xlsx) 생성 라이브러리 (오프라인 번들) -->
+    <script src="./lib/xlsx.mini.min.js"></script>
+    <script src="./lib/jszip.min.js"></script>
 
     <!-- App JavaScript -->
     <script src="app.js" defer></script>
