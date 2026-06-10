@@ -131,13 +131,17 @@
                                     </div>
                                 </div>
                                 <div class="input-row">
-                                    <div class="input-group flex-1 hidden" id="corp-amount-group">
-                                        <label for="expense-corporate-amount-input">법인카드 결제 금액 (원)</label>
-                                        <input type="number" id="expense-corporate-amount-input" min="0" step="100" placeholder="법인카드 결제 금액">
+                                    <div class="input-group flex-1 hidden" id="corp-amount-group" style="display:flex; flex-direction:column;">
+                                        <div style="display:flex; align-items:center; gap:0.6rem;">
+                                            <label for="expense-corporate-amount-input" style="margin:0; white-space:nowrap;">법인카드 결제 금액 (원)</label>
+                                            <input type="number" id="expense-corporate-amount-input" min="0" step="100" placeholder="법인카드 결제 금액" style="flex:1;">
+                                        </div>
                                     </div>
-                                    <div class="input-group flex-1 hidden" id="personal-amount-group">
-                                        <label for="expense-personal-amount-input">개인카드 결제 금액 (원)</label>
-                                        <input type="number" id="expense-personal-amount-input" min="0" step="100" placeholder="개인카드 결제 금액">
+                                    <div class="input-group flex-1 hidden" id="personal-amount-group" style="display:flex; flex-direction:column;">
+                                        <div style="display:flex; align-items:center; gap:0.6rem;">
+                                            <label for="expense-personal-amount-input" style="margin:0; white-space:nowrap;">개인카드 결제 금액 (원)</label>
+                                            <input type="number" id="expense-personal-amount-input" min="0" step="100" placeholder="개인카드 결제 금액" style="flex:1;">
+                                        </div>
                                         <small class="input-hint" id="split-auto-hint" style="display:none;">총금액 - 법인카드 금액로 자동 계산됨</small>
                                     </div>
                                 </div>

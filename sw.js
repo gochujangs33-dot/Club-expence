@@ -6,7 +6,7 @@
  *   예) '1.0.0' → '1.1.0'
  *   그러면 앱에 자동으로 "업데이트 있음" 알림이 표시됩니다.
  */
-const APP_VERSION = '1.4.2';
+const APP_VERSION = '1.4.3';
 const CACHE_NAME  = `club-expense-v${APP_VERSION}`;
 
 const ASSETS = [
