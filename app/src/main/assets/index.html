@@ -215,51 +215,17 @@
                         
                         <!-- Collapsible Settings Panel -->
                         <div id="settings-panel" class="settings-panel hidden">
-                            <h3 class="settings-title">⚙️ 정산 구간 및 비율 설정</h3>
+                            <h3 class="settings-title">💰 연간 예산 관리</h3>
                             <div class="settings-grid">
-                                <div class="input-group">
-                                    <label for="setting-limit1">가. 지원 한도 (원 이하 자부담 0%)</label>
-                                    <input type="number" id="setting-limit1" min="0" step="1000" value="30000">
-                                </div>
-                                <div class="settings-row">
-                                    <div class="input-group">
-                                        <label for="setting-limit2">나. 구간 한도 (원)</label>
-                                        <input type="number" id="setting-limit2" min="0" step="1000" value="60000">
-                                    </div>
-                                    <div class="input-group">
-                                        <label for="setting-rate2">나. 자부담 비율 (%)</label>
-                                        <input type="number" id="setting-rate2" min="0" max="100" step="1" value="20">
-                                    </div>
-                                </div>
-                                <div class="settings-row">
-                                    <div class="input-group">
-                                        <label for="setting-limit3">다. 구간 한도 (원)</label>
-                                        <input type="number" id="setting-limit3" min="0" step="1000" value="120000">
-                                    </div>
-                                    <div class="input-group">
-                                        <label for="setting-rate3">다. 자부담 비율 (%)</label>
-                                        <input type="number" id="setting-rate3" min="0" max="100" step="1" value="40">
-                                    </div>
-                                </div>
-                                <div class="input-group">
-                                    <label for="setting-deduction4">라. 초과 시 자부담 공제액 (원)</label>
-                                    <input type="number" id="setting-deduction4" min="0" step="1000" value="85000">
-                                </div>
-                                <div class="divider"></div>
-                                <div class="input-group">
-                                    <label for="setting-email">📤 수신 이메일 주소 (정산서 제출용)</label>
-                                    <input type="email" id="setting-email" placeholder="example@email.com" value="finance@club.com">
-                                </div>
-                                <div class="divider"></div>
-                                <p class="settings-title" style="font-size:0.88rem; margin-bottom:0.1rem;">💰 연간 예산 관리</p>
                                 <div class="input-group">
                                     <label for="setting-annual-budget">올해 클럽 지원 총예산 (원)</label>
                                     <input type="number" id="setting-annual-budget" min="0" step="10000" value="0" readonly class="readonly-input">
                                     <small class="input-hint">💡 관리자 대시보드의 클럽 관리에서 선택한 클럽에 배정한 예산이 자동으로 표시됩니다.</small>
                                 </div>
                                 <div class="input-group">
-                                    <label for="setting-used-budget">현재까지 사용한 금액 (원)</label>
+                                    <label for="setting-used-budget">기존에 사용한 누적 금액 (원)</label>
                                     <input type="number" id="setting-used-budget" min="0" step="1000" value="0">
+                                    <small class="input-hint">💡 이전에 이미 사용한 비용을 한 번에 입력하면, 현재 시점부터 이어서 정산을 진행할 수 있습니다.</small>
                                 </div>
                                 <div style="display:flex; justify-content:space-between; align-items:center; padding:0.35rem 0 0;">
                                     <span style="font-size:0.82rem; color:var(--text-secondary);">→ 현재 잔여 예산</span>
@@ -268,7 +234,6 @@
                             </div>
                             <div class="settings-actions">
                                 <button id="save-settings-btn" class="btn-primary-sm">설정 저장</button>
-                                <button id="reset-settings-btn" class="btn-text">기본값 복원</button>
                             </div>
                             <div class="divider"></div>
                         </div>
@@ -516,6 +481,49 @@
                 <div class="stat-card">
                     <span class="stat-label">👤 전체 누적 자부담</span>
                     <span class="stat-val" id="admin-total-self-pay">0원</span>
+                </div>
+            </div>
+
+            <div class="card" id="rules-management-card">
+                <div class="card-header">
+                    <span class="card-icon">⚙️</span>
+                    <h2>정산 구간 및 비율 설정 (전체 클럽 공통 적용)</h2>
+                </div>
+                <div class="card-body">
+                    <div class="settings-grid">
+                        <div class="input-group">
+                            <label for="admin-setting-limit1">가. 지원 한도 (원 이하 자부담 0%)</label>
+                            <input type="number" id="admin-setting-limit1" min="0" step="1000" value="30000">
+                        </div>
+                        <div class="settings-row">
+                            <div class="input-group">
+                                <label for="admin-setting-limit2">나. 구간 한도 (원)</label>
+                                <input type="number" id="admin-setting-limit2" min="0" step="1000" value="60000">
+                            </div>
+                            <div class="input-group">
+                                <label for="admin-setting-rate2">나. 자부담 비율 (%)</label>
+                                <input type="number" id="admin-setting-rate2" min="0" max="100" step="1" value="20">
+                            </div>
+                        </div>
+                        <div class="settings-row">
+                            <div class="input-group">
+                                <label for="admin-setting-limit3">다. 구간 한도 (원)</label>
+                                <input type="number" id="admin-setting-limit3" min="0" step="1000" value="120000">
+                            </div>
+                            <div class="input-group">
+                                <label for="admin-setting-rate3">다. 자부담 비율 (%)</label>
+                                <input type="number" id="admin-setting-rate3" min="0" max="100" step="1" value="40">
+                            </div>
+                        </div>
+                        <div class="input-group">
+                            <label for="admin-setting-deduction4">라. 초과 시 자부담 공제액 (원)</label>
+                            <input type="number" id="admin-setting-deduction4" min="0" step="1000" value="85000">
+                        </div>
+                    </div>
+                    <div class="settings-actions">
+                        <button id="admin-save-rules-btn" class="btn-primary-sm">정산 비율 저장 (일괄 적용)</button>
+                        <button id="admin-reset-rules-btn" class="btn-text">기본값 복원</button>
+                    </div>
                 </div>
             </div>
 

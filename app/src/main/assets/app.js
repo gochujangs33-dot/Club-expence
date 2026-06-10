@@ -1214,7 +1214,7 @@ const AppState = {
             this.rules
         );
         
-        const emailReceiver = document.getElementById('setting-email')?.value || this.reportEmail || 'finance@club.com';
+        const emailReceiver = this.reportEmail || 'finance@club.com';
         
         // Build email subject
         const dateStr = new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' });
@@ -1648,6 +1648,7 @@ document.addEventListener('DOMContentLoaded', () => {
             AppState.syncBudgetFromClub(AppState.clubName);
             AppState.save();
             setSettingsFormValues(AppState.rules);
+            if (typeof setAdminRulesFormValues === 'function') setAdminRulesFormValues(AppState.rules);
         });
 
         if (AppState.firebaseDb) {
@@ -1679,6 +1680,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const finish = () => {
                 renderClubOptions();
                 setSettingsFormValues(AppState.rules);
+            if (typeof setAdminRulesFormValues === 'function') setAdminRulesFormValues(AppState.rules);
             };
             if (AppState.firebaseDb) {
                 AppState.loadClubRegistry().then(finish);
@@ -1702,14 +1704,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Set settings form input values
     const setSettingsFormValues = (rules) => {
-        document.getElementById('setting-limit1').value = rules.limit1;
-        document.getElementById('setting-limit2').value = rules.limit2;
-        document.getElementById('setting-rate2').value = Math.round(rules.rate2 * 100);
-        document.getElementById('setting-limit3').value = rules.limit3;
-        document.getElementById('setting-rate3').value = Math.round(rules.rate3 * 100);
-        document.getElementById('setting-deduction4').value = rules.deduction4;
-        document.getElementById('setting-email').value = AppState.reportEmail || '';
-
         const annualInput = document.getElementById('setting-annual-budget');
         const usedInput = document.getElementById('setting-used-budget');
         if (annualInput) annualInput.value = AppState.annualBudget;
@@ -1895,31 +1889,52 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Save settings handler
     document.getElementById('save-settings-btn').addEventListener('click', () => {
-        const limit1 = parseInt(document.getElementById('setting-limit1').value, 10) || 0;
-        const limit2 = parseInt(document.getElementById('setting-limit2').value, 10) || 0;
-        const rate2 = (parseInt(document.getElementById('setting-rate2').value, 10) || 0) / 100;
-        const limit3 = parseInt(document.getElementById('setting-limit3').value, 10) || 0;
-        const rate3 = (parseInt(document.getElementById('setting-rate3').value, 10) || 0) / 100;
-        const deduction4 = parseInt(document.getElementById('setting-deduction4').value, 10) || 0;
-
         const usedBudget = parseInt(document.getElementById('setting-used-budget').value, 10) || 0;
         AppState.usedBudget = usedBudget;
-        AppState.reportEmail = document.getElementById('setting-email').value.trim();
         AppState.save();
-        AppState.updateRules({ limit1, limit2, rate2, limit3, rate3, deduction4 });
+        AppState.render();
+        if (typeof updateRemainingDisplay === 'function') updateRemainingDisplay();
 
         // Hide panel after saving
         document.getElementById('settings-panel').classList.add('hidden');
     });
 
-    // Reset settings handler
-    document.getElementById('reset-settings-btn').addEventListener('click', () => {
-        if (confirm("정산 기준 및 비율을 초기 기본값으로 복원하시겠습니까?")) {
-            AppState.resetRules();
-            setSettingsFormValues(AppState.rules);
-            document.getElementById('settings-panel').classList.add('hidden');
-        }
-    });
+    // Admin: 정산 구간/비율 설정 폼 값 채우기
+    const setAdminRulesFormValues = (rules) => {
+        document.getElementById('admin-setting-limit1').value = rules.limit1;
+        document.getElementById('admin-setting-limit2').value = rules.limit2;
+        document.getElementById('admin-setting-rate2').value = Math.round(rules.rate2 * 100);
+        document.getElementById('admin-setting-limit3').value = rules.limit3;
+        document.getElementById('admin-setting-rate3').value = Math.round(rules.rate3 * 100);
+        document.getElementById('admin-setting-deduction4').value = rules.deduction4;
+    };
+    setAdminRulesFormValues(AppState.rules);
+
+    // Admin: 정산 비율 저장 (전체 클럽 공통 적용)
+    const adminSaveRulesBtn = document.getElementById('admin-save-rules-btn');
+    if (adminSaveRulesBtn) {
+        adminSaveRulesBtn.addEventListener('click', () => {
+            const limit1 = parseInt(document.getElementById('admin-setting-limit1').value, 10) || 0;
+            const limit2 = parseInt(document.getElementById('admin-setting-limit2').value, 10) || 0;
+            const rate2 = (parseInt(document.getElementById('admin-setting-rate2').value, 10) || 0) / 100;
+            const limit3 = parseInt(document.getElementById('admin-setting-limit3').value, 10) || 0;
+            const rate3 = (parseInt(document.getElementById('admin-setting-rate3').value, 10) || 0) / 100;
+            const deduction4 = parseInt(document.getElementById('admin-setting-deduction4').value, 10) || 0;
+            AppState.updateRules({ limit1, limit2, rate2, limit3, rate3, deduction4 });
+            alert("정산 구간 및 비율 설정이 저장되어 모든 클럽에 일괄 적용됩니다.");
+        });
+    }
+
+    // Admin: 정산 비율 기본값 복원
+    const adminResetRulesBtn = document.getElementById('admin-reset-rules-btn');
+    if (adminResetRulesBtn) {
+        adminResetRulesBtn.addEventListener('click', () => {
+            if (confirm("정산 기준 및 비율을 초기 기본값으로 복원하시겠습니까? (모든 클럽에 적용됩니다)")) {
+                AppState.resetRules();
+                setAdminRulesFormValues(AppState.rules);
+            }
+        });
+    }
 
     // Attendance input change listeners
     prizeInput.addEventListener('input', () => {
@@ -2334,6 +2349,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         memberInput.value = AppState.memberCount || 0;
                         prizeInput.value = AppState.previousPrizeTotal || 0;
                         setSettingsFormValues(AppState.rules);
+            if (typeof setAdminRulesFormValues === 'function') setAdminRulesFormValues(AppState.rules);
                         AppState.render();
                     }).catch(err => {
                         console.error(err);
@@ -2473,6 +2489,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     memberInput.value = AppState.memberCount || 0;
                     prizeInput.value = AppState.previousPrizeTotal || 0;
                     setSettingsFormValues(AppState.rules);
+            if (typeof setAdminRulesFormValues === 'function') setAdminRulesFormValues(AppState.rules);
                     AppState.render();
                 }).catch(err => {
                     regError.textContent = "가입 등록에 실패했습니다. 네트워크를 확인해 주세요.";
