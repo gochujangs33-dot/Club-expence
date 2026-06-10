@@ -229,7 +229,7 @@ const AppState = {
             if (entry === undefined) {
                 this.directory[name] = { id: employeeId, count: 0 };
                 added++;
-            } else if (typeof entry === 'object' && entry.id !== employeeId && /^[A-Za-z]/.test(String(entry.id))) {
+            } else if (typeof entry === 'object' && entry.id !== employeeId && !/^\d{4}$/.test(String(entry.id))) {
                 entry.id = employeeId;
                 updated++;
             }
