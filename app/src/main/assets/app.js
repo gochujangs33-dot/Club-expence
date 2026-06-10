@@ -2045,10 +2045,19 @@ document.addEventListener('DOMContentLoaded', () => {
             sendEmailBtn.disabled = true;
             try {
                 await AppState.downloadExcelOnly();
-                sendEmailBtn.innerHTML = "<span class='btn-icon'>✓</span> 다운로드 완료!";
+                sendEmailBtn.innerHTML = "<span class='btn-icon'>✓</span> 저장 완료!";
+
+                const todayStr = new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' });
+                runFinalizeSettlement();
+                alert(
+                    `📂 ${todayStr} 정산 엑셀 파일이 생성되어 다운로드 폴더에 저장되었습니다.\n\n` +
+                    `✅ 전체 항목이 초기화되었습니다.\n` +
+                    `📧 저장된 파일을 이메일로 보내주세요.\n` +
+                    `📋 이번 정산 내역은 [정산 이력] 탭에서 확인하실 수 있습니다.`
+                );
             } catch (err) {
                 console.error(err);
-                sendEmailBtn.innerHTML = "<span class='btn-icon'>❌</span> 다운로드 실패";
+                sendEmailBtn.innerHTML = "<span class='btn-icon'>❌</span> 저장 실패";
             } finally {
                 setTimeout(() => {
                     sendEmailBtn.innerHTML = originalText;
@@ -2094,14 +2103,6 @@ document.addEventListener('DOMContentLoaded', () => {
         finalizeBtn.addEventListener('click', runFinalizeSettlement);
     }
 
-    const finalizeMainBtn = document.getElementById('finalize-settlement-main-btn');
-    if (finalizeMainBtn) {
-        finalizeMainBtn.addEventListener('click', () => {
-            if (confirm('정산을 확정하고 이력에 저장한 뒤 현재 데이터를 초기화할까요?')) {
-                runFinalizeSettlement();
-            }
-        });
-    }
 
     if (downloadExcelBtn) {
         downloadExcelBtn.addEventListener('click', async () => {
