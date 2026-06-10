@@ -136,7 +136,6 @@ const AppState = {
     editingAttendeeId: null,
     editingDirName: null,
     rules: { ...DefaultRules },
-    tempReceiptImage: null,
     tempCorpReceiptImage: null,
     tempPersonalReceiptImage: null,
     lastCalculatedSelfPay: 0,
@@ -339,10 +338,31 @@ const AppState = {
     },
 
 
-    addExpense(description, amount, category, cardType, corporateAmount) {
-        const isSplit = cardType === 'split';
-        const corpAmount = isSplit ? Math.min(Math.max(corporateAmount || 0, 0), amount) : null;
-        const personalAmount = isSplit ? amount - corpAmount : null;
+    addExpense(description, amount, category, corpChecked, personalChecked, corporateAmountInput) {
+        let cardType, corpAmount, personalAmount, receiptImage, corporateReceiptImage, personalReceiptImage;
+
+        if (corpChecked && personalChecked) {
+            cardType = 'split';
+            corpAmount = Math.min(Math.max(corporateAmountInput || 0, 0), amount);
+            personalAmount = amount - corpAmount;
+            receiptImage = null;
+            corporateReceiptImage = this.tempCorpReceiptImage;
+            personalReceiptImage = this.tempPersonalReceiptImage;
+        } else if (personalChecked) {
+            cardType = 'personal';
+            corpAmount = null;
+            personalAmount = amount;
+            receiptImage = this.tempPersonalReceiptImage;
+            corporateReceiptImage = null;
+            personalReceiptImage = null;
+        } else {
+            cardType = 'corporate';
+            corpAmount = null;
+            personalAmount = null;
+            receiptImage = this.tempCorpReceiptImage;
+            corporateReceiptImage = null;
+            personalReceiptImage = null;
+        }
 
         if (this.editingItemId !== null) {
             const index = this.expenseItems.findIndex(item => item.id === this.editingItemId);
@@ -354,9 +374,9 @@ const AppState = {
                 item.cardType = cardType;
                 item.corporateAmount = corpAmount;
                 item.personalAmount = personalAmount;
-                item.receiptImage = isSplit ? null : this.tempReceiptImage;
-                item.corporateReceiptImage = isSplit ? this.tempCorpReceiptImage : null;
-                item.personalReceiptImage = isSplit ? this.tempPersonalReceiptImage : null;
+                item.receiptImage = receiptImage;
+                item.corporateReceiptImage = corporateReceiptImage;
+                item.personalReceiptImage = personalReceiptImage;
             }
         } else {
             const item = {
@@ -367,9 +387,9 @@ const AppState = {
                 cardType,
                 corporateAmount: corpAmount,
                 personalAmount: personalAmount,
-                receiptImage: isSplit ? null : this.tempReceiptImage,
-                corporateReceiptImage: isSplit ? this.tempCorpReceiptImage : null,
-                personalReceiptImage: isSplit ? this.tempPersonalReceiptImage : null
+                receiptImage,
+                corporateReceiptImage,
+                personalReceiptImage
             };
             this.expenseItems.push(item);
         }
@@ -404,26 +424,16 @@ const AppState = {
 
             // Card type / split payment
             const cardType = item.cardType || 'corporate';
-            document.getElementById('expense-card-type-select').value = cardType;
+            document.getElementById('expense-corp-check').checked = (cardType === 'corporate' || cardType === 'split');
+            document.getElementById('expense-personal-check').checked = (cardType === 'personal' || cardType === 'split');
             document.getElementById('expense-corporate-amount-input').value = item.corporateAmount ?? '';
-            updateCardTypeUI();
+            document.getElementById('expense-personal-amount-input').value = item.personalAmount ?? '';
 
             // Load receipt preview status
-            this.tempReceiptImage = item.receiptImage || null;
-            this.tempCorpReceiptImage = item.corporateReceiptImage || null;
-            this.tempPersonalReceiptImage = item.personalReceiptImage || null;
+            this.tempCorpReceiptImage = (cardType === 'split') ? (item.corporateReceiptImage || null) : (cardType === 'corporate' ? (item.receiptImage || null) : null);
+            this.tempPersonalReceiptImage = (cardType === 'split') ? (item.personalReceiptImage || null) : (cardType === 'personal' ? (item.receiptImage || null) : null);
 
-            const statusEl = document.getElementById('receipt-preview-status');
-            const deleteReceiptBtn = document.getElementById('delete-receipt-btn');
-            if (this.tempReceiptImage) {
-                statusEl.textContent = "✓ 영수증 첨부됨 (변경하려면 새 파일 선택)";
-                statusEl.classList.remove('hidden');
-                if (deleteReceiptBtn) deleteReceiptBtn.classList.remove('hidden');
-            } else {
-                statusEl.classList.add('hidden');
-                if (deleteReceiptBtn) deleteReceiptBtn.classList.add('hidden');
-            }
-            document.getElementById('expense-receipt-input').value = '';
+            updateCardTypeUI();
 
             const corpStatusEl = document.getElementById('receipt-corp-status');
             const deleteCorpBtn = document.getElementById('delete-receipt-corp-btn');
@@ -463,15 +473,11 @@ const AppState = {
         document.getElementById('expense-desc-input').value = '';
         document.getElementById('expense-amount-input').value = '';
         document.getElementById('expense-category-select').selectedIndex = 0;
-        document.getElementById('expense-receipt-input').value = '';
-        this.tempReceiptImage = null;
-        document.getElementById('receipt-preview-status').classList.add('hidden');
-        const deleteReceiptBtn = document.getElementById('delete-receipt-btn');
-        if (deleteReceiptBtn) deleteReceiptBtn.classList.add('hidden');
 
-        document.getElementById('expense-card-type-select').selectedIndex = 0;
+        document.getElementById('expense-corp-check').checked = true;
+        document.getElementById('expense-personal-check').checked = false;
         document.getElementById('expense-corporate-amount-input').value = '';
-        document.getElementById('split-personal-amount-display').textContent = '0';
+        document.getElementById('expense-personal-amount-input').value = '';
 
         document.getElementById('expense-receipt-corp-input').value = '';
         this.tempCorpReceiptImage = null;
@@ -1389,7 +1395,6 @@ const AppState = {
         this.eventPhoto = null;
         this.editingItemId = null;
         this.editingAttendeeId = null;
-        this.tempReceiptImage = null;
 
         this.save();
         this.render();
@@ -1633,23 +1638,29 @@ document.addEventListener('DOMContentLoaded', () => {
         const description = descInput.value.trim();
         const amount = parseInt(amountInput.value, 10);
         const category = catSelect.value;
-        const cardType = document.getElementById('expense-card-type-select').value;
+        const corpChecked = document.getElementById('expense-corp-check').checked;
+        const personalChecked = document.getElementById('expense-personal-check').checked;
         const corporateAmount = parseInt(document.getElementById('expense-corporate-amount-input').value, 10) || 0;
 
         if (description && !isNaN(amount) && amount > 0) {
-            AppState.addExpense(description, amount, category, cardType, corporateAmount);
+            AppState.addExpense(description, amount, category, corpChecked, personalChecked, corporateAmount);
             descInput.focus();
         }
     });
 
-    // Card type / split payment listeners
-    const cardTypeSelect = document.getElementById('expense-card-type-select');
+    // Card type checkbox listeners
+    const corpCheck = document.getElementById('expense-corp-check');
+    const personalCheck = document.getElementById('expense-personal-check');
     const corporateAmountInput = document.getElementById('expense-corporate-amount-input');
-    if (cardTypeSelect) {
-        cardTypeSelect.addEventListener('change', updateCardTypeUI);
-    }
+    const personalAmountInput = document.getElementById('expense-personal-amount-input');
+    [corpCheck, personalCheck].forEach(el => {
+        if (el) el.addEventListener('change', updateCardTypeUI);
+    });
     if (corporateAmountInput) {
         corporateAmountInput.addEventListener('input', updateCardTypeUI);
+    }
+    if (personalAmountInput) {
+        personalAmountInput.addEventListener('input', updateCardTypeUI);
     }
     amountInput.addEventListener('input', updateCardTypeUI);
     updateCardTypeUI();
@@ -1668,41 +1679,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Receipt File Upload Change Listener & Compression
-    const receiptInput = document.getElementById('expense-receipt-input');
-    const receiptStatus = document.getElementById('receipt-preview-status');
-    const deleteReceiptBtn = document.getElementById('delete-receipt-btn');
-
-    if (receiptInput && receiptStatus) {
-        receiptInput.addEventListener('change', (e) => {
-            const file = e.target.files[0];
-            if (file) {
-                receiptStatus.textContent = "⌛ 영수증 압축 중...";
-                receiptStatus.classList.remove('hidden');
-
-                compressReceiptImage(file, (compressedBase64) => {
-                    AppState.tempReceiptImage = compressedBase64;
-                    receiptStatus.textContent = "✓ 영수증 대기 완료";
-                    if (deleteReceiptBtn) deleteReceiptBtn.classList.remove('hidden');
-                });
-            } else {
-                AppState.tempReceiptImage = null;
-                receiptStatus.classList.add('hidden');
-                if (deleteReceiptBtn) deleteReceiptBtn.classList.add('hidden');
-            }
-        });
-    }
-
-    if (deleteReceiptBtn) {
-        deleteReceiptBtn.addEventListener('click', () => {
-            AppState.tempReceiptImage = null;
-            receiptStatus.classList.add('hidden');
-            receiptInput.value = '';
-            deleteReceiptBtn.classList.add('hidden');
-        });
-    }
-
-    // Split-payment receipt uploads (법인카드/개인카드)
+    // 법인카드/개인카드 영수증 업로드
     const setupSplitReceiptInput = (inputId, statusId, deleteBtnId, stateKey) => {
         const input = document.getElementById(inputId);
         const status = document.getElementById(statusId);
@@ -1794,10 +1771,11 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('expense-desc-input').value = '';
             document.getElementById('expense-amount-input').value = '';
             document.getElementById('expense-category-select').selectedIndex = 0;
-            document.getElementById('expense-receipt-input').value = '';
-            document.getElementById('receipt-preview-status').classList.add('hidden');
-            const drb = document.getElementById('delete-receipt-btn');
-            if (drb) drb.classList.add('hidden');
+            document.getElementById('expense-corp-check').checked = true;
+            document.getElementById('expense-personal-check').checked = false;
+            document.getElementById('expense-corporate-amount-input').value = '';
+            document.getElementById('expense-personal-amount-input').value = '';
+            updateCardTypeUI();
             document.getElementById('prev-prize-input').value = 0;
             // Switch to history tab
             document.querySelectorAll('.tab-nav .tab-btn').forEach(b => b.classList.remove('active'));
@@ -2510,22 +2488,38 @@ async function embedImagesIntoXlsx(zip, placements) {
 // 결제 카드 종류에 따라 입력 폼의 영수증/분리결제 영역을 표시/숨김 처리하고
 // 분리 결제 시 개인카드 부담액(총금액 - 법인카드금액)을 자동 계산해 표시
 function updateCardTypeUI() {
-    const cardTypeSelect = document.getElementById('expense-card-type-select');
-    const splitAmountGroup = document.getElementById('split-amount-group');
-    const singleReceiptGroup = document.getElementById('single-receipt-group');
-    const splitReceiptGroup = document.getElementById('split-receipt-group');
-    if (!cardTypeSelect) return;
+    const corpCheck = document.getElementById('expense-corp-check');
+    const personalCheck = document.getElementById('expense-personal-check');
+    const corpAmountGroup = document.getElementById('corp-amount-group');
+    const personalAmountGroup = document.getElementById('personal-amount-group');
+    const corpReceiptGroup = document.getElementById('corp-receipt-group');
+    const personalReceiptGroup = document.getElementById('personal-receipt-group');
+    const splitAutoHint = document.getElementById('split-auto-hint');
+    const personalAmountInput = document.getElementById('expense-personal-amount-input');
+    if (!corpCheck || !personalCheck) return;
 
-    const isSplit = cardTypeSelect.value === 'split';
-    splitAmountGroup.classList.toggle('hidden', !isSplit);
-    singleReceiptGroup.classList.toggle('hidden', isSplit);
-    splitReceiptGroup.classList.toggle('hidden', !isSplit);
+    const corpOn = corpCheck.checked;
+    const personalOn = personalCheck.checked;
+
+    // Require at least one card type selected
+    if (!corpOn && !personalOn) {
+        corpCheck.checked = true;
+        return updateCardTypeUI();
+    }
+
+    corpAmountGroup.classList.toggle('hidden', !corpOn);
+    personalAmountGroup.classList.toggle('hidden', !personalOn);
+    corpReceiptGroup.classList.toggle('hidden', !corpOn);
+    personalReceiptGroup.classList.toggle('hidden', !personalOn);
+
+    const isSplit = corpOn && personalOn;
+    splitAutoHint.style.display = isSplit ? '' : 'none';
+    personalAmountInput.readOnly = isSplit;
 
     if (isSplit) {
         const total = parseInt(document.getElementById('expense-amount-input').value, 10) || 0;
         const corp = parseInt(document.getElementById('expense-corporate-amount-input').value, 10) || 0;
-        const personal = Math.max(total - corp, 0);
-        document.getElementById('split-personal-amount-display').textContent = personal.toLocaleString('ko-KR');
+        personalAmountInput.value = Math.max(total - corp, 0);
     }
 }
 
