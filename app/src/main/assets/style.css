@@ -1454,6 +1454,50 @@ body:has(.update-banner:not(.hidden)) {
     background: rgba(255, 255, 255, 0.02);
 }
 
+.admin-mode-title {
+    font-family: var(--font-heading);
+    font-size: 1.3rem;
+    font-weight: 800;
+    background: linear-gradient(135deg, #fbbf24, #ef4444);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 1rem;
+}
+
+.club-filter-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+}
+
+.club-filter-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--card-border);
+    border-radius: 999px;
+    padding: 0.35rem 0.85rem;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: var(--transition-smooth);
+}
+
+.club-filter-chip input {
+    width: auto;
+    accent-color: var(--color-primary);
+    cursor: pointer;
+}
+
+.club-filter-chip.active {
+    border-color: var(--color-primary);
+    color: var(--text-primary);
+    background: rgba(139, 92, 246, 0.15);
+}
+
 .admin-stats-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));

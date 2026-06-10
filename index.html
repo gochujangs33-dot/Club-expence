@@ -494,6 +494,7 @@
 
         <!-- Tab Content 5: Admin Dashboard -->
         <div id="tab-admin" class="tab-pane hidden">
+            <h2 class="admin-mode-title">👑 전체 관리자 모드</h2>
             <div class="admin-stats-grid">
                 <div class="stat-card">
                     <span class="stat-label">👥 총 등록 가입자</span>
@@ -560,7 +561,11 @@
                     <h2>클럽별 지출 분석</h2>
                 </div>
                 <div class="card-body">
+                    <div id="club-filter-container" class="club-filter-row">
+                        <!-- Populated dynamically: 전체 클럽 + per-club checkboxes -->
+                    </div>
                     <canvas id="club-analysis-chart" height="120"></canvas>
+                    <canvas id="club-monthly-chart" height="120" class="hidden"></canvas>
                 </div>
             </div>
 
@@ -579,6 +584,7 @@
                                         <th>이름</th>
                                         <th>6자리 PIN</th>
                                         <th>가입일</th>
+                                        <th>관리</th>
                                     </tr>
                                 </thead>
                                 <tbody id="admin-users-list">

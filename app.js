@@ -2293,6 +2293,66 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // ── 가입 회원 - 이름/PIN 수정 및 삭제 ────────────────────────────────
+    function editAdminUser(oldPin, currentName) {
+        const newName = prompt('이름 수정', currentName);
+        if (newName === null || !newName.trim()) return;
+
+        const newPin = prompt('6자리 PIN 번호 수정', oldPin);
+        if (newPin === null) return;
+        if (!/^\d{6}$/.test(newPin)) {
+            alert('PIN 번호는 6자리 숫자여야 합니다.');
+            return;
+        }
+
+        firebaseDb.ref(`users/${oldPin}`).once('value').then(snap => {
+            const userData = snap.val() || {};
+            userData.name = newName.trim();
+
+            if (newPin === oldPin) {
+                return firebaseDb.ref(`users/${oldPin}`).update({ name: userData.name });
+            }
+
+            return firebaseDb.ref(`users/${newPin}`).once('value').then(existing => {
+                if (existing.exists()) {
+                    alert('이미 사용 중인 PIN 번호입니다.');
+                    return Promise.reject(new Error('duplicate-pin'));
+                }
+                return firebaseDb.ref(`settlements/${oldPin}`).once('value').then(settlementSnap => {
+                    const tasks = [
+                        firebaseDb.ref(`users/${newPin}`).set(userData),
+                        firebaseDb.ref(`users/${oldPin}`).remove()
+                    ];
+                    if (settlementSnap.exists()) {
+                        tasks.push(firebaseDb.ref(`settlements/${newPin}`).set(settlementSnap.val()));
+                        tasks.push(firebaseDb.ref(`settlements/${oldPin}`).remove());
+                    }
+                    return Promise.all(tasks);
+                });
+            });
+        }).then(() => {
+            renderAdminDashboard();
+        }).catch(err => {
+            if (err && err.message !== 'duplicate-pin') {
+                console.error('회원 정보 수정 실패:', err);
+                alert('회원 정보 수정에 실패했습니다.');
+            }
+        });
+    }
+
+    function deleteAdminUser(pin, name) {
+        if (!confirm(`'${name}' (${pin}) 회원을 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`)) return;
+        Promise.all([
+            firebaseDb.ref(`users/${pin}`).remove(),
+            firebaseDb.ref(`settlements/${pin}`).remove()
+        ]).then(() => {
+            renderAdminDashboard();
+        }).catch(err => {
+            console.error('회원 삭제 실패:', err);
+            alert('회원 삭제에 실패했습니다.');
+        });
+    }
+
     function renderAdminDashboard() {
         if (!firebaseDb) return;
         
@@ -2312,10 +2372,25 @@ document.addEventListener('DOMContentLoaded', () => {
                     <td><strong>${AppState.escapeHtml(user.name)}</strong></td>
                     <td><code>${AppState.escapeHtml(pin)}</code></td>
                     <td><span style="font-size:0.8rem; color:var(--text-muted);">${dateStr}</span></td>
+                    <td style="white-space:nowrap;">
+                        <button class="btn-edit-user btn-secondary" data-pin="${AppState.escapeHtml(pin)}" data-name="${AppState.escapeHtml(user.name)}" style="padding:0.3rem 0.6rem; font-size:0.78rem;">수정</button>
+                        <button class="btn-delete-user btn-text-danger" data-pin="${AppState.escapeHtml(pin)}" data-name="${AppState.escapeHtml(user.name)}" style="padding:0.3rem 0.6rem; font-size:0.78rem;">삭제</button>
+                    </td>
                 `;
                 tbody.appendChild(tr);
             });
             document.getElementById('admin-total-users').textContent = `${userCount}명`;
+
+            tbody.querySelectorAll('.btn-edit-user').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    editAdminUser(btn.getAttribute('data-pin'), btn.getAttribute('data-name'));
+                });
+            });
+            tbody.querySelectorAll('.btn-delete-user').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    deleteAdminUser(btn.getAttribute('data-pin'), btn.getAttribute('data-name'));
+                });
+            });
         });
         
         // 2. Fetch Global History
@@ -2338,18 +2413,24 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('admin-total-self-pay').textContent = SettlementCalculator.formatCurrency(totalSelfPay);
 
             renderAdminHistory(historyList);
+            lastHistoryList = historyList;
             renderClubAnalysisChart(historyList);
         });
 
         // 3. Fetch Club Registry & Total Budget
         AppState.loadClubRegistry().then(() => {
             renderClubManagement();
+            renderClubFilters();
+            renderClubAnalysisChart(lastHistoryList);
         });
     }
 
     // ── 클럽 관리 (관리자 대시보드) ───────────────────────────────────────
     let clubAnalysisChartInstance = null;
+    let clubMonthlyChartInstance = null;
     let editingClubId = null;
+    let lastHistoryList = [];
+    let selectedClubFilter = '';
 
     const clubTotalBudgetInput = document.getElementById('club-total-budget-input');
     const clubBudgetSummary = document.getElementById('club-budget-summary');
@@ -2453,8 +2534,96 @@ document.addEventListener('DOMContentLoaded', () => {
         cancelEditClubBtn.addEventListener('click', resetClubForm);
     }
 
+    // ── 클럽별 지출 분석 - 필터 체크박스 ──────────────────────────────────
+    function renderClubFilters() {
+        const container = document.getElementById('club-filter-container');
+        if (!container) return;
+
+        const clubs = Object.values(AppState.clubRegistry || {});
+        let html = `
+            <label class="club-filter-chip ${selectedClubFilter === '' ? 'active' : ''}">
+                <input type="radio" name="club-filter" value="" ${selectedClubFilter === '' ? 'checked' : ''}>
+                전체 클럽
+            </label>
+        `;
+        clubs.sort((a, b) => a.name.localeCompare(b.name)).forEach(club => {
+            html += `
+                <label class="club-filter-chip ${selectedClubFilter === club.name ? 'active' : ''}">
+                    <input type="radio" name="club-filter" value="${AppState.escapeHtml(club.name)}" ${selectedClubFilter === club.name ? 'checked' : ''}>
+                    ${AppState.escapeHtml(club.name)}
+                </label>
+            `;
+        });
+        container.innerHTML = html;
+
+        container.querySelectorAll('input[name="club-filter"]').forEach(input => {
+            input.addEventListener('change', () => {
+                selectedClubFilter = input.value;
+                renderClubFilters();
+                if (selectedClubFilter === '') {
+                    document.getElementById('club-monthly-chart').classList.add('hidden');
+                    document.getElementById('club-analysis-chart').classList.remove('hidden');
+                    renderClubAnalysisChart(lastHistoryList);
+                } else {
+                    document.getElementById('club-analysis-chart').classList.add('hidden');
+                    document.getElementById('club-monthly-chart').classList.remove('hidden');
+                    renderClubMonthlyChart(lastHistoryList, selectedClubFilter);
+                }
+            });
+        });
+    }
+
+    // ── 특정 클럽 - 월별 지원금 지출내역 (꺾은선) ─────────────────────────
+    function renderClubMonthlyChart(historyList, clubName) {
+        const canvas = document.getElementById('club-monthly-chart');
+        if (!canvas || typeof Chart === 'undefined') return;
+
+        const spendByMonth = {};
+        historyList
+            .filter(entry => (entry.clubName || '기본 클럽') === clubName)
+            .forEach(entry => {
+                const d = entry.date ? new Date(entry.date) : null;
+                const key = d ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` : '알 수 없음';
+                spendByMonth[key] = (spendByMonth[key] || 0) + (entry.finalSupportAmount || 0);
+            });
+
+        const labels = Object.keys(spendByMonth).sort();
+        const data = labels.map(key => spendByMonth[key]);
+
+        if (clubMonthlyChartInstance) {
+            clubMonthlyChartInstance.destroy();
+        }
+        clubMonthlyChartInstance = new Chart(canvas.getContext('2d'), {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: `${clubName} - 월별 지원금 지출액`,
+                        data: data,
+                        borderColor: 'rgba(56, 189, 248, 0.9)',
+                        backgroundColor: 'rgba(56, 189, 248, 0.25)',
+                        tension: 0.3,
+                        fill: true
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: { labels: { color: '#cbd5e1' } }
+                },
+                scales: {
+                    x: { ticks: { color: '#cbd5e1' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+                    y: { ticks: { color: '#cbd5e1' }, grid: { color: 'rgba(255,255,255,0.05)' }, beginAtZero: true }
+                }
+            }
+        });
+    }
+
     // ── 클럽별 지출 분석 차트 ─────────────────────────────────────────────
     function renderClubAnalysisChart(historyList) {
+        if (selectedClubFilter !== '') return;
         const canvas = document.getElementById('club-analysis-chart');
         if (!canvas || typeof Chart === 'undefined') return;
 
