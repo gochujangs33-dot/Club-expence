@@ -1407,6 +1407,9 @@ const AppState = {
         } catch (err) {
             if (err.name === 'AbortError') {
                 setStatus('공유가 취소되었습니다.');
+            } else if (err.name === 'NotAllowedError') {
+                console.error(err);
+                setStatus('이 브라우저/환경에서는 파일 공유가 차단되었습니다. "메일 앱 열기" 또는 "본문 복사"를 이용해주세요.');
             } else {
                 console.error(err);
                 setStatus('공유 중 오류가 발생했습니다: ' + err.message);
