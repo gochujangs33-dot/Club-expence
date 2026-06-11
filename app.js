@@ -244,61 +244,23 @@ const AppState = {
     resetDirectoryCountsIfNewYear() {
         const currentYear = new Date().getFullYear();
         if (this.directoryCountYear !== currentYear) {
+            const prevYear = this.directoryCountYear;
             Object.keys(this.directory).forEach(name => {
-                const entry = this.directory[name];
-                if (typeof entry === 'object') {
-                    entry.count = 0;
-                } else {
-                    this.directory[name] = { id: entry, count: 0 };
+                let entry = this.directory[name];
+                if (typeof entry !== 'object') {
+                    entry = { id: entry, count: 0 };
+                    this.directory[name] = entry;
                 }
+                if (entry.count > 0) {
+                    if (!entry.history) entry.history = {};
+                    entry.history[prevYear] = entry.count;
+                }
+                entry.count = 0;
             });
             this.directoryCountYear = currentYear;
             localStorage.setItem('club_directory_count_year', currentYear.toString());
             this.save();
         }
-    },
-
-    // 전사원 명부 누적 카운트는 모든 사용자가 공유하는 globalDirectory와 병합
-    // (이름별로 더 큰 카운트를 기준으로 채택, 로컬이 더 크면 globalDirectory도 갱신)
-    loadGlobalDirectory() {
-        if (!this.firebaseDb) return Promise.resolve();
-        return this.firebaseDb.ref('globalDirectory').once('value').then(snapshot => {
-            const global = snapshot.val() || {};
-            const pushUpdates = {};
-
-            Object.keys(global).forEach(name => {
-                const g = global[name] || {};
-                const local = this.directory[name];
-                const localCount = (local && typeof local === 'object') ? (local.count || 0) : 0;
-                const localId = (local && typeof local === 'object') ? local.id : local;
-                const mergedCount = Math.max(g.count || 0, localCount);
-                const mergedId = g.id || localId;
-                this.directory[name] = { id: mergedId, count: mergedCount };
-                if (mergedCount > (g.count || 0)) {
-                    pushUpdates[name] = { id: mergedId, count: mergedCount };
-                }
-            });
-
-            // globalDirectory에 아직 없는 이름인데 로컬에 카운트가 있는 경우도 반영
-            Object.keys(this.directory).forEach(name => {
-                if (global[name]) return;
-                const local = this.directory[name];
-                const localCount = (local && typeof local === 'object') ? (local.count || 0) : 0;
-                if (localCount > 0) {
-                    const localId = (local && typeof local === 'object') ? local.id : local;
-                    pushUpdates[name] = { id: localId, count: localCount };
-                }
-            });
-
-            if (Object.keys(pushUpdates).length > 0) {
-                const refUpdates = {};
-                Object.keys(pushUpdates).forEach(name => {
-                    refUpdates[`globalDirectory/${name}`] = pushUpdates[name];
-                });
-                this.firebaseDb.ref().update(refUpdates)
-                    .catch(err => console.error("Global directory backfill failed:", err));
-            }
-        }).catch(err => console.error("전사원 명부(공통) 로드 실패:", err));
     },
 
     // 전사원 명부 일괄 등록: 기존에 등록된 이름은 건드리지 않고, 새 이름만 추가
@@ -393,15 +355,9 @@ const AppState = {
                 this.isLoggedIn = true;
                 this.currentPin = pin;
                 this.userName = "관리자";
-                this.loadGlobalDirectory()
-                    .then(() => fetch('./lib/employee_directory.json'))
+                fetch('./lib/employee_directory.json')
                     .then(res => res.json())
                     .then(list => this.bulkImportDirectory(list))
-                    // 관리자 화면의 명부를 전체 사용자 공유 기준으로 반영
-                    .then(() => {
-                        this.firebaseDb.ref('globalDirectory').set(this.directory)
-                            .catch(err => console.error("Global directory sync failed:", err));
-                    })
                     .catch(err => console.error("전사원 명부 자동 등록 실패:", err))
                     .finally(() => resolve(true));
                 return;
@@ -469,10 +425,8 @@ const AppState = {
                             this.isLoggedIn = true;
                             this.currentPin = pin;
 
-                            // 관리자 화면 기준 누적 카운트를 먼저 반영한 뒤,
                             // 번들된 전사원 데이터 중 누락된 사람을 클라우드 명부에도 병합
-                            this.loadGlobalDirectory()
-                                .then(() => fetch('./lib/employee_directory.json'))
+                            fetch('./lib/employee_directory.json')
                                 .then(res => res.json())
                                 .then(list => this.bulkImportDirectory(list))
                                 .catch(err => console.error("전사원 명부 자동 등록 실패:", err))
@@ -1231,7 +1185,7 @@ const AppState = {
                         <div class="expense-row-left">
                             <span class="expense-row-title" style="font-size: 0.88rem;">
                                 ${this.escapeHtml(name)}
-                                <span style="font-size: 0.72rem; color: var(--color-secondary); font-weight: 600; margin-left: 0.3rem;">(올해 누적: <input type="number" class="dir-count-input" data-name="${this.escapeHtml(name)}" value="${countValue}" min="0" style="width:34px; padding:0 2px; font-size:0.72rem; font-weight:700; color:var(--color-secondary); background:transparent; border:none; border-bottom:1px dashed var(--color-secondary); outline:none; text-align:center; -moz-appearance:textfield; appearance:textfield;">회)</span>
+                                <span style="font-size: 0.72rem; color: var(--color-secondary); font-weight: 600; margin-left: 0.3rem;">(올해 누적: ${this.userName === '관리자' ? `<input type="number" class="dir-count-input" data-name="${this.escapeHtml(name)}" value="${countValue}" min="0" style="width:34px; padding:0 2px; font-size:0.72rem; font-weight:700; color:var(--color-secondary); background:transparent; border:none; border-bottom:1px dashed var(--color-secondary); outline:none; text-align:center; -moz-appearance:textfield; appearance:textfield;">` : countValue}회)</span>
                             </span>
                             <span style="font-size: 0.75rem; color: var(--text-secondary);">EMP ID: ${this.escapeHtml(idValue)}</span>
                         </div>
@@ -1766,17 +1720,6 @@ const AppState = {
                 this.directory[att.name] = { id: curId, count: curCount + 1 };
             } else {
                 this.directory[att.name] = { id: att.employeeId, count: 1 };
-            }
-
-            // 관리자 화면(전체 공유 명부)의 누적 카운트도 함께 증가
-            if (this.isLoggedIn && this.firebaseDb) {
-                const empId = att.employeeId;
-                this.firebaseDb.ref(`globalDirectory/${att.name}`).transaction(cur => {
-                    if (cur && typeof cur === 'object') {
-                        return { id: cur.id || empId, count: (cur.count || 0) + 1 };
-                    }
-                    return { id: empId, count: 1 };
-                }).catch(err => console.error("Global directory count update failed:", err));
             }
         });
 
