@@ -3119,11 +3119,18 @@ function setCellValue(xml, ref, value, isString) {
         '<': '&lt;', '>': '&gt;', '&': '&amp;', "'": '&apos;', '"': '&quot;'
     }[c]));
 
+    // 빈 문자열은 inlineStr("")로 채우면 COUNTA가 비어있지 않은 셀로 카운트하므로
+    // 진짜 빈 셀(자체 닫힘 <c r="REF" s="N"/>)로 만들어 COUNTA에서 제외되도록 함
+    const isEmptyString = isString && String(value) === '';
+
     // 자체 닫힘 빈 셀: <c r="REF" s="N"/>
     const reSelf = new RegExp(`<c r="${ref}"([^>]*?)/>`);
     const mSelf = xml.match(reSelf);
     if (mSelf) {
         const attrs = mSelf[1].replace(/\st="[^"]*"/, '');
+        if (isEmptyString) {
+            return xml.replace(reSelf, `<c r="${ref}"${attrs}/>`);
+        }
         const replacement = isString
             ? `<c r="${ref}"${attrs} t="inlineStr"><is><t xml:space="preserve">${escaped}</t></is></c>`
             : `<c r="${ref}"${attrs}><v>${value}</v></c>`;
@@ -3135,6 +3142,9 @@ function setCellValue(xml, ref, value, isString) {
     const mFull = xml.match(reFull);
     if (mFull) {
         const attrs = mFull[1].replace(/\st="[^"]*"/, '');
+        if (isEmptyString) {
+            return xml.replace(reFull, `<c r="${ref}"${attrs}/>`);
+        }
         const replacement = isString
             ? `<c r="${ref}"${attrs} t="inlineStr"><is><t xml:space="preserve">${escaped}</t></is></c>`
             : `<c r="${ref}"${attrs}><v>${value}</v></c>`;
