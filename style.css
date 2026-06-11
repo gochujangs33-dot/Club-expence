@@ -649,7 +649,14 @@ select {
 .scroll-y {
     max-height: 250px;
     overflow-y: auto;
+    overflow-x: hidden;
     padding-right: 0.25rem;
+    -webkit-overflow-scrolling: touch;
+    transform: translateZ(0);
+}
+
+#club-list-container .expense-row {
+    animation: none;
 }
 
 .scroll-y::-webkit-scrollbar {
