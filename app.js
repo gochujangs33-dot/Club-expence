@@ -2,6 +2,20 @@
  * Club Expense Settlement App - Main JavaScript Logic
  */
 
+// 인당 자부담 비용에 따라 강조 박스의 아이콘/색상을 전환 (100원 이상이면 🔥, 0이면 😊)
+function updatePerPersonSelfPayIcon(perPersonSelfPay) {
+    const iconEl = document.getElementById('result-per-person-icon');
+    const boxEl = document.getElementById('result-per-person-box');
+    if (!iconEl || !boxEl) return;
+    if (perPersonSelfPay >= 100) {
+        iconEl.textContent = '🔥';
+        boxEl.classList.remove('no-self-pay');
+    } else {
+        iconEl.textContent = '😊';
+        boxEl.classList.add('no-self-pay');
+    }
+}
+
 // --- Firebase Config & Initialization ---
 // 구글 Firebase 콘솔에서 발급받은 실제 설정 키값들을 아래에 입력하시면 클라우드 연동이 활성화됩니다.
 const firebaseConfig = {
@@ -802,6 +816,7 @@ const AppState = {
         }
         
         document.getElementById('result-per-person-self-pay').textContent = SettlementCalculator.formatCurrency(result.perPersonSelfPay);
+        updatePerPersonSelfPayIcon(result.perPersonSelfPay);
         document.getElementById('result-self-pay-ratio').textContent = `${(result.selfPayRatio * 100).toFixed(1)}%`;
         document.getElementById('result-total-cost').textContent = SettlementCalculator.formatCurrency(result.totalCost);
         document.getElementById('result-event-cost').textContent = SettlementCalculator.formatCurrency(result.eventCost);
@@ -2365,6 +2380,21 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    const feedbackDeleteSelectedBtn = document.getElementById('feedback-delete-selected-btn');
+    if (feedbackDeleteSelectedBtn) {
+        feedbackDeleteSelectedBtn.addEventListener('click', () => {
+            const checked = document.querySelectorAll('.feedback-select-checkbox:checked');
+            if (checked.length === 0) {
+                alert('삭제할 항목을 선택해주세요.');
+                return;
+            }
+            if (!confirm(`선택한 ${checked.length}건의 요청사항을 삭제하시겠습니까?`)) return;
+            const updates = {};
+            checked.forEach(cb => { updates[cb.getAttribute('data-key')] = null; });
+            firebaseDb.ref('requests').update(updates).then(() => renderFeedbackList());
+        });
+    }
+
     // 요청사항(피드백) 모달
     const feedbackOpenBtn = document.getElementById('feedback-open-btn');
     const feedbackModal = document.getElementById('feedback-modal');
@@ -2477,6 +2507,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const memberCount = AppState.memberCount;
         const perPerson = memberCount > 0 ? newValue / memberCount : 0;
         document.getElementById('result-per-person-self-pay').textContent = SettlementCalculator.formatCurrency(perPerson);
+        updatePerPersonSelfPayIcon(perPerson);
 
         const totalCost = AppState.expenseItems.reduce((sum, item) => sum + item.amount, 0);
         const ratio = totalCost > 0 ? newValue / totalCost : 0;
@@ -2904,9 +2935,13 @@ document.addEventListener('DOMContentLoaded', () => {
             const unreadCount = requestList.filter(r => !r.read).length;
             document.getElementById('feedback-unread-count').textContent = unreadCount;
 
+            const deleteSelectedBtn = document.getElementById('feedback-delete-selected-btn');
+
             if (requestList.length === 0) {
                 listContainer.innerHTML = '<p style="font-size:0.85rem; color:var(--text-muted); text-align:center; padding:1rem 0;">요청사항이 없습니다.</p>';
+                if (deleteSelectedBtn) deleteSelectedBtn.classList.add('hidden');
             } else {
+                if (deleteSelectedBtn) deleteSelectedBtn.classList.remove('hidden');
                 listContainer.innerHTML = requestList.map(req => {
                     const dateStr = req.createdAt ? new Date(req.createdAt).toLocaleString('ko-KR') : '-';
                     const photoHtml = req.photo
@@ -2915,12 +2950,18 @@ document.addEventListener('DOMContentLoaded', () => {
                     return `
                         <div class="feedback-item" data-key="${AppState.escapeHtml(req.key)}" style="border:1px solid var(--card-border); border-radius:10px; padding:0.7rem 0.9rem; ${req.read ? 'opacity:0.6;' : 'background:rgba(245, 158, 11, 0.08); border-color:rgba(245,158,11,0.3);'}">
                             <div style="display:flex; justify-content:space-between; align-items:center; gap:0.5rem;">
-                                <strong style="font-size:0.88rem;">${AppState.escapeHtml(req.userName || '알 수 없음')}${req.clubName ? ` (${AppState.escapeHtml(req.clubName)})` : ''}</strong>
+                                <label style="display:flex; align-items:center; gap:0.4rem; font-size:0.88rem; font-weight:600; cursor:pointer;">
+                                    <input type="checkbox" class="feedback-select-checkbox" data-key="${AppState.escapeHtml(req.key)}">
+                                    ${AppState.escapeHtml(req.userName || '알 수 없음')}${req.clubName ? ` (${AppState.escapeHtml(req.clubName)})` : ''}
+                                </label>
                                 <span style="font-size:0.72rem; color:var(--text-muted); white-space:nowrap;">${dateStr}</span>
                             </div>
                             <p style="font-size:0.85rem; margin:0.4rem 0 0; white-space:pre-wrap;">${AppState.escapeHtml(req.message || '')}</p>
                             ${photoHtml}
-                            ${!req.read ? '<button class="btn-mark-read btn-secondary" data-key="' + AppState.escapeHtml(req.key) + '" style="margin-top:0.5rem; padding:0.25rem 0.6rem; font-size:0.75rem;">확인 완료</button>' : '<span style="font-size:0.72rem; color:var(--text-muted);">✔️ 확인됨</span>'}
+                            <div style="margin-top:0.5rem; display:flex; gap:0.5rem; align-items:center;">
+                                ${!req.read ? '<button class="btn-mark-read btn-secondary" data-key="' + AppState.escapeHtml(req.key) + '" style="padding:0.25rem 0.6rem; font-size:0.75rem;">확인 완료</button>' : '<span style="font-size:0.72rem; color:var(--text-muted);">✔️ 확인됨</span>'}
+                                <button class="btn-delete-feedback btn-text-danger" data-key="${AppState.escapeHtml(req.key)}" style="padding:0.25rem 0.6rem; font-size:0.75rem;">삭제</button>
+                            </div>
                         </div>
                     `;
                 }).join('');
@@ -2929,6 +2970,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     btn.addEventListener('click', () => {
                         const key = btn.getAttribute('data-key');
                         firebaseDb.ref(`requests/${key}/read`).set(true).then(() => renderFeedbackList());
+                    });
+                });
+                listContainer.querySelectorAll('.btn-delete-feedback').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        const key = btn.getAttribute('data-key');
+                        if (!confirm('이 요청사항을 삭제하시겠습니까?')) return;
+                        firebaseDb.ref(`requests/${key}`).remove().then(() => renderFeedbackList());
                     });
                 });
                 listContainer.querySelectorAll('.feedback-photo-img').forEach(img => {

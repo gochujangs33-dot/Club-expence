@@ -258,8 +258,8 @@
                                         <span style="font-size: 0.95rem; font-weight: 600; color: var(--text-primary);">원</span>
                                     </div>
                                 </div>
-                                <div class="summary-item" style="background: linear-gradient(135deg, rgba(239, 68, 68, 0.18), rgba(249, 115, 22, 0.12)); border: 2px solid rgba(239, 68, 68, 0.5); border-radius: 12px; padding: 0.65rem 0.9rem; margin: 0.3rem 0; box-shadow: 0 0 14px rgba(239, 68, 68, 0.25);">
-                                    <span class="summary-label" style="font-weight:800; color:#f87171; font-size:1rem;">🔥 인당 자부담 비용</span>
+                                <div class="summary-item" id="result-per-person-box" style="background: linear-gradient(135deg, rgba(239, 68, 68, 0.18), rgba(249, 115, 22, 0.12)); border: 2px solid rgba(239, 68, 68, 0.5); border-radius: 12px; padding: 0.65rem 0.9rem; margin: 0.3rem 0; box-shadow: 0 0 14px rgba(239, 68, 68, 0.25);">
+                                    <span class="summary-label" style="font-weight:800; color:#f87171; font-size:1rem;"><span id="result-per-person-icon">🔥</span> 인당 자부담 비용</span>
                                     <span class="summary-value highlight" id="result-per-person-self-pay" style="font-size:1.4rem; background: linear-gradient(135deg, #ef4444, #f97316); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;">0원</span>
                                 </div>
                                 <div class="summary-item">
@@ -777,6 +777,7 @@
                 <span class="modal-close" id="close-feedback-list-modal" style="position: static; font-size: 28px; cursor: pointer; margin-left: auto; color: var(--text-secondary);">&times;</span>
             </div>
             <div class="card-body scroll-y" style="max-height: 60vh; display:flex; flex-direction:column; gap:0.6rem;">
+                <button id="feedback-delete-selected-btn" class="btn-text-danger hidden" style="align-self:flex-end; padding:0.3rem 0.7rem; font-size:0.78rem; border:1px solid rgba(239,68,68,0.3); border-radius:8px;">선택 삭제</button>
                 <div id="feedback-list-container">
                     <!-- Populated dynamically -->
                 </div>
