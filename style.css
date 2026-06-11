@@ -657,6 +657,8 @@ select {
 
 #club-list-container .expense-row {
     animation: none;
+    overflow: visible;
+    min-height: auto;
 }
 
 .scroll-y::-webkit-scrollbar {

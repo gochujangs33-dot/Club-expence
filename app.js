@@ -3050,15 +3050,27 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         clubs.sort((a, b) => a[1].name.localeCompare(b[1].name)).forEach(([clubId, club]) => {
+            const spent = lastHistoryList
+                .filter(entry => entry.clubName === club.name)
+                .reduce((sum, entry) => sum + (entry.finalSupportAmount || 0), 0);
+            const budget = club.budget || 0;
+            const remaining = budget - spent;
             const row = document.createElement('div');
             row.className = 'expense-row';
-            row.style.padding = '0.5rem 0.75rem';
+            row.style.cssText = 'padding:0.6rem 0.75rem; height:auto; align-items:center; flex-wrap:wrap;';
             row.innerHTML = `
-                <div class="expense-row-left">
-                    <span class="expense-row-title" style="font-size:0.9rem;">${AppState.escapeHtml(club.name)}</span>
-                    <span style="font-size:0.78rem; color:var(--text-secondary);">배정 예산: ${SettlementCalculator.formatCurrency(club.budget || 0)}</span>
+                <div class="expense-row-left" style="flex:1.4; min-width:90px;">
+                    <span class="expense-row-title" style="font-size:0.9rem; white-space:normal; line-height:1.3;">${AppState.escapeHtml(club.name)}</span>
                 </div>
-                <div class="expense-row-right" style="gap:0.4rem;">
+                <div style="flex:1.2; min-width:100px; text-align:center;">
+                    <div style="font-size:0.7rem; color:var(--text-secondary);">배정 예산</div>
+                    <div style="font-size:0.85rem; font-weight:600;">${SettlementCalculator.formatCurrency(budget)}</div>
+                </div>
+                <div style="flex:1.2; min-width:100px; text-align:center;">
+                    <div style="font-size:0.7rem; color:var(--text-secondary);">잔여 예산</div>
+                    <div style="font-size:0.85rem; font-weight:600; color:${remaining < 0 ? 'var(--warning-text, #ff6b6b)' : 'var(--color-secondary)'};">${SettlementCalculator.formatCurrency(remaining)}</div>
+                </div>
+                <div class="expense-row-right" style="gap:0.4rem; flex:0 0 auto;">
                     <button class="btn-edit-club btn-secondary" data-id="${AppState.escapeHtml(clubId)}" style="padding:0.3rem 0.6rem; font-size:0.78rem;">수정</button>
                     <button class="btn-delete-club btn-text-danger" data-id="${AppState.escapeHtml(clubId)}" style="padding:0.3rem 0.6rem; font-size:0.78rem;">삭제</button>
                 </div>
