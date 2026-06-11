@@ -1293,7 +1293,11 @@ const AppState = {
         // 비용내역 = sheet2.xml (수식 보존을 위해 셀 XML 직접 치환)
         let sheet2 = await zip.file('xl/worksheets/sheet2.xml').async('string');
 
-        // D5부터 정회원 참석자 이름 입력 (최대 120명, K4=COUNTA(D5:D124), E열 수식이 D열을 Global ID 명단과 대조)
+        // K4(참석자 수): COUNTA(D5:D124) 수식의 캐시된 값이 뷰어에서 재계산되지 않는 경우가 있어
+        // 실제 참석자 수를 값으로 직접 기입
+        sheet2 = setCellValue(sheet2, 'K4', this.attendees.length, false);
+
+        // D5부터 정회원 참석자 이름 입력 (최대 120명, E열 수식이 D열을 Global ID 명단과 대조)
         for (let idx = 0; idx < 120; idx++) {
             const row = 5 + idx;
             const att = this.attendees[idx];
