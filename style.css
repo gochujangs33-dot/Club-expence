@@ -419,9 +419,9 @@ select.club-name-input option {
 }
 
 .card-collapse-btn {
-    background: transparent;
-    border: none;
-    color: var(--text-secondary);
+    background: rgba(139, 92, 246, 0.15);
+    border: 1px solid rgba(139, 92, 246, 0.4);
+    color: var(--color-primary-light, #a78bfa);
     font-size: 1.25rem;
     cursor: pointer;
     padding: 0.35rem;
@@ -434,8 +434,8 @@ select.club-name-input option {
 }
 
 .card-collapse-btn:hover {
-    color: var(--color-secondary);
-    background: rgba(255, 255, 255, 0.05);
+    color: #fff;
+    background: var(--color-primary);
 }
 
 .card.collapsed .card-body {

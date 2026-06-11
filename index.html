@@ -907,12 +907,13 @@
         // 업데이트 버튼 → skipWaiting 후 새로고침
         document.getElementById('update-reload-btn').addEventListener('click', () => {
             if (pendingWorker) {
+                navigator.serviceWorker.addEventListener('controllerchange', () => {
+                    window.location.reload();
+                });
                 pendingWorker.postMessage({ action: 'skipWaiting' });
-            }
-            navigator.serviceWorker.addEventListener('controllerchange', () => {
+            } else {
                 window.location.reload();
-            });
-            window.location.reload();
+            }
         });
 
         // 닫기 버튼
