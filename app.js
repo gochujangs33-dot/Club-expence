@@ -3453,12 +3453,31 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         container.dataset.initialized = '1';
 
-        container.innerHTML = allClubNames.map(name => `
+        const allSelected = allClubNames.length > 0 && allClubNames.every(name => selectedUsageClubs.has(name));
+
+        container.innerHTML = `
+            <label class="club-filter-chip ${allSelected ? 'active' : ''}">
+                <input type="checkbox" data-club-usage-select-all ${allSelected ? 'checked' : ''}>
+                전체 선택
+            </label>
+        ` + allClubNames.map(name => `
             <label class="club-filter-chip ${selectedUsageClubs.has(name) ? 'active' : ''}">
                 <input type="checkbox" data-club-usage-filter value="${AppState.escapeHtml(name)}" ${selectedUsageClubs.has(name) ? 'checked' : ''}>
                 ${AppState.escapeHtml(name)}
             </label>
         `).join('');
+
+        const selectAllInput = container.querySelector('input[data-club-usage-select-all]');
+        if (selectAllInput) {
+            selectAllInput.addEventListener('change', () => {
+                if (selectAllInput.checked) {
+                    allClubNames.forEach(name => selectedUsageClubs.add(name));
+                } else {
+                    selectedUsageClubs.clear();
+                }
+                renderClubUsageChart(historyList);
+            });
+        }
 
         container.querySelectorAll('input[data-club-usage-filter]').forEach(input => {
             input.addEventListener('change', () => {
