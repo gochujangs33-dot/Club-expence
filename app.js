@@ -2678,7 +2678,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function setAdminMode(isAdmin) {
         // 관리자 모드: 헤더 문구 변경 및 클럽 선택 영역 숨김
         const headerTitleEl = document.querySelector('.logo-area h1');
-        if (headerTitleEl) headerTitleEl.textContent = isAdmin ? '총 클럽 비용 관리' : '클럽 비용 정산기';
+        if (headerTitleEl) headerTitleEl.textContent = isAdmin ? '총 클럽 비용 관리' : '클럽 비용 정산';
         const clubNameWrapperEl = document.querySelector('.club-name-wrapper');
         if (clubNameWrapperEl) clubNameWrapperEl.classList.toggle('hidden', isAdmin);
 
