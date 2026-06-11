@@ -2998,6 +2998,8 @@ document.addEventListener('DOMContentLoaded', () => {
         // 3. Fetch Club Registry & Total Budget
         AppState.loadClubRegistry().then(() => {
             renderClubManagement();
+            // 총 클럽비용은 비동기로 로드되므로, 차트의 예산 통계를 다시 갱신
+            updateChartsBudgetStats(lastHistoryList);
             renderClubFilters();
             renderClubHistorySelect();
             renderOverallMonthlyChart(lastHistoryList);
