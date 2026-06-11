@@ -2658,7 +2658,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
             renderAdminHistory(historyList);
             lastHistoryList = historyList;
-            renderClubAnalysisChart(historyList);
             renderOverallMonthlyChart(historyList);
         });
 
@@ -2667,7 +2666,7 @@ document.addEventListener('DOMContentLoaded', () => {
             renderClubManagement();
             renderClubFilters();
             renderClubHistorySelect();
-            renderClubAnalysisChart(lastHistoryList);
+            renderOverallMonthlyChart(lastHistoryList);
         });
     }
 
@@ -2683,8 +2682,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // ── 클럽 관리 (관리자 대시보드) ───────────────────────────────────────
-    let clubAnalysisChartInstance = null;
-    let clubMonthlyChartInstance = null;
     let editingClubId = null;
     let lastHistoryList = [];
     let selectedClubFilter = '';
@@ -2791,7 +2788,7 @@ document.addEventListener('DOMContentLoaded', () => {
         cancelEditClubBtn.addEventListener('click', resetClubForm);
     }
 
-    // ── 클럽별 지출 분석 - 필터 체크박스 ──────────────────────────────────
+    // ── 차트 탭 - 클럽 선택 필터 칩 ──────────────────────────────────
     function renderClubFilters() {
         const container = document.getElementById('club-filter-container');
         if (!container) return;
@@ -2817,161 +2814,109 @@ document.addEventListener('DOMContentLoaded', () => {
             input.addEventListener('change', () => {
                 selectedClubFilter = input.value;
                 renderClubFilters();
-                if (selectedClubFilter === '') {
-                    document.getElementById('club-monthly-chart').classList.add('hidden');
-                    document.getElementById('club-analysis-chart').classList.remove('hidden');
-                    renderClubAnalysisChart(lastHistoryList);
-                } else {
-                    document.getElementById('club-analysis-chart').classList.add('hidden');
-                    document.getElementById('club-monthly-chart').classList.remove('hidden');
-                    renderClubMonthlyChart(lastHistoryList, selectedClubFilter);
-                }
+                renderOverallMonthlyChart(lastHistoryList);
             });
         });
     }
 
-    // ── 특정 클럽 - 월별 지원금 지출내역 (꺾은선) ─────────────────────────
-    function renderClubMonthlyChart(historyList, clubName) {
-        const canvas = document.getElementById('club-monthly-chart');
-        if (!canvas || typeof Chart === 'undefined') return;
+    // ── 차트 탭 상단 - 총 예산 / 사용 예산 / 잔여 예산 ────────────────────
+    function updateChartsBudgetStats(historyList) {
+        const totalBudgetEl = document.getElementById('charts-total-budget');
+        const usedBudgetEl = document.getElementById('charts-used-budget');
+        const remainingBudgetEl = document.getElementById('charts-remaining-budget');
+        if (!totalBudgetEl || !usedBudgetEl || !remainingBudgetEl) return;
 
-        const spendByMonth = {};
-        historyList
-            .filter(entry => (entry.clubName || '기본 클럽') === clubName)
-            .forEach(entry => {
-                const d = entry.date ? new Date(entry.date) : null;
-                const key = d ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` : '알 수 없음';
-                spendByMonth[key] = (spendByMonth[key] || 0) + (entry.totalCost || 0);
-            });
+        const totalBudget = AppState.clubTotalBudget || 0;
+        const usedBudget = (historyList || []).reduce((sum, entry) => sum + (entry.totalCost || 0), 0);
+        const remaining = totalBudget - usedBudget;
 
-        const labels = Object.keys(spendByMonth).sort();
-        const data = labels.map(key => spendByMonth[key]);
-
-        if (clubMonthlyChartInstance) {
-            clubMonthlyChartInstance.destroy();
-        }
-        clubMonthlyChartInstance = new Chart(canvas.getContext('2d'), {
-            type: 'bar',
-            data: {
-                labels: labels,
-                datasets: [
-                    {
-                        label: `${clubName} - 월별 지출액`,
-                        data: data,
-                        backgroundColor: 'rgba(56, 189, 248, 0.45)',
-                        borderColor: 'rgba(56, 189, 248, 0.9)',
-                        borderWidth: 1
-                    }
-                ]
-            },
-            options: {
-                responsive: true,
-                plugins: {
-                    legend: { labels: { color: '#cbd5e1' } }
-                },
-                scales: {
-                    x: { ticks: { color: '#cbd5e1' }, grid: { color: 'rgba(255,255,255,0.05)' } },
-                    y: { ticks: { color: '#cbd5e1' }, grid: { color: 'rgba(255,255,255,0.05)' }, beginAtZero: true }
-                }
-            }
-        });
-    }
-
-    // ── 클럽별 지출 분석 차트 ─────────────────────────────────────────────
-    function renderClubAnalysisChart(historyList) {
-        if (selectedClubFilter !== '') return;
-        const canvas = document.getElementById('club-analysis-chart');
-        if (!canvas || typeof Chart === 'undefined') return;
-
-        const spendByClub = {};
-        historyList.forEach(entry => {
-            const club = entry.clubName || '기본 클럽';
-            spendByClub[club] = (spendByClub[club] || 0) + (entry.totalCost || 0);
-        });
-
-        // 클럽 레지스트리에 등록된 클럽도 (지출 0이라도) 표시
-        Object.values(AppState.clubRegistry || {}).forEach(club => {
-            if (spendByClub[club.name] === undefined) spendByClub[club.name] = 0;
-        });
-
-        const labels = Object.keys(spendByClub);
-        const spendData = labels.map(name => spendByClub[name]);
-        const budgetData = labels.map(name => {
-            const club = Object.values(AppState.clubRegistry || {}).find(c => c.name === name);
-            return club ? (club.budget || 0) : 0;
-        });
-
-        if (clubAnalysisChartInstance) {
-            clubAnalysisChartInstance.destroy();
-        }
-        clubAnalysisChartInstance = new Chart(canvas.getContext('2d'), {
-            type: 'bar',
-            data: {
-                labels: labels,
-                datasets: [
-                    {
-                        label: '배정 예산',
-                        data: budgetData,
-                        backgroundColor: 'rgba(139, 92, 246, 0.35)',
-                        borderColor: 'rgba(139, 92, 246, 0.9)',
-                        borderWidth: 1
-                    },
-                    {
-                        label: '지출액',
-                        data: spendData,
-                        backgroundColor: 'rgba(56, 189, 248, 0.45)',
-                        borderColor: 'rgba(56, 189, 248, 0.9)',
-                        borderWidth: 1
-                    }
-                ]
-            },
-            options: {
-                responsive: true,
-                plugins: {
-                    legend: { labels: { color: '#cbd5e1' } }
-                },
-                scales: {
-                    x: { ticks: { color: '#cbd5e1' }, grid: { color: 'rgba(255,255,255,0.05)' } },
-                    y: { ticks: { color: '#cbd5e1' }, grid: { color: 'rgba(255,255,255,0.05)' }, beginAtZero: true }
-                }
-            }
-        });
+        totalBudgetEl.textContent = SettlementCalculator.formatCurrency(totalBudget);
+        usedBudgetEl.textContent = SettlementCalculator.formatCurrency(usedBudget);
+        remainingBudgetEl.textContent = SettlementCalculator.formatCurrency(remaining);
+        remainingBudgetEl.style.color = remaining < 0 ? 'var(--warning-text, #ff6b6b)' : 'var(--color-secondary)';
     }
 
     let overallMonthlyChartInstance = null;
 
-    // ── 전체 클럽 비용 - 월별 지출 (막대 그래프) ─────────────────────────
+    // ── 월별 클럽 지출 현황 (막대 그래프) ────────────────────────────────
+    // 전체 클럽 선택 시: 월별 x축, 클럽별 막대로 그룹화하여 비교
+    // 특정 클럽 선택 시: 해당 클럽의 월별 지출액만 표시
     function renderOverallMonthlyChart(historyList) {
         const canvas = document.getElementById('overall-monthly-chart');
         if (!canvas || typeof Chart === 'undefined') return;
 
-        const spendByMonth = {};
-        historyList.forEach(entry => {
-            const d = entry.date ? new Date(entry.date) : null;
-            const key = d ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` : '알 수 없음';
-            spendByMonth[key] = (spendByMonth[key] || 0) + (entry.totalCost || 0);
-        });
+        updateChartsBudgetStats(historyList);
 
-        const labels = Object.keys(spendByMonth).sort();
-        const data = labels.map(key => spendByMonth[key]);
+        const palette = [
+            'rgba(139, 92, 246, 0.6)',
+            'rgba(56, 189, 248, 0.6)',
+            'rgba(248, 113, 113, 0.6)',
+            'rgba(52, 211, 153, 0.6)',
+            'rgba(251, 191, 36, 0.6)',
+            'rgba(236, 72, 153, 0.6)',
+            'rgba(129, 140, 248, 0.6)'
+        ];
+
+        let labels, datasets;
+
+        if (selectedClubFilter === '') {
+            // 전체 클럽: 월별 x축 + 클럽별 막대
+            const monthSet = new Set();
+            const clubNames = new Set();
+            const spendByMonthClub = {};
+
+            historyList.forEach(entry => {
+                const d = entry.date ? new Date(entry.date) : null;
+                const monthKey = d ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` : '알 수 없음';
+                const club = entry.clubName || '기본 클럽';
+                monthSet.add(monthKey);
+                clubNames.add(club);
+                spendByMonthClub[monthKey] = spendByMonthClub[monthKey] || {};
+                spendByMonthClub[monthKey][club] = (spendByMonthClub[monthKey][club] || 0) + (entry.totalCost || 0);
+            });
+
+            // 클럽 레지스트리에 등록된 클럽도 (지출 0이라도) 표시
+            Object.values(AppState.clubRegistry || {}).forEach(club => clubNames.add(club.name));
+
+            labels = Array.from(monthSet).sort();
+            const sortedClubs = Array.from(clubNames).sort((a, b) => a.localeCompare(b));
+
+            datasets = sortedClubs.map((club, idx) => ({
+                label: club,
+                data: labels.map(month => (spendByMonthClub[month] && spendByMonthClub[month][club]) || 0),
+                backgroundColor: palette[idx % palette.length],
+                borderColor: palette[idx % palette.length].replace('0.6', '0.9'),
+                borderWidth: 1
+            }));
+        } else {
+            // 특정 클럽: 월별 지출액
+            const spendByMonth = {};
+            historyList
+                .filter(entry => (entry.clubName || '기본 클럽') === selectedClubFilter)
+                .forEach(entry => {
+                    const d = entry.date ? new Date(entry.date) : null;
+                    const key = d ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` : '알 수 없음';
+                    spendByMonth[key] = (spendByMonth[key] || 0) + (entry.totalCost || 0);
+                });
+
+            labels = Object.keys(spendByMonth).sort();
+            datasets = [
+                {
+                    label: `${selectedClubFilter} - 월별 지출액`,
+                    data: labels.map(key => spendByMonth[key]),
+                    backgroundColor: 'rgba(56, 189, 248, 0.6)',
+                    borderColor: 'rgba(56, 189, 248, 0.9)',
+                    borderWidth: 1
+                }
+            ];
+        }
 
         if (overallMonthlyChartInstance) {
             overallMonthlyChartInstance.destroy();
         }
         overallMonthlyChartInstance = new Chart(canvas.getContext('2d'), {
             type: 'bar',
-            data: {
-                labels: labels,
-                datasets: [
-                    {
-                        label: '전체 클럽 - 월별 지출액',
-                        data: data,
-                        backgroundColor: 'rgba(139, 92, 246, 0.45)',
-                        borderColor: 'rgba(139, 92, 246, 0.9)',
-                        borderWidth: 1
-                    }
-                ]
-            },
+            data: { labels, datasets },
             options: {
                 responsive: true,
                 plugins: {

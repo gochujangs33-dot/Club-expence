@@ -491,24 +491,27 @@
             <div class="card" id="overall-monthly-chart-card">
                 <div class="card-header">
                     <span class="card-icon">📊</span>
-                    <h2>전체 클럽 비용 - 월별 지출</h2>
+                    <h2>월별 클럽 지출 현황</h2>
                 </div>
                 <div class="card-body">
-                    <canvas id="overall-monthly-chart" height="120"></canvas>
-                </div>
-            </div>
-
-            <div class="card" id="club-analysis-card">
-                <div class="card-header">
-                    <span class="card-icon">📈</span>
-                    <h2>클럽별 지출 분석</h2>
-                </div>
-                <div class="card-body">
-                    <div id="club-filter-container" class="club-filter-row">
-                        <!-- Populated dynamically: 전체 클럽 + per-club checkboxes -->
+                    <div class="admin-stats-grid" style="margin-bottom:1rem;">
+                        <div class="stat-card">
+                            <span class="stat-label">💰 총 예산</span>
+                            <span class="stat-val" id="charts-total-budget">0원</span>
+                        </div>
+                        <div class="stat-card">
+                            <span class="stat-label">💸 사용 예산</span>
+                            <span class="stat-val" id="charts-used-budget">0원</span>
+                        </div>
+                        <div class="stat-card">
+                            <span class="stat-label">🟢 잔여 예산</span>
+                            <span class="stat-val" id="charts-remaining-budget">0원</span>
+                        </div>
                     </div>
-                    <canvas id="club-analysis-chart" height="120"></canvas>
-                    <canvas id="club-monthly-chart" height="120" class="hidden"></canvas>
+                    <div id="club-filter-container" class="club-filter-row">
+                        <!-- Populated dynamically: 전체 클럽 + per-club chips -->
+                    </div>
+                    <canvas id="overall-monthly-chart" height="120"></canvas>
                 </div>
             </div>
         </div>
