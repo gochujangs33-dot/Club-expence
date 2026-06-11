@@ -2532,10 +2532,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
         AppState.lastCalculatedSelfPay = newValue;
 
-        const memberCount = AppState.memberCount;
-        const perPerson = memberCount > 0 ? newValue / memberCount : 0;
-        document.getElementById('result-per-person-self-pay').textContent = SettlementCalculator.formatCurrency(perPerson);
-        updatePerPersonSelfPayIcon(perPerson);
+        // 인당 자부담 비용 표시는 항상 자동 계산값 기준 (CALCULATION_SPEC.md 4번 참조)
+        const calcResult = SettlementCalculator.calculate(
+            AppState.memberCount,
+            AppState.expenseItems,
+            AppState.previousPrizeTotal,
+            AppState.rules
+        );
+        document.getElementById('result-per-person-self-pay').textContent = SettlementCalculator.formatCurrency(calcResult.perPersonSelfPay);
+        updatePerPersonSelfPayIcon(calcResult.perPersonSelfPay);
 
         const totalCost = AppState.expenseItems.reduce((sum, item) => sum + item.amount, 0);
         const ratio = totalCost > 0 ? newValue / totalCost : 0;
