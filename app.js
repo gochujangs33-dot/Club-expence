@@ -398,6 +398,11 @@ const AppState = {
         const club = Object.values(this.clubRegistry).find(c => c.name === clubName);
         if (club) {
             this.annualBudget = club.budget;
+            // 아직 정산을 진행하지 않은 상태(누적 사용금액 0)라면, 관리자가 입력한
+            // "이전 사용 금액"을 초기값으로 동기화
+            if (this.usedBudget === 0 && club.priorUsed) {
+                this.usedBudget = club.priorUsed;
+            }
             this.save();
         }
     },
