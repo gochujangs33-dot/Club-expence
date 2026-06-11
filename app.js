@@ -2617,6 +2617,12 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     function setAdminMode(isAdmin) {
+        // 관리자 모드: 헤더 문구 변경 및 클럽 선택 영역 숨김
+        const headerTitleEl = document.querySelector('.logo-area h1');
+        if (headerTitleEl) headerTitleEl.textContent = isAdmin ? '총 클럽 비용 관리' : '클럽 비용 정산기';
+        const clubNameWrapperEl = document.querySelector('.club-name-wrapper');
+        if (clubNameWrapperEl) clubNameWrapperEl.classList.toggle('hidden', isAdmin);
+
         const adminOnlyIds = ['admin-tab-btn', 'club-history-tab-btn', 'charts-tab-btn'];
         const memberOnlyIds = ['settlement-tab-btn', 'attendees-tab-btn', 'history-tab-btn'];
         adminOnlyIds.forEach(id => {
