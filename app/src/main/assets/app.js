@@ -2304,6 +2304,99 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // 요청사항(피드백) 모달
+    const feedbackOpenBtn = document.getElementById('feedback-open-btn');
+    const feedbackModal = document.getElementById('feedback-modal');
+    const closeFeedbackModalBtn = document.getElementById('close-feedback-modal');
+    const feedbackMessageInput = document.getElementById('feedback-message-input');
+    const feedbackPhotoInput = document.getElementById('feedback-photo-input');
+    const feedbackPhotoPreview = document.getElementById('feedback-photo-preview');
+    const feedbackPhotoImg = document.getElementById('feedback-photo-img');
+    const feedbackPhotoRemoveBtn = document.getElementById('feedback-photo-remove-btn');
+    const feedbackSubmitBtn = document.getElementById('feedback-submit-btn');
+    const feedbackStatus = document.getElementById('feedback-status');
+    let feedbackPhotoData = null;
+
+    if (feedbackOpenBtn) {
+        feedbackOpenBtn.addEventListener('click', () => {
+            feedbackMessageInput.value = '';
+            feedbackPhotoData = null;
+            feedbackPhotoPreview.classList.add('hidden');
+            feedbackPhotoImg.src = '';
+            feedbackPhotoInput.value = '';
+            feedbackStatus.textContent = '';
+            feedbackModal.classList.remove('hidden');
+        });
+    }
+
+    if (closeFeedbackModalBtn) {
+        closeFeedbackModalBtn.addEventListener('click', () => {
+            feedbackModal.classList.add('hidden');
+        });
+    }
+
+    if (feedbackPhotoInput) {
+        feedbackPhotoInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                compressReceiptImage(file, (compressed) => {
+                    feedbackPhotoData = compressed;
+                    feedbackPhotoImg.src = compressed;
+                    feedbackPhotoPreview.classList.remove('hidden');
+                });
+            }
+        });
+    }
+
+    if (feedbackPhotoRemoveBtn) {
+        feedbackPhotoRemoveBtn.addEventListener('click', () => {
+            feedbackPhotoData = null;
+            feedbackPhotoInput.value = '';
+            feedbackPhotoPreview.classList.add('hidden');
+            feedbackPhotoImg.src = '';
+        });
+    }
+
+    if (feedbackSubmitBtn) {
+        feedbackSubmitBtn.addEventListener('click', () => {
+            const message = feedbackMessageInput.value.trim();
+            if (!message && !feedbackPhotoData) {
+                feedbackStatus.textContent = '메시지나 사진을 입력해주세요.';
+                return;
+            }
+            if (!firebaseDb) {
+                feedbackStatus.textContent = '온라인 상태에서만 요청을 보낼 수 있습니다.';
+                return;
+            }
+            feedbackSubmitBtn.disabled = true;
+            feedbackStatus.textContent = '전송 중...';
+
+            const requestData = {
+                userName: AppState.userName || '알 수 없음',
+                pin: AppState.currentPin || '',
+                clubName: AppState.clubName || '',
+                message: message,
+                photo: feedbackPhotoData || null,
+                read: false,
+                createdAt: Date.now()
+            };
+
+            firebaseDb.ref('requests').push(requestData)
+                .then(() => {
+                    feedbackStatus.textContent = '요청이 전송되었습니다. 감사합니다!';
+                    setTimeout(() => {
+                        feedbackModal.classList.add('hidden');
+                        feedbackSubmitBtn.disabled = false;
+                    }, 1000);
+                })
+                .catch((err) => {
+                    console.error('요청 전송 실패:', err);
+                    feedbackStatus.textContent = '전송에 실패했습니다. 다시 시도해주세요.';
+                    feedbackSubmitBtn.disabled = false;
+                });
+        });
+    }
+
     // Total self-pay manual adjustment handler
     const selfPayInput = document.getElementById('result-total-self-pay-input');
 
@@ -2458,6 +2551,25 @@ document.addEventListener('DOMContentLoaded', () => {
             const el = document.getElementById(id);
             if (el) el.classList.toggle('hidden', isAdmin);
         });
+
+        // 관리자 모드에서는 요청사항 알림 배지를 실시간으로 갱신
+        if (isAdmin && firebaseDb) {
+            firebaseDb.ref('requests').on('value', snapshot => {
+                const requestsData = snapshot.val() || {};
+                const unreadCount = Object.values(requestsData).filter(r => !r.read).length;
+                const badge = document.getElementById('admin-feedback-badge');
+                if (badge) {
+                    if (unreadCount > 0) {
+                        badge.textContent = unreadCount;
+                        badge.classList.remove('hidden');
+                    } else {
+                        badge.classList.add('hidden');
+                    }
+                }
+            });
+        } else if (!isAdmin && firebaseDb) {
+            firebaseDb.ref('requests').off('value');
+        }
 
         // 활성 탭이 더 이상 보이지 않으면 기본 탭으로 전환
         const activeBtn = document.querySelector('.tab-nav .tab-btn.active');
@@ -2675,7 +2787,65 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function renderAdminDashboard() {
         if (!firebaseDb) return;
-        
+
+        // 0. Fetch Requests (요청사항 / 알림)
+        firebaseDb.ref('requests').once('value').then(snapshot => {
+            const requestsData = snapshot.val() || {};
+            const requestList = Object.keys(requestsData)
+                .map(key => ({ key, ...requestsData[key] }))
+                .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+
+            const listContainer = document.getElementById('feedback-list-container');
+            const unreadCount = requestList.filter(r => !r.read).length;
+            document.getElementById('feedback-unread-count').textContent = unreadCount;
+
+            if (requestList.length === 0) {
+                listContainer.innerHTML = '<p style="font-size:0.85rem; color:var(--text-muted); text-align:center; padding:1rem 0;">요청사항이 없습니다.</p>';
+            } else {
+                listContainer.innerHTML = requestList.map(req => {
+                    const dateStr = req.createdAt ? new Date(req.createdAt).toLocaleString('ko-KR') : '-';
+                    const photoHtml = req.photo
+                        ? `<img src="${req.photo}" alt="첨부 사진" class="feedback-photo-img" data-key="${AppState.escapeHtml(req.key)}" style="max-width:100%; max-height:220px; border-radius:8px; margin-top:0.5rem; cursor:pointer; display:block;">`
+                        : '';
+                    return `
+                        <div class="feedback-item" data-key="${AppState.escapeHtml(req.key)}" style="border:1px solid var(--card-border); border-radius:10px; padding:0.7rem 0.9rem; ${req.read ? 'opacity:0.6;' : 'background:rgba(245, 158, 11, 0.08); border-color:rgba(245,158,11,0.3);'}">
+                            <div style="display:flex; justify-content:space-between; align-items:center; gap:0.5rem;">
+                                <strong style="font-size:0.88rem;">${AppState.escapeHtml(req.userName || '알 수 없음')}${req.clubName ? ` (${AppState.escapeHtml(req.clubName)})` : ''}</strong>
+                                <span style="font-size:0.72rem; color:var(--text-muted); white-space:nowrap;">${dateStr}</span>
+                            </div>
+                            <p style="font-size:0.85rem; margin:0.4rem 0 0; white-space:pre-wrap;">${AppState.escapeHtml(req.message || '')}</p>
+                            ${photoHtml}
+                            ${!req.read ? '<button class="btn-mark-read btn-secondary" data-key="' + AppState.escapeHtml(req.key) + '" style="margin-top:0.5rem; padding:0.25rem 0.6rem; font-size:0.75rem;">확인 완료</button>' : '<span style="font-size:0.72rem; color:var(--text-muted);">✔️ 확인됨</span>'}
+                        </div>
+                    `;
+                }).join('');
+
+                listContainer.querySelectorAll('.btn-mark-read').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        const key = btn.getAttribute('data-key');
+                        firebaseDb.ref(`requests/${key}/read`).set(true).then(() => renderAdminDashboard());
+                    });
+                });
+                listContainer.querySelectorAll('.feedback-photo-img').forEach(img => {
+                    img.addEventListener('click', () => {
+                        document.getElementById('modal-img').src = img.src;
+                        document.getElementById('modal-caption').textContent = '';
+                        document.getElementById('receipt-modal').classList.remove('hidden');
+                    });
+                });
+            }
+
+            const badge = document.getElementById('admin-feedback-badge');
+            if (badge) {
+                if (unreadCount > 0) {
+                    badge.textContent = unreadCount;
+                    badge.classList.remove('hidden');
+                } else {
+                    badge.classList.add('hidden');
+                }
+            }
+        });
+
         // 1. Fetch Users
         firebaseDb.ref('users').once('value').then(snapshot => {
             const users = snapshot.val() || {};

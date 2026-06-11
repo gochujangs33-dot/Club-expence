@@ -41,6 +41,7 @@
             <div class="logo-area">
                 <span class="logo-icon">📊</span>
                 <h1>클럽 비용 정산기</h1>
+                <button id="feedback-open-btn" class="btn-text" style="font-size:0.75rem; padding:0.25rem 0.55rem; border-radius:8px; background:rgba(255,255,255,0.08); margin-left:0.5rem;">📩 요청사항</button>
             </div>
             <div class="club-name-wrapper">
                 <select id="club-name-select" class="club-name-input">
@@ -67,7 +68,7 @@
             <button id="history-tab-btn" class="tab-btn" data-tab="tab-history">📋 정산 이력</button>
             <button id="club-history-tab-btn" class="tab-btn hidden" data-tab="tab-club-history" style="background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(239, 68, 68, 0.15)); border-color: rgba(245, 158, 11, 0.3); color: #fbbf24;">📋 클럽별 정산이력</button>
             <button id="charts-tab-btn" class="tab-btn hidden" data-tab="tab-charts" style="background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(239, 68, 68, 0.15)); border-color: rgba(245, 158, 11, 0.3); color: #fbbf24;">📈 차트</button>
-            <button id="admin-tab-btn" class="tab-btn hidden" data-tab="tab-admin" style="background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(239, 68, 68, 0.15)); border-color: rgba(245, 158, 11, 0.3); color: #fbbf24;">👑 대시보드 관리</button>
+            <button id="admin-tab-btn" class="tab-btn hidden" data-tab="tab-admin" style="background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(239, 68, 68, 0.15)); border-color: rgba(245, 158, 11, 0.3); color: #fbbf24;">👑 대시보드 관리 <span id="admin-feedback-badge" class="hidden" style="background:#ef4444; color:#fff; border-radius:10px; padding:0.05rem 0.4rem; font-size:0.72rem; margin-left:0.2rem;">0</span></button>
         </nav>
         <!-- Tab Content 1: Settlement Calculator -->
         <div id="tab-settlement" class="tab-pane active">
@@ -538,6 +539,18 @@
                 </div>
             </div>
 
+            <div class="card" id="feedback-list-card">
+                <div class="card-header">
+                    <span class="card-icon">📩</span>
+                    <h2>요청사항 / 알림 (<span id="feedback-unread-count">0</span>건 안읽음)</h2>
+                </div>
+                <div class="card-body scroll-y" style="max-height: 400px; display:flex; flex-direction:column; gap:0.6rem;">
+                    <div id="feedback-list-container">
+                        <!-- Populated dynamically -->
+                    </div>
+                </div>
+            </div>
+
             <div class="card" id="rules-management-card">
                 <div class="card-header">
                     <span class="card-icon">⚙️</span>
@@ -702,6 +715,37 @@
     <div id="diff-popup" class="diff-popup hidden">
         <span class="diff-popup-label">자부담 변경 내역</span>
         <span class="diff-popup-formula" id="diff-popup-formula"></span>
+    </div>
+
+    <!-- Feedback / Request Modal -->
+    <div id="feedback-modal" class="modal hidden">
+        <div class="modal-content-card card" style="max-width: 480px; width: 95%; background: var(--bg-dark); border: 1px solid var(--card-border); margin: auto;">
+            <div class="card-header">
+                <span class="card-icon">📩</span>
+                <h2>요청사항 보내기</h2>
+                <span class="modal-close" id="close-feedback-modal" style="position: static; font-size: 28px; cursor: pointer; margin-left: auto; color: var(--text-secondary);">&times;</span>
+            </div>
+            <div class="card-body">
+                <div class="input-group">
+                    <label for="feedback-message-input">메시지</label>
+                    <textarea id="feedback-message-input" rows="5" placeholder="개발자/관리자에게 전달할 요청사항이나 버그를 적어주세요." style="background: rgba(15, 23, 42, 0.6); border: 1px solid var(--card-border); color: var(--text-primary); border-radius: 12px; padding: 0.75rem 1rem; font-size: 0.9rem; resize: vertical;"></textarea>
+                </div>
+                <div class="input-group">
+                    <label for="feedback-photo-input" class="btn-secondary" style="cursor:pointer; display:inline-flex; align-items:center; gap:0.3rem; padding:0.4rem 0.8rem; font-size:0.85rem; border-radius:8px;">📷 사진 첨부</label>
+                    <input type="file" id="feedback-photo-input" accept="image/*" style="display:none;">
+                    <div id="feedback-photo-preview" class="hidden" style="margin-top:0.6rem; border-radius:12px; overflow:hidden; max-height:200px; position:relative;">
+                        <img id="feedback-photo-img" src="" alt="첨부 사진" style="width:100%; object-fit:cover; max-height:200px; display:block; border-radius:12px;">
+                        <button id="feedback-photo-remove-btn" type="button" style="position:absolute; top:6px; right:6px; background:rgba(239,68,68,0.9); border:none; color:white; border-radius:50%; width:24px; height:24px; font-size:14px; cursor:pointer; display:flex; align-items:center; justify-content:center; font-weight:bold;">&times;</button>
+                    </div>
+                </div>
+                <div class="form-actions" style="margin-top: 0.5rem;">
+                    <button id="feedback-submit-btn" class="btn-primary" style="flex:1;">
+                        <span class="btn-icon">📨</span> 요청 보내기
+                    </button>
+                </div>
+                <p id="feedback-status" style="font-size:0.78rem; color:var(--text-muted); text-align:center; margin-top:0.4rem;"></p>
+            </div>
+        </div>
     </div>
 
     <!-- PIN 로그인 모달 -->
