@@ -36,6 +36,11 @@
     </div>
     
     <main class="app-container">
+        <!-- 관리자 전용: 요청사항 리스트 버튼 (우측 상단 고정) -->
+        <button id="feedback-list-open-btn" class="hidden" style="position:fixed; top:10px; right:10px; z-index:500; background:linear-gradient(135deg, rgba(245,158,11,0.9), rgba(239,68,68,0.9)); color:#fff; border:none; border-radius:20px; padding:0.4rem 0.9rem; font-size:0.8rem; font-weight:700; cursor:pointer; box-shadow:0 4px 12px rgba(0,0,0,0.4); display:flex; align-items:center; gap:0.35rem;">
+            📩 요청사항 리스트
+            <span id="feedback-list-badge" class="hidden" style="background:#fff; color:#ef4444; border-radius:10px; padding:0.05rem 0.4rem; font-size:0.72rem;">0</span>
+        </button>
         <!-- App Header -->
         <header class="app-header">
             <div class="logo-area">
@@ -68,7 +73,7 @@
             <button id="history-tab-btn" class="tab-btn" data-tab="tab-history">📋 정산 이력</button>
             <button id="club-history-tab-btn" class="tab-btn hidden" data-tab="tab-club-history" style="background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(239, 68, 68, 0.15)); border-color: rgba(245, 158, 11, 0.3); color: #fbbf24;">📋 클럽별 정산이력</button>
             <button id="charts-tab-btn" class="tab-btn hidden" data-tab="tab-charts" style="background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(239, 68, 68, 0.15)); border-color: rgba(245, 158, 11, 0.3); color: #fbbf24;">📈 차트</button>
-            <button id="admin-tab-btn" class="tab-btn hidden" data-tab="tab-admin" style="background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(239, 68, 68, 0.15)); border-color: rgba(245, 158, 11, 0.3); color: #fbbf24;">👑 대시보드 관리 <span id="admin-feedback-badge" class="hidden" style="background:#ef4444; color:#fff; border-radius:10px; padding:0.05rem 0.4rem; font-size:0.72rem; margin-left:0.2rem;">0</span></button>
+            <button id="admin-tab-btn" class="tab-btn hidden" data-tab="tab-admin" style="background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(239, 68, 68, 0.15)); border-color: rgba(245, 158, 11, 0.3); color: #fbbf24;">👑 대시보드 관리</button>
         </nav>
         <!-- Tab Content 1: Settlement Calculator -->
         <div id="tab-settlement" class="tab-pane active">
@@ -539,18 +544,6 @@
                 </div>
             </div>
 
-            <div class="card" id="feedback-list-card">
-                <div class="card-header">
-                    <span class="card-icon">📩</span>
-                    <h2>요청사항 / 알림 (<span id="feedback-unread-count">0</span>건 안읽음)</h2>
-                </div>
-                <div class="card-body scroll-y" style="max-height: 400px; display:flex; flex-direction:column; gap:0.6rem;">
-                    <div id="feedback-list-container">
-                        <!-- Populated dynamically -->
-                    </div>
-                </div>
-            </div>
-
             <div class="card" id="rules-management-card">
                 <div class="card-header">
                     <span class="card-icon">⚙️</span>
@@ -744,6 +737,38 @@
                     </button>
                 </div>
                 <p id="feedback-status" style="font-size:0.78rem; color:var(--text-muted); text-align:center; margin-top:0.4rem;"></p>
+            </div>
+        </div>
+    </div>
+
+    <!-- 새 요청사항 알림 팝업 (관리자용) -->
+    <div id="feedback-popup-modal" class="modal hidden">
+        <div class="modal-content-card card" style="max-width: 440px; width: 95%; background: var(--bg-dark); border: 1px solid rgba(245,158,11,0.4); margin: auto; box-shadow: 0 0 24px rgba(245,158,11,0.25);">
+            <div class="card-header">
+                <span class="card-icon">📩</span>
+                <h2>새 요청사항 도착</h2>
+            </div>
+            <div class="card-body">
+                <div id="feedback-popup-body"></div>
+                <div class="form-actions" style="margin-top: 0.75rem;">
+                    <button id="feedback-popup-confirm-btn" class="btn-primary" style="flex:1;">확인</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 요청사항 리스트 모달 (관리자용) -->
+    <div id="feedback-list-modal" class="modal hidden">
+        <div class="modal-content-card card" style="max-width: 520px; width: 95%; background: var(--bg-dark); border: 1px solid var(--card-border); margin: auto;">
+            <div class="card-header">
+                <span class="card-icon">📩</span>
+                <h2>요청사항 / 알림 (<span id="feedback-unread-count">0</span>건 안읽음)</h2>
+                <span class="modal-close" id="close-feedback-list-modal" style="position: static; font-size: 28px; cursor: pointer; margin-left: auto; color: var(--text-secondary);">&times;</span>
+            </div>
+            <div class="card-body scroll-y" style="max-height: 60vh; display:flex; flex-direction:column; gap:0.6rem;">
+                <div id="feedback-list-container">
+                    <!-- Populated dynamically -->
+                </div>
             </div>
         </div>
     </div>

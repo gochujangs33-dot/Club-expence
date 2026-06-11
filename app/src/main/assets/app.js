@@ -2303,6 +2303,61 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // 요청사항 알림 팝업 (관리자용)
+    const seenFeedbackKeys = new Set();
+    const feedbackPopupQueue = [];
+    let feedbackPopupShowing = false;
+
+    function showNextFeedbackPopup() {
+        if (feedbackPopupShowing || feedbackPopupQueue.length === 0) return;
+        const req = feedbackPopupQueue.shift();
+        feedbackPopupShowing = true;
+
+        const popupModal = document.getElementById('feedback-popup-modal');
+        const popupBody = document.getElementById('feedback-popup-body');
+        const dateStr = req.createdAt ? new Date(req.createdAt).toLocaleString('ko-KR') : '-';
+        const photoHtml = req.photo
+            ? `<img src="${req.photo}" alt="첨부 사진" style="max-width:100%; max-height:240px; border-radius:8px; margin-top:0.5rem; display:block; object-fit:contain;">`
+            : '';
+        popupBody.innerHTML = `
+            <div style="display:flex; justify-content:space-between; align-items:center; gap:0.5rem;">
+                <strong style="font-size:0.95rem;">${AppState.escapeHtml(req.userName || '알 수 없음')}${req.clubName ? ` (${AppState.escapeHtml(req.clubName)})` : ''}</strong>
+                <span style="font-size:0.75rem; color:var(--text-muted); white-space:nowrap;">${dateStr}</span>
+            </div>
+            <p style="font-size:0.9rem; margin:0.6rem 0 0; white-space:pre-wrap;">${AppState.escapeHtml(req.message || '')}</p>
+            ${photoHtml}
+        `;
+        popupModal.classList.remove('hidden');
+
+        const confirmBtn = document.getElementById('feedback-popup-confirm-btn');
+        confirmBtn.onclick = () => {
+            popupModal.classList.add('hidden');
+            feedbackPopupShowing = false;
+            if (firebaseDb) {
+                firebaseDb.ref(`requests/${req.key}/read`).set(true).then(() => renderFeedbackList());
+            }
+            const listOpenBtn = document.getElementById('feedback-list-open-btn');
+            if (listOpenBtn) listOpenBtn.classList.remove('hidden');
+            showNextFeedbackPopup();
+        };
+    }
+
+    const feedbackListOpenBtn = document.getElementById('feedback-list-open-btn');
+    const feedbackListModal = document.getElementById('feedback-list-modal');
+    const closeFeedbackListModalBtn = document.getElementById('close-feedback-list-modal');
+
+    if (feedbackListOpenBtn) {
+        feedbackListOpenBtn.addEventListener('click', () => {
+            renderFeedbackList();
+            feedbackListModal.classList.remove('hidden');
+        });
+    }
+    if (closeFeedbackListModalBtn) {
+        closeFeedbackListModalBtn.addEventListener('click', () => {
+            feedbackListModal.classList.add('hidden');
+        });
+    }
+
     // 요청사항(피드백) 모달
     const feedbackOpenBtn = document.getElementById('feedback-open-btn');
     const feedbackModal = document.getElementById('feedback-modal');
@@ -2551,12 +2606,22 @@ document.addEventListener('DOMContentLoaded', () => {
             if (el) el.classList.toggle('hidden', isAdmin);
         });
 
-        // 관리자 모드에서는 요청사항 알림 배지를 실시간으로 갱신
+        // 일반 회원: 요청사항 보내기 버튼만 표시 / 관리자: 요청사항 리스트 버튼만 표시
+        const feedbackOpenBtnEl = document.getElementById('feedback-open-btn');
+        const feedbackListOpenBtnEl = document.getElementById('feedback-list-open-btn');
+        if (feedbackOpenBtnEl) feedbackOpenBtnEl.classList.toggle('hidden', isAdmin);
+        if (feedbackListOpenBtnEl && !isAdmin) feedbackListOpenBtnEl.classList.add('hidden');
+
+        // 관리자 모드에서는 새 요청사항이 도착하면 알림 팝업을 띄우고, 리스트 버튼을 표시
         if (isAdmin && firebaseDb) {
             firebaseDb.ref('requests').on('value', snapshot => {
                 const requestsData = snapshot.val() || {};
-                const unreadCount = Object.values(requestsData).filter(r => !r.read).length;
-                const badge = document.getElementById('admin-feedback-badge');
+                const requestList = Object.keys(requestsData)
+                    .map(key => ({ key, ...requestsData[key] }))
+                    .sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+                const unreadCount = requestList.filter(r => !r.read).length;
+
+                const badge = document.getElementById('feedback-list-badge');
                 if (badge) {
                     if (unreadCount > 0) {
                         badge.textContent = unreadCount;
@@ -2564,6 +2629,20 @@ document.addEventListener('DOMContentLoaded', () => {
                     } else {
                         badge.classList.add('hidden');
                     }
+                }
+
+                // 새로 도착한(아직 본 적 없는) 안읽은 요청은 팝업 큐에 추가
+                requestList.forEach(req => {
+                    if (!req.read && !seenFeedbackKeys.has(req.key)) {
+                        seenFeedbackKeys.add(req.key);
+                        feedbackPopupQueue.push(req);
+                    }
+                });
+                showNextFeedbackPopup();
+
+                // 안읽은 요청이 있으면(팝업 확인 전이라도) 리스트 버튼 노출
+                if (feedbackListOpenBtnEl && unreadCount > 0) {
+                    feedbackListOpenBtnEl.classList.remove('hidden');
                 }
             });
         } else if (!isAdmin && firebaseDb) {
@@ -2784,10 +2863,9 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    function renderAdminDashboard() {
+    // 요청사항 목록을 모달에 렌더링하고, 리스트 버튼 배지를 갱신
+    function renderFeedbackList() {
         if (!firebaseDb) return;
-
-        // 0. Fetch Requests (요청사항 / 알림)
         firebaseDb.ref('requests').once('value').then(snapshot => {
             const requestsData = snapshot.val() || {};
             const requestList = Object.keys(requestsData)
@@ -2822,7 +2900,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 listContainer.querySelectorAll('.btn-mark-read').forEach(btn => {
                     btn.addEventListener('click', () => {
                         const key = btn.getAttribute('data-key');
-                        firebaseDb.ref(`requests/${key}/read`).set(true).then(() => renderAdminDashboard());
+                        firebaseDb.ref(`requests/${key}/read`).set(true).then(() => renderFeedbackList());
                     });
                 });
                 listContainer.querySelectorAll('.feedback-photo-img').forEach(img => {
@@ -2834,7 +2912,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
             }
 
-            const badge = document.getElementById('admin-feedback-badge');
+            const badge = document.getElementById('feedback-list-badge');
             if (badge) {
                 if (unreadCount > 0) {
                     badge.textContent = unreadCount;
@@ -2844,6 +2922,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
         });
+    }
+
+    function renderAdminDashboard() {
+        if (!firebaseDb) return;
+
+        renderFeedbackList();
 
         // 1. Fetch Users
         firebaseDb.ref('users').once('value').then(snapshot => {
