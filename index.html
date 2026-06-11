@@ -965,14 +965,21 @@
         // 업데이트 버튼 → skipWaiting 후 새로고침
         document.getElementById('update-reload-btn').addEventListener('click', () => {
             markUpdateSeen();
-            if (pendingWorker) {
-                navigator.serviceWorker.addEventListener('controllerchange', () => {
-                    window.location.reload();
-                });
-                pendingWorker.postMessage({ action: 'skipWaiting' });
-            } else {
+
+            navigator.serviceWorker.addEventListener('controllerchange', () => {
                 window.location.reload();
-            }
+            });
+
+            // pendingWorker가 비어있으면 등록 정보에서 직접 대기 중인 워커를 조회
+            const worker = pendingWorker || (navigator.serviceWorker.controller && navigator.serviceWorker.getRegistration().then(reg => reg && reg.waiting));
+
+            Promise.resolve(worker).then(w => {
+                if (w) {
+                    w.postMessage({ action: 'skipWaiting' });
+                }
+                // 0.5초 내에 controllerchange가 발생하지 않으면 강제 새로고침
+                setTimeout(() => window.location.reload(), 500);
+            });
         });
 
         // 닫기 버튼
