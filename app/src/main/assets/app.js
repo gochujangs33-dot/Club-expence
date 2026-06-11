@@ -2337,13 +2337,8 @@ document.addEventListener('DOMContentLoaded', () => {
                         resetPinInput();
 
                         // Admin tab check
-                        const adminTabBtn = document.getElementById('admin-tab-btn');
-                        if (pin === "000000") {
-                            adminTabBtn.classList.remove('hidden');
-                        } else {
-                            adminTabBtn.classList.add('hidden');
-                        }
-                        
+                        setAdminMode(pin === "000000");
+
                         // Sync values to form fields
                         AppState.loadClubRegistry().then(renderClubOptions);
                         memberInput.value = AppState.memberCount || 0;
@@ -2375,6 +2370,33 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    // 관리자(PIN 000000) 모드 전용 탭 전환
+    function setAdminMode(isAdmin) {
+        const adminOnlyIds = ['admin-tab-btn', 'club-history-tab-btn', 'charts-tab-btn'];
+        const memberOnlyIds = ['settlement-tab-btn', 'attendees-tab-btn', 'history-tab-btn'];
+        adminOnlyIds.forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.classList.toggle('hidden', !isAdmin);
+        });
+        memberOnlyIds.forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.classList.toggle('hidden', isAdmin);
+        });
+
+        // 활성 탭이 더 이상 보이지 않으면 기본 탭으로 전환
+        const activeBtn = document.querySelector('.tab-nav .tab-btn.active');
+        if (!activeBtn || activeBtn.classList.contains('hidden')) {
+            const fallbackId = isAdmin ? 'tab-club-history' : 'tab-settlement';
+            document.querySelectorAll('.tab-nav .tab-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.tab-pane').forEach(p => p.classList.add('hidden'));
+            const fallbackBtn = document.querySelector(`[data-tab="${fallbackId}"]`);
+            if (fallbackBtn) fallbackBtn.classList.add('active');
+            const fallbackPane = document.getElementById(fallbackId);
+            if (fallbackPane) fallbackPane.classList.remove('hidden');
+            if (isAdmin && typeof renderAdminDashboard === 'function') renderAdminDashboard();
+        }
+    }
+
     function switchToOfflineMode() {
         pinModal.classList.add('hidden');
         statusBadge.className = 'badge-offline';
@@ -2382,7 +2404,8 @@ document.addEventListener('DOMContentLoaded', () => {
         logoutBtn.style.display = 'none';
         loginBtn.style.display = 'inline-block';
         document.getElementById('admin-tab-btn').classList.add('hidden');
-        
+        setAdminMode(false);
+
         // If we were on admin tab, switch back to settlement
         if (document.getElementById('admin-tab-btn').classList.contains('active')) {
             document.querySelectorAll('.tab-nav .tab-btn').forEach(b => b.classList.remove('active'));
@@ -2477,7 +2500,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     AppState.currentPin = pin;
                     AppState.userName = name;
                     
-                    document.getElementById('admin-tab-btn').classList.add('hidden');
+                    setAdminMode(false);
                     pinModal.classList.add('hidden');
                     statusBadge.className = 'badge-online';
                     statusBadge.innerHTML = `🌐 온라인 (${name} / PIN: ${pin})`;
@@ -2503,7 +2526,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const adminSearchInput = document.getElementById('admin-search-input');
     if (adminSearchInput) {
         adminSearchInput.addEventListener('input', () => {
-            renderAdminDashboard();
+            renderAdminHistory(lastHistoryList);
+        });
+    }
+
+    const clubHistorySelect = document.getElementById('club-history-select');
+    if (clubHistorySelect) {
+        clubHistorySelect.addEventListener('change', () => {
+            renderAdminHistory(lastHistoryList);
         });
     }
 
@@ -2629,14 +2659,27 @@ document.addEventListener('DOMContentLoaded', () => {
             renderAdminHistory(historyList);
             lastHistoryList = historyList;
             renderClubAnalysisChart(historyList);
+            renderOverallMonthlyChart(historyList);
         });
 
         // 3. Fetch Club Registry & Total Budget
         AppState.loadClubRegistry().then(() => {
             renderClubManagement();
             renderClubFilters();
+            renderClubHistorySelect();
             renderClubAnalysisChart(lastHistoryList);
         });
+    }
+
+    // ── 클럽별 정산이력 탭 - 클럽 선택 드롭다운 ───────────────────────────
+    function renderClubHistorySelect() {
+        const select = document.getElementById('club-history-select');
+        if (!select) return;
+        const current = select.value;
+        const clubs = Object.values(AppState.clubRegistry || {}).sort((a, b) => a.name.localeCompare(b.name));
+        select.innerHTML = `<option value="">전체 클럽 (월별)</option>` +
+            clubs.map(c => `<option value="${AppState.escapeHtml(c.name)}">${AppState.escapeHtml(c.name)}</option>`).join('');
+        select.value = current;
     }
 
     // ── 클럽 관리 (관리자 대시보드) ───────────────────────────────────────
@@ -2798,7 +2841,7 @@ document.addEventListener('DOMContentLoaded', () => {
             .forEach(entry => {
                 const d = entry.date ? new Date(entry.date) : null;
                 const key = d ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` : '알 수 없음';
-                spendByMonth[key] = (spendByMonth[key] || 0) + (entry.finalSupportAmount || 0);
+                spendByMonth[key] = (spendByMonth[key] || 0) + (entry.totalCost || 0);
             });
 
         const labels = Object.keys(spendByMonth).sort();
@@ -2808,17 +2851,16 @@ document.addEventListener('DOMContentLoaded', () => {
             clubMonthlyChartInstance.destroy();
         }
         clubMonthlyChartInstance = new Chart(canvas.getContext('2d'), {
-            type: 'line',
+            type: 'bar',
             data: {
                 labels: labels,
                 datasets: [
                     {
-                        label: `${clubName} - 월별 지원금 지출액`,
+                        label: `${clubName} - 월별 지출액`,
                         data: data,
+                        backgroundColor: 'rgba(56, 189, 248, 0.45)',
                         borderColor: 'rgba(56, 189, 248, 0.9)',
-                        backgroundColor: 'rgba(56, 189, 248, 0.25)',
-                        tension: 0.3,
-                        fill: true
+                        borderWidth: 1
                     }
                 ]
             },
@@ -2896,22 +2938,75 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    let overallMonthlyChartInstance = null;
+
+    // ── 전체 클럽 비용 - 월별 지출 (막대 그래프) ─────────────────────────
+    function renderOverallMonthlyChart(historyList) {
+        const canvas = document.getElementById('overall-monthly-chart');
+        if (!canvas || typeof Chart === 'undefined') return;
+
+        const spendByMonth = {};
+        historyList.forEach(entry => {
+            const d = entry.date ? new Date(entry.date) : null;
+            const key = d ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` : '알 수 없음';
+            spendByMonth[key] = (spendByMonth[key] || 0) + (entry.totalCost || 0);
+        });
+
+        const labels = Object.keys(spendByMonth).sort();
+        const data = labels.map(key => spendByMonth[key]);
+
+        if (overallMonthlyChartInstance) {
+            overallMonthlyChartInstance.destroy();
+        }
+        overallMonthlyChartInstance = new Chart(canvas.getContext('2d'), {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: '전체 클럽 - 월별 지출액',
+                        data: data,
+                        backgroundColor: 'rgba(139, 92, 246, 0.45)',
+                        borderColor: 'rgba(139, 92, 246, 0.9)',
+                        borderWidth: 1
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: { labels: { color: '#cbd5e1' } }
+                },
+                scales: {
+                    x: { ticks: { color: '#cbd5e1' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+                    y: { ticks: { color: '#cbd5e1' }, grid: { color: 'rgba(255,255,255,0.05)' }, beginAtZero: true }
+                }
+            }
+        });
+    }
+
     function renderAdminHistory(historyList) {
         const container = document.getElementById('admin-history-container');
         const searchVal = (document.getElementById('admin-search-input').value || '').trim().toLowerCase();
+        const clubSelect = document.getElementById('club-history-select');
+        const selectedClub = clubSelect ? clubSelect.value : '';
         container.innerHTML = '';
-        
-        const filtered = historyList.filter(entry => {
+
+        let filtered = historyList.filter(entry => {
             if (!searchVal) return true;
-            
+
             // Search creator name
             if (entry.creatorName && entry.creatorName.toLowerCase().includes(searchVal)) return true;
-            
+
             // Search attendees list
             if (entry.attendees && entry.attendees.some(att => att.name && att.name.toLowerCase().includes(searchVal))) return true;
-            
+
             return false;
         });
+
+        if (selectedClub) {
+            filtered = filtered.filter(entry => (entry.clubName || '기본 클럽') === selectedClub);
+        }
         
         if (filtered.length === 0) {
             container.innerHTML = `
@@ -2923,10 +3018,23 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         
+        let lastMonthKey = null;
         filtered.forEach(entry => {
+            if (!selectedClub) {
+                const d = entry.date ? new Date(entry.date) : new Date(entry.id);
+                const monthKey = `${d.getFullYear()}년 ${d.getMonth() + 1}월`;
+                if (monthKey !== lastMonthKey) {
+                    lastMonthKey = monthKey;
+                    const header = document.createElement('h3');
+                    header.style.cssText = 'margin: 0.5rem 0 0; color: var(--color-secondary); font-size: 1rem;';
+                    header.textContent = `📅 ${monthKey}`;
+                    container.appendChild(header);
+                }
+            }
+
             const div = document.createElement('div');
             div.className = 'history-entry';
-            
+
             let receiptHtml = '';
             if (entry.expenseItems) {
                 entry.expenseItems.forEach(item => {
@@ -3027,7 +3135,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const tabId = btn.getAttribute('data-tab');
             document.getElementById(tabId).classList.remove('hidden');
 
-            if (tabId === 'tab-admin') {
+            if (tabId === 'tab-admin' || tabId === 'tab-club-history' || tabId === 'tab-charts') {
                 renderAdminDashboard();
             }
         });

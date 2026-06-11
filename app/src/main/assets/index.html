@@ -61,11 +61,13 @@
         </header>
         <!-- Tab Navigation -->
         <nav class="tab-nav">
-            <button class="tab-btn active" data-tab="tab-settlement">📊 비용 정산</button>
-            <button class="tab-btn" data-tab="tab-attendees">👥 현재 참석자 (<span id="attendee-badge-count">0</span>명)</button>
-            <button class="tab-btn" data-tab="tab-directory">🗂️ 전사원 명부 (<span id="directory-badge-count">0</span>명)</button>
-            <button class="tab-btn" data-tab="tab-history">📋 정산 이력</button>
-            <button id="admin-tab-btn" class="tab-btn hidden" data-tab="tab-admin" style="background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(239, 68, 68, 0.15)); border-color: rgba(245, 158, 11, 0.3); color: #fbbf24;">👑 관리자 대시보드</button>
+            <button id="settlement-tab-btn" class="tab-btn active" data-tab="tab-settlement">📊 비용 정산</button>
+            <button id="attendees-tab-btn" class="tab-btn" data-tab="tab-attendees">👥 현재 참석자 (<span id="attendee-badge-count">0</span>명)</button>
+            <button id="directory-tab-btn" class="tab-btn" data-tab="tab-directory">🗂️ 전사원 명부 (<span id="directory-badge-count">0</span>명)</button>
+            <button id="history-tab-btn" class="tab-btn" data-tab="tab-history">📋 정산 이력</button>
+            <button id="club-history-tab-btn" class="tab-btn hidden" data-tab="tab-club-history" style="background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(239, 68, 68, 0.15)); border-color: rgba(245, 158, 11, 0.3); color: #fbbf24;">📋 클럽별 정산이력</button>
+            <button id="charts-tab-btn" class="tab-btn hidden" data-tab="tab-charts" style="background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(239, 68, 68, 0.15)); border-color: rgba(245, 158, 11, 0.3); color: #fbbf24;">📈 차트</button>
+            <button id="admin-tab-btn" class="tab-btn hidden" data-tab="tab-admin" style="background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(239, 68, 68, 0.15)); border-color: rgba(245, 158, 11, 0.3); color: #fbbf24;">👑 대시보드 관리</button>
         </nav>
         <!-- Tab Content 1: Settlement Calculator -->
         <div id="tab-settlement" class="tab-pane active">
@@ -462,7 +464,56 @@
             </div>
         </div>
 
-        <!-- Tab Content 5: Admin Dashboard -->
+        <!-- Tab Content 5: 클럽별 정산이력 (관리자 전용) -->
+        <div id="tab-club-history" class="tab-pane hidden">
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-icon">📋</span>
+                    <h2>클럽별 정산 이력</h2>
+                </div>
+                <div class="card-body">
+                    <div class="input-group">
+                        <label for="club-history-select">클럽 선택</label>
+                        <select id="club-history-select">
+                            <option value="">전체 클럽 (월별)</option>
+                        </select>
+                    </div>
+                    <input type="text" id="admin-search-input" class="search-box" placeholder="회원 이름 검색 (예: 홍길동)...">
+                    <div id="admin-history-container" class="scroll-y" style="max-height: 600px; display: flex; flex-direction: column; gap: 1rem;">
+                        <!-- Populated dynamically -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab Content 6: 차트 (관리자 전용) -->
+        <div id="tab-charts" class="tab-pane hidden">
+            <div class="card" id="overall-monthly-chart-card">
+                <div class="card-header">
+                    <span class="card-icon">📊</span>
+                    <h2>전체 클럽 비용 - 월별 지출</h2>
+                </div>
+                <div class="card-body">
+                    <canvas id="overall-monthly-chart" height="120"></canvas>
+                </div>
+            </div>
+
+            <div class="card" id="club-analysis-card">
+                <div class="card-header">
+                    <span class="card-icon">📈</span>
+                    <h2>클럽별 지출 분석</h2>
+                </div>
+                <div class="card-body">
+                    <div id="club-filter-container" class="club-filter-row">
+                        <!-- Populated dynamically: 전체 클럽 + per-club checkboxes -->
+                    </div>
+                    <canvas id="club-analysis-chart" height="120"></canvas>
+                    <canvas id="club-monthly-chart" height="120" class="hidden"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab Content 7: Admin Dashboard -->
         <div id="tab-admin" class="tab-pane hidden">
             <h2 class="admin-mode-title">👑 전체 관리자 모드</h2>
             <div class="admin-stats-grid">
@@ -568,61 +619,26 @@
                 </div>
             </div>
 
-            <div class="card" id="club-analysis-card">
+            <div class="card">
                 <div class="card-header">
-                    <span class="card-icon">📈</span>
-                    <h2>클럽별 지출 분석</h2>
+                    <span class="card-icon">👥</span>
+                    <h2>가입 회원 관리 (이름 / PIN 수정)</h2>
                 </div>
-                <div class="card-body">
-                    <div id="club-filter-container" class="club-filter-row">
-                        <!-- Populated dynamically: 전체 클럽 + per-club checkboxes -->
-                    </div>
-                    <canvas id="club-analysis-chart" height="120"></canvas>
-                    <canvas id="club-monthly-chart" height="120" class="hidden"></canvas>
+                <div class="card-body scroll-y" style="max-height: 400px; padding: 0;">
+                    <table class="admin-table">
+                        <thead>
+                            <tr>
+                                <th>이름</th>
+                                <th>6자리 PIN</th>
+                                <th>가입일</th>
+                                <th>관리</th>
+                            </tr>
+                        </thead>
+                        <tbody id="admin-users-list">
+                            <!-- Populated dynamically -->
+                        </tbody>
+                    </table>
                 </div>
-            </div>
-
-            <div class="layout-grid">
-                <!-- Left Panel: User list -->
-                <section class="panel-left">
-                    <div class="card">
-                        <div class="card-header">
-                            <span class="card-icon">👥</span>
-                            <h2>가입 회원 목록</h2>
-                        </div>
-                        <div class="card-body scroll-y" style="max-height: 400px; padding: 0;">
-                            <table class="admin-table">
-                                <thead>
-                                    <tr>
-                                        <th>이름</th>
-                                        <th>6자리 PIN</th>
-                                        <th>가입일</th>
-                                        <th>관리</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="admin-users-list">
-                                    <!-- Populated dynamically -->
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </section>
-
-                <!-- Right Panel: Overall History & Query -->
-                <section class="panel-right">
-                    <div class="card">
-                        <div class="card-header">
-                            <span class="card-icon">🔍</span>
-                            <h2>전체 지출 이력 &amp; 회원 통계</h2>
-                        </div>
-                        <div class="card-body">
-                            <input type="text" id="admin-search-input" class="search-box" placeholder="회원 이름 검색 (예: 홍길동)...">
-                            <div id="admin-history-container" class="scroll-y" style="max-height: 450px; display: flex; flex-direction: column; gap: 1rem;">
-                                <!-- Populated dynamically -->
-                            </div>
-                        </div>
-                    </div>
-                </section>
             </div>
         </div>
     </main>
