@@ -1365,7 +1365,8 @@ const AppState = {
         // 인당 행사비 (F)=(C)/(A) 및 정산 구간별 인당 비용/자부담 비용 (서식의 30,000/60,000/120,000원,
         // 20%/40%, 85,000원 구간 기준에 맞춰 계산 — calculateSelfPayPerPerson과 동일한 합산 결과를 가짐)
         const F = calcResult.memberCount > 0 ? calcResult.eventCost / calcResult.memberCount : 0;
-        const L1 = 30000, L2 = 60000, L3 = 120000, R2 = 0.2, R3 = 0.4, D4 = 85000;
+        const L1 = this.rules.limit1, L2 = this.rules.limit2, L3 = this.rules.limit3,
+              R2 = this.rules.rate2, R3 = this.rules.rate3, D4 = this.rules.deduction4;
         const k15 = F <= L1 ? F : 0;
         const k16 = (F > L1 && F <= L2) ? F : (F > L2 ? L2 : 0);
         const k17 = (F > L2 && F <= L3) ? (F - L2) : (F > L3 ? (L3 - L2) : 0);
@@ -1386,13 +1387,19 @@ const AppState = {
             } else if (F <= L1) {
                 label12 = '전액지원';
             } else if (F <= L2) {
-                label12 = '20% 자체 부담';
+                label12 = `${Math.round(R2 * 100)}% 자체 부담`;
             } else if (F <= L3) {
-                label12 = "'나' 구간 자부담 비용 + 60,000원 초과 금액에 대해 40% 자체 부담";
+                label12 = `'나' 구간 자부담 비용 + ${formatAmount(L2)}원 초과 금액에 대해 ${Math.round(R3 * 100)}% 자체 부담`;
             } else {
-                label12 = '85,000원 이외 금액 자체 부담(최대 인당 8.5만원 지원)';
+                label12 = `${formatAmount(D4)}원 이외 금액 자체 부담(최대 인당 ${(D4 / 10000).toLocaleString('ko-KR')}만원 지원)`;
             }
             sheet2 = setCellValue(sheet2, 'L12', label12, true);
+
+            // 정산 구간표(가/나/다/라) 라벨도 현재 설정값 기준으로 갱신
+            sheet2 = setCellValue(sheet2, 'J15', `가. (F) ≤ ${formatAmount(L1)}원`, true);
+            sheet2 = setCellValue(sheet2, 'J16', `나. ${formatAmount(L1)}원 < (F) ≤ ${formatAmount(L2)}원`, true);
+            sheet2 = setCellValue(sheet2, 'J17', `다. ${formatAmount(L2)}원 < (F) ≤ ${formatAmount(L3)}원`, true);
+            sheet2 = setCellValue(sheet2, 'J18', `라. ${formatAmount(L3)}원 < (F)`, true);
         } else {
             sheet2 = setCellValue(sheet2, 'K12', '', true);
             sheet2 = setCellValue(sheet2, 'L12', '', true);
