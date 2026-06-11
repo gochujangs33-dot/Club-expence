@@ -3160,7 +3160,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // ── 클럽 관리 (관리자 대시보드) ───────────────────────────────────────
     let editingClubId = null;
     let lastHistoryList = [];
-    let selectedClubFilter = '';
+    let selectedOverallClubs = null; // null = 전체 표시, Set이면 해당 클럽만 표시
 
     const clubTotalBudgetInput = document.getElementById('club-total-budget-input');
     const clubBudgetSummary = document.getElementById('club-budget-summary');
@@ -3316,26 +3316,58 @@ document.addEventListener('DOMContentLoaded', () => {
         const container = document.getElementById('club-filter-container');
         if (!container) return;
 
-        const clubs = Object.values(AppState.clubRegistry || {});
+        const clubs = Object.values(AppState.clubRegistry || {}).sort((a, b) => a.name.localeCompare(b.name));
+        const allClubNames = clubs.map(c => c.name);
+
+        if (!selectedOverallClubs) {
+            selectedOverallClubs = new Set(allClubNames);
+        } else {
+            allClubNames.forEach(name => {
+                if (!selectedOverallClubs.has(name) && !container.dataset.initialized) {
+                    selectedOverallClubs.add(name);
+                }
+            });
+        }
+        container.dataset.initialized = '1';
+
+        const allSelected = allClubNames.length > 0 && allClubNames.every(name => selectedOverallClubs.has(name));
+
         let html = `
-            <label class="club-filter-chip ${selectedClubFilter === '' ? 'active' : ''}">
-                <input type="radio" name="club-filter" value="" ${selectedClubFilter === '' ? 'checked' : ''}>
-                전체 클럽
+            <label class="club-filter-chip ${allSelected ? 'active' : ''}">
+                <input type="checkbox" data-overall-select-all ${allSelected ? 'checked' : ''}>
+                전체 선택
             </label>
         `;
-        clubs.sort((a, b) => a.name.localeCompare(b.name)).forEach(club => {
+        clubs.forEach(club => {
             html += `
-                <label class="club-filter-chip ${selectedClubFilter === club.name ? 'active' : ''}">
-                    <input type="radio" name="club-filter" value="${AppState.escapeHtml(club.name)}" ${selectedClubFilter === club.name ? 'checked' : ''}>
+                <label class="club-filter-chip ${selectedOverallClubs.has(club.name) ? 'active' : ''}">
+                    <input type="checkbox" data-overall-filter value="${AppState.escapeHtml(club.name)}" ${selectedOverallClubs.has(club.name) ? 'checked' : ''}>
                     ${AppState.escapeHtml(club.name)}
                 </label>
             `;
         });
         container.innerHTML = html;
 
-        container.querySelectorAll('input[name="club-filter"]').forEach(input => {
+        const selectAllInput = container.querySelector('input[data-overall-select-all]');
+        if (selectAllInput) {
+            selectAllInput.addEventListener('change', () => {
+                if (selectAllInput.checked) {
+                    allClubNames.forEach(name => selectedOverallClubs.add(name));
+                } else {
+                    selectedOverallClubs.clear();
+                }
+                renderClubFilters();
+                renderOverallMonthlyChart(lastHistoryList);
+            });
+        }
+
+        container.querySelectorAll('input[data-overall-filter]').forEach(input => {
             input.addEventListener('change', () => {
-                selectedClubFilter = input.value;
+                if (input.checked) {
+                    selectedOverallClubs.add(input.value);
+                } else {
+                    selectedOverallClubs.delete(input.value);
+                }
                 renderClubFilters();
                 renderOverallMonthlyChart(lastHistoryList);
             });
@@ -3380,61 +3412,38 @@ document.addEventListener('DOMContentLoaded', () => {
             'rgba(129, 140, 248, 0.6)'
         ];
 
-        let labels, datasets;
+        // 월별 x축 + 선택된 클럽별 막대 (중복 선택 가능)
+        const monthSet = new Set();
+        const clubNames = new Set();
+        const spendByMonthClub = {};
 
-        if (selectedClubFilter === '') {
-            // 전체 클럽: 월별 x축 + 클럽별 막대
-            const monthSet = new Set();
-            const clubNames = new Set();
-            const spendByMonthClub = {};
+        historyList.forEach(entry => {
+            const d = entry.date ? new Date(entry.date) : null;
+            const monthKey = d ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` : '알 수 없음';
+            const club = entry.clubName || '기본 클럽';
+            monthSet.add(monthKey);
+            clubNames.add(club);
+            spendByMonthClub[monthKey] = spendByMonthClub[monthKey] || {};
+            spendByMonthClub[monthKey][club] = (spendByMonthClub[monthKey][club] || 0) + (entry.totalCost || 0);
+        });
 
-            historyList.forEach(entry => {
-                const d = entry.date ? new Date(entry.date) : null;
-                const monthKey = d ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` : '알 수 없음';
-                const club = entry.clubName || '기본 클럽';
-                monthSet.add(monthKey);
-                clubNames.add(club);
-                spendByMonthClub[monthKey] = spendByMonthClub[monthKey] || {};
-                spendByMonthClub[monthKey][club] = (spendByMonthClub[monthKey][club] || 0) + (entry.totalCost || 0);
-            });
+        // 클럽 레지스트리에 등록된 클럽도 (지출 0이라도) 표시
+        Object.values(AppState.clubRegistry || {}).forEach(club => clubNames.add(club.name));
 
-            // 클럽 레지스트리에 등록된 클럽도 (지출 0이라도) 표시
-            Object.values(AppState.clubRegistry || {}).forEach(club => clubNames.add(club.name));
+        const labels = Array.from(monthSet).sort();
+        const sortedClubs = Array.from(clubNames)
+            .filter(name => !selectedOverallClubs || selectedOverallClubs.has(name))
+            .sort((a, b) => a.localeCompare(b));
 
-            labels = Array.from(monthSet).sort();
-            const sortedClubs = Array.from(clubNames).sort((a, b) => a.localeCompare(b));
+        const datasets = sortedClubs.map((club, idx) => ({
+            label: club,
+            data: labels.map(month => (spendByMonthClub[month] && spendByMonthClub[month][club]) || 0),
+            backgroundColor: palette[idx % palette.length],
+            borderColor: palette[idx % palette.length].replace('0.6', '0.9'),
+            borderWidth: 1
+        }));
 
-            datasets = sortedClubs.map((club, idx) => ({
-                label: club,
-                data: labels.map(month => (spendByMonthClub[month] && spendByMonthClub[month][club]) || 0),
-                backgroundColor: palette[idx % palette.length],
-                borderColor: palette[idx % palette.length].replace('0.6', '0.9'),
-                borderWidth: 1
-            }));
-        } else {
-            // 특정 클럽: 월별 지출액
-            const spendByMonth = {};
-            historyList
-                .filter(entry => (entry.clubName || '기본 클럽') === selectedClubFilter)
-                .forEach(entry => {
-                    const d = entry.date ? new Date(entry.date) : null;
-                    const key = d ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` : '알 수 없음';
-                    spendByMonth[key] = (spendByMonth[key] || 0) + (entry.totalCost || 0);
-                });
-
-            labels = Object.keys(spendByMonth).sort();
-            datasets = [
-                {
-                    label: `${selectedClubFilter} - 월별 지출액`,
-                    data: labels.map(key => spendByMonth[key]),
-                    backgroundColor: 'rgba(56, 189, 248, 0.6)',
-                    borderColor: 'rgba(56, 189, 248, 0.9)',
-                    borderWidth: 1
-                }
-            ];
-        }
-
-        const stacked = selectedClubFilter === '';
+        const stacked = sortedClubs.length > 1;
 
         if (overallMonthlyChartInstance) {
             overallMonthlyChartInstance.destroy();
@@ -3444,6 +3453,7 @@ document.addEventListener('DOMContentLoaded', () => {
             data: { labels, datasets },
             options: {
                 responsive: true,
+                maintainAspectRatio: false,
                 plugins: {
                     legend: { labels: { color: '#cbd5e1' } }
                 },
@@ -3558,6 +3568,7 @@ document.addEventListener('DOMContentLoaded', () => {
             options: {
                 indexAxis: 'y',
                 responsive: true,
+                maintainAspectRatio: false,
                 plugins: {
                     legend: { display: false },
                     tooltip: { callbacks: { label: (ctx) => `${ctx.parsed.x}% 소진` } }
@@ -3602,6 +3613,7 @@ document.addEventListener('DOMContentLoaded', () => {
             },
             options: {
                 responsive: true,
+                maintainAspectRatio: false,
                 plugins: {
                     legend: { position: 'bottom', labels: { color: '#cbd5e1' } },
                     tooltip: {
@@ -3665,6 +3677,7 @@ document.addEventListener('DOMContentLoaded', () => {
             },
             options: {
                 responsive: true,
+                maintainAspectRatio: false,
                 plugins: {
                     legend: { labels: { color: '#cbd5e1' } }
                 },

@@ -1590,6 +1590,14 @@ body:has(.update-banner:not(.hidden)) {
 .chart-canvas-wrap {
     position: relative;
     width: 100%;
+    height: 320px;
+    max-height: 340px;
+}
+
+@media (max-width: 600px) {
+    .chart-canvas-wrap {
+        height: 260px;
+    }
 }
 
 .club-filter-row {
