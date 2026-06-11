@@ -367,6 +367,8 @@ const AppState = {
                     .then(() => fetch('./lib/employee_directory.json'))
                     .then(res => res.json())
                     .then(list => this.bulkImportDirectory(list))
+                    // 관리자의 명부(누적 카운트의 기준)를 항상 globalDirectory에 반영
+                    .then(() => this.save())
                     .catch(err => console.error("전사원 명부 자동 등록 실패:", err))
                     .finally(() => resolve(true));
                 return;
