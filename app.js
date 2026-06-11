@@ -3384,6 +3384,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         <span class="history-club" style="color:var(--color-secondary);">정산인: ${AppState.escapeHtml(entry.creatorName || '오프라인')}</span>
                     </div>
                     <span class="history-date">${new Date(entry.id).toLocaleString()}</span>
+                    <button class="btn-delete-history btn-text-danger" data-id="${entry.id}" style="padding:0.25rem 0.5rem; font-size:0.75rem;">삭제</button>
                 </div>
                 <div class="history-summary">
                     <div class="history-stat">
@@ -3420,6 +3421,36 @@ document.addEventListener('DOMContentLoaded', () => {
             container.appendChild(div);
         });
         
+        // 정산 기록 삭제 → globalHistory에서 제거 + 참석자 누적 참석 횟수 차감
+        container.querySelectorAll('.btn-delete-history').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const id = btn.getAttribute('data-id');
+                const entry = historyList.find(e => String(e.id) === String(id));
+                if (!entry) return;
+                if (!confirm(`이 정산 기록을 삭제하시겠습니까?\n참석자 ${entry.memberCount}명의 누적 참석 횟수도 함께 차감됩니다.`)) return;
+
+                if (entry.attendees) {
+                    entry.attendees.forEach(att => {
+                        const cur = AppState.directory[att.name];
+                        if (cur && typeof cur === 'object') {
+                            cur.count = Math.max(0, (cur.count || 0) - 1);
+                        }
+                    });
+                    AppState.save();
+                }
+
+                if (firebaseDb) {
+                    firebaseDb.ref(`globalHistory/${entry.id}`).remove().then(() => {
+                        lastHistoryList = lastHistoryList.filter(e => String(e.id) !== String(id));
+                        renderAdminHistory(lastHistoryList);
+                        renderOverallMonthlyChart(lastHistoryList);
+                        updateChartsBudgetStats(lastHistoryList);
+                        renderClubManagement();
+                    }).catch(() => alert('삭제에 실패했습니다. 온라인 상태를 확인해주세요.'));
+                }
+            });
+        });
+
         // Bind click handlers to receipt thumbnails in admin dashboard
         container.querySelectorAll('.receipt-thumbnail').forEach(img => {
             img.addEventListener('click', (e) => {
