@@ -334,8 +334,18 @@ const AppState = {
                                 if (data.eventPhoto) this.eventPhoto = data.eventPhoto;
                                 console.log(`Firebase data loaded successfully for PIN: ${pin} (${this.userName})`);
                             } else {
-                                // Firebase에 데이터가 없을 경우 현재의 로컬 상태를 클라우드에 생성
-                                console.log(`No existing data on Firebase for PIN: ${pin}. Uploading current local state.`);
+                                // Firebase에 데이터가 없을 경우(신규 계정) - 이 기기에 남아있던
+                                // 이전 계정의 로컬 데이터를 그대로 올리지 않도록 정산 관련 상태를 초기화
+                                console.log(`No existing data on Firebase for PIN: ${pin}. Resetting local state for new account.`);
+                                this.expenseItems = [];
+                                this.attendees = [];
+                                this.memberCount = 0;
+                                this.previousPrizeTotal = 0;
+                                this.annualBudget = 0;
+                                this.usedBudget = 0;
+                                this.clubName = '';
+                                this.settlementHistory = [];
+                                this.eventPhoto = null;
                                 this.isLoggedIn = true;
                                 this.currentPin = pin;
                                 this.save();
