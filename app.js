@@ -873,6 +873,18 @@ const AppState = {
         document.getElementById('result-prize-cost').textContent = SettlementCalculator.formatCurrency(result.prizeCost);
         document.getElementById('result-per-person-event-cost').textContent = SettlementCalculator.formatCurrency(result.perPersonEventCost);
 
+        const remainingBudgetRow = document.getElementById('result-club-remaining-budget');
+        if (remainingBudgetRow) {
+            if (this.annualBudget > 0) {
+                remainingBudgetRow.closest('.detail-row').classList.remove('hidden');
+                const remaining = this.annualBudget - this.usedBudget;
+                remainingBudgetRow.textContent = SettlementCalculator.formatCurrency(remaining);
+                remainingBudgetRow.style.color = remaining < 0 ? 'var(--warning-text)' : 'var(--color-secondary)';
+            } else {
+                remainingBudgetRow.closest('.detail-row').classList.add('hidden');
+            }
+        }
+
         // Budget remaining calculation
         const budgetSection = document.getElementById('budget-result-section');
         if (budgetSection) {
