@@ -1310,14 +1310,15 @@ const AppState = {
         });
 
         // K24(실제 자부담 비용): 앱에서 계산/수정된 총 자부담 금액을 그대로 입력
-        // (수정 없으면 자동 계산된 값, 수정했으면 수정된 값) — 나머지(L24 비율 등)는 서식 수식대로 자동 계산됨
+        // (수정 없으면 자동 계산된 값, 수정했으면 사용자가 직접 수정한 값) — 나머지(L24 비율 등)는 서식 수식대로 자동 계산됨
         const result = SettlementCalculator.calculate(
             this.memberCount,
             this.expenseItems,
             this.previousPrizeTotal,
             this.rules
         );
-        sheet2 = setCellValue(sheet2, 'K24', result.totalSelfPay, false);
+        const finalSelfPay = this.lastCalculatedSelfPay > 0 ? this.lastCalculatedSelfPay : result.totalSelfPay;
+        sheet2 = setCellValue(sheet2, 'K24', finalSelfPay, false);
 
         zip.file('xl/worksheets/sheet2.xml', sheet2);
 
