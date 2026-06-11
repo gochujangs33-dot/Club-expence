@@ -374,8 +374,13 @@ const AppState = {
     saveClubTotalBudget(value) {
         this.clubTotalBudget = Math.max(0, value || 0);
         if (this.firebaseDb) {
-            this.firebaseDb.ref('clubTotalBudget').set(this.clubTotalBudget).catch(err => console.error("총 클럽비용 저장 실패:", err));
+            return this.firebaseDb.ref('clubTotalBudget').set(this.clubTotalBudget)
+                .catch(err => {
+                    console.error("총 클럽비용 저장 실패:", err);
+                    throw err;
+                });
         }
+        return Promise.resolve();
     },
 
     addOrUpdateClub(clubId, name, budget) {
@@ -3097,6 +3102,24 @@ document.addEventListener('DOMContentLoaded', () => {
         clubTotalBudgetInput.addEventListener('change', () => {
             AppState.saveClubTotalBudget(parseInt(clubTotalBudgetInput.value, 10) || 0);
             renderClubManagement();
+        });
+    }
+
+    const saveClubTotalBudgetBtn = document.getElementById('save-club-total-budget-btn');
+    if (saveClubTotalBudgetBtn) {
+        saveClubTotalBudgetBtn.addEventListener('click', () => {
+            const value = parseInt(clubTotalBudgetInput.value, 10) || 0;
+            Promise.resolve(AppState.saveClubTotalBudget(value)).then(() => {
+                renderClubManagement();
+                const statusEl = document.getElementById('club-total-budget-status');
+                if (statusEl) {
+                    statusEl.style.display = 'block';
+                    setTimeout(() => { statusEl.style.display = 'none'; }, 2000);
+                }
+                renderOverallMonthlyChart(lastHistoryList);
+            }).catch(() => {
+                alert('총 클럽비용 저장에 실패했습니다. 온라인 상태를 확인해주세요.');
+            });
         });
     }
 
