@@ -3434,13 +3434,54 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     let clubUsageChartInstance = null;
+    let selectedUsageClubs = null; // null = 전체 표시, Set이면 해당 클럽만 표시
+
+    // ── 클럽별 예산 소진율 체크박스 필터 ──────────────────────────────────
+    function renderClubUsageFilter(allClubNames, historyList) {
+        const container = document.getElementById('club-usage-filter-container');
+        if (!container) return;
+
+        // 최초 렌더(또는 클럽 목록 변경 시): 전체 선택 상태로 초기화
+        if (!selectedUsageClubs) {
+            selectedUsageClubs = new Set(allClubNames);
+        } else {
+            allClubNames.forEach(name => {
+                if (!selectedUsageClubs.has(name) && !container.dataset.initialized) {
+                    selectedUsageClubs.add(name);
+                }
+            });
+        }
+        container.dataset.initialized = '1';
+
+        container.innerHTML = allClubNames.map(name => `
+            <label class="club-filter-chip ${selectedUsageClubs.has(name) ? 'active' : ''}">
+                <input type="checkbox" data-club-usage-filter value="${AppState.escapeHtml(name)}" ${selectedUsageClubs.has(name) ? 'checked' : ''}>
+                ${AppState.escapeHtml(name)}
+            </label>
+        `).join('');
+
+        container.querySelectorAll('input[data-club-usage-filter]').forEach(input => {
+            input.addEventListener('change', () => {
+                if (input.checked) {
+                    selectedUsageClubs.add(input.value);
+                } else {
+                    selectedUsageClubs.delete(input.value);
+                }
+                input.closest('.club-filter-chip').classList.toggle('active', input.checked);
+                renderClubUsageChart(historyList);
+            });
+        });
+    }
 
     // ── 클럽별 예산 소진율 (가로 막대) ──────────────────────────────────
     function renderClubUsageChart(historyList) {
         const canvas = document.getElementById('club-usage-chart');
         if (!canvas || typeof Chart === 'undefined') return;
 
-        const clubs = Object.values(AppState.clubRegistry || {}).sort((a, b) => a.name.localeCompare(b.name));
+        const allClubs = Object.values(AppState.clubRegistry || {}).sort((a, b) => a.name.localeCompare(b.name));
+        renderClubUsageFilter(allClubs.map(c => c.name), historyList);
+
+        const clubs = allClubs.filter(c => selectedUsageClubs.has(c.name));
         const labels = clubs.map(c => c.name);
         const usageRatio = [];
         const usageColors = [];
