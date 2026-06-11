@@ -258,16 +258,45 @@ const AppState = {
         }
     },
 
-    // 전사원 명부 누적 카운트는 관리자(000000) 화면이 기준 — globalDirectory를 불러와
-    // 이름별로 id/count를 동기화(전체 기준값으로 갱신), 로컬에만 있던 이름은 그대로 유지
+    // 전사원 명부 누적 카운트는 모든 사용자가 공유하는 globalDirectory와 병합
+    // (이름별로 더 큰 카운트를 기준으로 채택, 로컬이 더 크면 globalDirectory도 갱신)
     loadGlobalDirectory() {
         if (!this.firebaseDb) return Promise.resolve();
         return this.firebaseDb.ref('globalDirectory').once('value').then(snapshot => {
-            const global = snapshot.val();
-            if (global && typeof global === 'object') {
-                Object.keys(global).forEach(name => {
-                    this.directory[name] = global[name];
+            const global = snapshot.val() || {};
+            const pushUpdates = {};
+
+            Object.keys(global).forEach(name => {
+                const g = global[name] || {};
+                const local = this.directory[name];
+                const localCount = (local && typeof local === 'object') ? (local.count || 0) : 0;
+                const localId = (local && typeof local === 'object') ? local.id : local;
+                const mergedCount = Math.max(g.count || 0, localCount);
+                const mergedId = g.id || localId;
+                this.directory[name] = { id: mergedId, count: mergedCount };
+                if (mergedCount > (g.count || 0)) {
+                    pushUpdates[name] = { id: mergedId, count: mergedCount };
+                }
+            });
+
+            // globalDirectory에 아직 없는 이름인데 로컬에 카운트가 있는 경우도 반영
+            Object.keys(this.directory).forEach(name => {
+                if (global[name]) return;
+                const local = this.directory[name];
+                const localCount = (local && typeof local === 'object') ? (local.count || 0) : 0;
+                if (localCount > 0) {
+                    const localId = (local && typeof local === 'object') ? local.id : local;
+                    pushUpdates[name] = { id: localId, count: localCount };
+                }
+            });
+
+            if (Object.keys(pushUpdates).length > 0) {
+                const refUpdates = {};
+                Object.keys(pushUpdates).forEach(name => {
+                    refUpdates[`globalDirectory/${name}`] = pushUpdates[name];
                 });
+                this.firebaseDb.ref().update(refUpdates)
+                    .catch(err => console.error("Global directory backfill failed:", err));
             }
         }).catch(err => console.error("전사원 명부(공통) 로드 실패:", err));
     },
