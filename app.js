@@ -2666,8 +2666,8 @@ document.addEventListener('DOMContentLoaded', () => {
                         loginBtn.style.display = 'none';
                         resetPinInput();
 
-                        // Admin tab check (관리자 또는 개발자 PIN)
-                        setAdminMode(pin === "000000" || pin === "002531");
+                        // Admin tab check
+                        setAdminMode(pin === "000000");
 
                         // Sync values to form fields
                         AppState.loadClubRegistry().then(renderClubOptions);
