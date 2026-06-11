@@ -321,6 +321,20 @@ const AppState = {
             };
             this.firebaseDb.ref(`settlements/${this.currentPin}`).set(dataToSync)
                 .catch(err => console.error("Firebase sync failed:", err));
+
+            // 오프라인 상태에서 정산 확정되어 globalHistory에 누락된 이력을 보충 동기화
+            if (this.settlementHistory && this.settlementHistory.length > 0) {
+                const updates = {};
+                this.settlementHistory.forEach(entry => {
+                    if (entry && entry.id) {
+                        updates[`globalHistory/${entry.id}`] = entry;
+                    }
+                });
+                if (Object.keys(updates).length > 0) {
+                    this.firebaseDb.ref().update(updates)
+                        .catch(err => console.error("Global history backfill failed:", err));
+                }
+            }
         }
     },
 
