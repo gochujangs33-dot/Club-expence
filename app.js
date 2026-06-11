@@ -378,7 +378,7 @@ const AppState = {
                                 if (data.usedBudget !== undefined) this.usedBudget = data.usedBudget;
                                 if (data.clubName !== undefined) this.clubName = data.clubName;
                                 if (data.reportEmail !== undefined) this.reportEmail = data.reportEmail;
-                                if (data.settlementHistory) this.settlementHistory = data.settlementHistory;
+                                this.settlementHistory = data.settlementHistory || [];
                                 if (data.eventPhoto) this.eventPhoto = data.eventPhoto;
                                 console.log(`Firebase data loaded successfully for PIN: ${pin} (${this.userName})`);
 
