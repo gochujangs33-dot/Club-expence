@@ -2911,6 +2911,8 @@ document.addEventListener('DOMContentLoaded', () => {
             ];
         }
 
+        const stacked = selectedClubFilter === '';
+
         if (overallMonthlyChartInstance) {
             overallMonthlyChartInstance.destroy();
         }
@@ -2923,8 +2925,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     legend: { labels: { color: '#cbd5e1' } }
                 },
                 scales: {
-                    x: { ticks: { color: '#cbd5e1' }, grid: { color: 'rgba(255,255,255,0.05)' } },
-                    y: { ticks: { color: '#cbd5e1' }, grid: { color: 'rgba(255,255,255,0.05)' }, beginAtZero: true }
+                    x: { stacked, ticks: { color: '#cbd5e1' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+                    y: { stacked, ticks: { color: '#cbd5e1' }, grid: { color: 'rgba(255,255,255,0.05)' }, beginAtZero: true }
                 }
             }
         });
