@@ -867,7 +867,27 @@ const AppState = {
                 row.style.cursor = 'pointer';
                 
                 let receiptControlHtml = '';
-                if (item.receiptImage) {
+                if (item.corporateReceiptImage || item.personalReceiptImage) {
+                    receiptControlHtml = '';
+                    if (item.corporateReceiptImage) {
+                        receiptControlHtml += `
+                            <div class="receipt-preview-wrapper" style="position: relative; display: inline-block; margin-right: 0.4rem;">
+                                <img src="${item.corporateReceiptImage}" class="receipt-thumbnail" alt="법인카드 영수증 미리보기" data-desc="${this.escapeHtml(item.description)} (법인카드)">
+                                <span style="position:absolute; bottom:-2px; left:-2px; background:rgba(15,23,42,0.85); color:#fff; font-size:9px; padding:0 3px; border-radius:4px; line-height:1.3;">법인</span>
+                                <button class="btn-delete-receipt-only" data-id="${item.id}" data-type="corporate" title="법인카드 영수증 삭제" style="position: absolute; top: -5px; right: -5px; background: rgba(239, 68, 68, 0.95); border: none; color: white; border-radius: 50%; width: 16px; height: 16px; font-size: 10px; display: flex; align-items: center; justify-content: center; cursor: pointer; line-height: 1; font-weight: bold; box-shadow: 0 2px 4px rgba(0,0,0,0.3); transition: var(--transition-smooth);">&times;</button>
+                            </div>
+                        `;
+                    }
+                    if (item.personalReceiptImage) {
+                        receiptControlHtml += `
+                            <div class="receipt-preview-wrapper" style="position: relative; display: inline-block; margin-right: 0.5rem;">
+                                <img src="${item.personalReceiptImage}" class="receipt-thumbnail" alt="개인카드 영수증 미리보기" data-desc="${this.escapeHtml(item.description)} (개인카드)">
+                                <span style="position:absolute; bottom:-2px; left:-2px; background:rgba(15,23,42,0.85); color:#fff; font-size:9px; padding:0 3px; border-radius:4px; line-height:1.3;">개인</span>
+                                <button class="btn-delete-receipt-only" data-id="${item.id}" data-type="personal" title="개인카드 영수증 삭제" style="position: absolute; top: -5px; right: -5px; background: rgba(239, 68, 68, 0.95); border: none; color: white; border-radius: 50%; width: 16px; height: 16px; font-size: 10px; display: flex; align-items: center; justify-content: center; cursor: pointer; line-height: 1; font-weight: bold; box-shadow: 0 2px 4px rgba(0,0,0,0.3); transition: var(--transition-smooth);">&times;</button>
+                            </div>
+                        `;
+                    }
+                } else if (item.receiptImage) {
                     receiptControlHtml = `
                         <div class="receipt-preview-wrapper" style="position: relative; display: inline-block; margin-right: 0.5rem;">
                             <img src="${item.receiptImage}" class="receipt-thumbnail" alt="영수증 미리보기" data-desc="${this.escapeHtml(item.description)}">
@@ -875,12 +895,7 @@ const AppState = {
                         </div>
                     `;
                 } else {
-                    receiptControlHtml = `
-                        <label class="btn-attach-receipt-row" style="cursor: pointer; padding: 0.35rem 0.6rem; border-radius: 8px; border: 1px dashed var(--color-secondary); color: var(--color-secondary); font-size: 0.8rem; display: inline-flex; align-items: center; gap: 0.3rem; transition: var(--transition-smooth); background: rgba(6, 182, 212, 0.05); margin-right: 0.5rem;">
-                            <span>📎 영수증 첨부</span>
-                            <input type="file" class="row-receipt-file-input" data-id="${item.id}" accept="image/*" style="display: none;">
-                        </label>
-                    `;
+                    receiptControlHtml = '';
                 }
 
                 row.innerHTML = `
@@ -917,29 +932,6 @@ const AppState = {
                 });
             });
 
-            // Bind change handlers to row receipt inputs
-            listContainer.querySelectorAll('.row-receipt-file-input').forEach(input => {
-                input.addEventListener('change', (e) => {
-                    const file = e.target.files[0];
-                    const itemId = parseInt(e.target.getAttribute('data-id'), 10);
-                    const labelSpan = e.target.previousElementSibling;
-                    
-                    if (file && itemId) {
-                        if (labelSpan) {
-                            labelSpan.textContent = "⌛ 압축 중...";
-                        }
-                        
-                        compressReceiptImage(file, (compressedBase64) => {
-                            const index = this.expenseItems.findIndex(item => item.id === itemId);
-                            if (index !== -1) {
-                                this.expenseItems[index].receiptImage = compressedBase64;
-                                this.save();
-                                this.render();
-                            }
-                        });
-                    }
-                });
-            });
 
             // Bind click handlers to delete receipt only buttons
             listContainer.querySelectorAll('.btn-delete-receipt-only').forEach(button => {
@@ -949,7 +941,14 @@ const AppState = {
                     if (itemId) {
                         const index = this.expenseItems.findIndex(item => item.id === itemId);
                         if (index !== -1) {
-                            this.expenseItems[index].receiptImage = null;
+                            const type = button.getAttribute('data-type');
+                            if (type === 'corporate') {
+                                this.expenseItems[index].corporateReceiptImage = null;
+                            } else if (type === 'personal') {
+                                this.expenseItems[index].personalReceiptImage = null;
+                            } else {
+                                this.expenseItems[index].receiptImage = null;
+                            }
                             this.save();
                             this.render();
                         }
