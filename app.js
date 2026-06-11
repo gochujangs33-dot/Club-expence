@@ -381,6 +381,21 @@ const AppState = {
                                 if (data.settlementHistory) this.settlementHistory = data.settlementHistory;
                                 if (data.eventPhoto) this.eventPhoto = data.eventPhoto;
                                 console.log(`Firebase data loaded successfully for PIN: ${pin} (${this.userName})`);
+
+                                // 과거(v1.6.55 이전)에 생성되어 globalHistory에 누락된 이력을
+                                // 로그인 시점에 1회성으로 보충 동기화 (관리자 탭과 항상 일치하도록)
+                                if (this.settlementHistory && this.settlementHistory.length > 0) {
+                                    const backfillUpdates = {};
+                                    this.settlementHistory.forEach(entry => {
+                                        if (entry && entry.id) {
+                                            backfillUpdates[`globalHistory/${entry.id}`] = entry;
+                                        }
+                                    });
+                                    if (Object.keys(backfillUpdates).length > 0) {
+                                        this.firebaseDb.ref().update(backfillUpdates)
+                                            .catch(err => console.error("Global history login backfill failed:", err));
+                                    }
+                                }
                             } else {
                                 // Firebase에 데이터가 없을 경우(신규 계정) - 이 기기에 남아있던
                                 // 이전 계정의 로컬 데이터를 그대로 올리지 않도록 정산 관련 상태를 초기화
@@ -1242,7 +1257,6 @@ const AppState = {
                                 <span class="history-date">${dateStr}</span>
                                 ${entry.clubName ? `<span class="history-club">${this.escapeHtml(entry.clubName)}</span>` : ''}
                             </div>
-                            <button class="btn-delete-my-history" data-id="${entry.id}" style="background:none; border:none; color:var(--warning-text); font-size:0.85rem; cursor:pointer;">삭제</button>
                         </div>
                         <div class="history-summary">
                             <div class="history-stat"><span>참석 인원</span><strong>${entry.memberCount}명</strong></div>
@@ -1257,35 +1271,6 @@ const AppState = {
                         </details>
                     `;
                     historyContainer.appendChild(card);
-                });
-
-                // 내 정산 이력 삭제 → 로컬/Firebase 개인 이력 및 globalHistory에서 함께 제거
-                historyContainer.querySelectorAll('.btn-delete-my-history').forEach(btn => {
-                    btn.addEventListener('click', () => {
-                        const id = btn.getAttribute('data-id');
-                        const entry = this.settlementHistory.find(e => String(e.id) === String(id));
-                        if (!entry) return;
-                        if (!confirm(`이 정산 이력을 삭제하시겠습니까?\n참석자 ${entry.memberCount}명의 누적 참석 횟수도 함께 차감됩니다.`)) return;
-
-                        if (entry.attendees) {
-                            entry.attendees.forEach(att => {
-                                const cur = this.directory[att.name];
-                                if (cur && typeof cur === 'object') {
-                                    cur.count = Math.max(0, (cur.count || 0) - 1);
-                                }
-                            });
-                        }
-
-                        this.settlementHistory = this.settlementHistory.filter(e => String(e.id) !== String(id));
-                        this.save();
-
-                        if (this.firebaseDb) {
-                            this.firebaseDb.ref(`globalHistory/${id}`).remove()
-                                .catch(err => console.error("Global history delete failed:", err));
-                        }
-
-                        this.render();
-                    });
                 });
             }
         }
