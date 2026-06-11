@@ -258,6 +258,15 @@ const AppState = {
         }
     },
 
+    // 전사원 명부(참석 누적 횟수 포함)는 모든 사용자가 공유하는 globalDirectory에서 불러옴
+    loadGlobalDirectory() {
+        if (!this.firebaseDb) return Promise.resolve();
+        return this.firebaseDb.ref('globalDirectory').once('value').then(snapshot => {
+            const data = snapshot.val();
+            if (data && typeof data === 'object') this.directory = data;
+        }).catch(err => console.error("전사원 명부(공통) 로드 실패:", err));
+    },
+
     // 전사원 명부 일괄 등록: 기존에 등록된 이름은 건드리지 않고, 새 이름만 추가
     bulkImportDirectory(list) {
         let added = 0;
@@ -322,6 +331,10 @@ const AppState = {
             this.firebaseDb.ref(`settlements/${this.currentPin}`).set(dataToSync)
                 .catch(err => console.error("Firebase sync failed:", err));
 
+            // 전사원 명부(참석 누적 횟수)는 모든 사용자가 공유하므로 별도 공통 노드에 동기화
+            this.firebaseDb.ref('globalDirectory').set(this.directory)
+                .catch(err => console.error("Global directory sync failed:", err));
+
             // 오프라인 상태에서 정산 확정되어 globalHistory에 누락된 이력을 보충 동기화
             if (this.settlementHistory && this.settlementHistory.length > 0) {
                 const updates = {};
@@ -350,7 +363,12 @@ const AppState = {
                 this.isLoggedIn = true;
                 this.currentPin = pin;
                 this.userName = "관리자";
-                resolve(true);
+                this.loadGlobalDirectory()
+                    .then(() => fetch('./lib/employee_directory.json'))
+                    .then(res => res.json())
+                    .then(list => this.bulkImportDirectory(list))
+                    .catch(err => console.error("전사원 명부 자동 등록 실패:", err))
+                    .finally(() => resolve(true));
                 return;
             }
 
@@ -416,8 +434,10 @@ const AppState = {
                             this.isLoggedIn = true;
                             this.currentPin = pin;
 
-                            // 번들된 전사원 데이터 중 누락된 사람을 클라우드 명부에도 병합
-                            fetch('./lib/employee_directory.json')
+                            // 전사원 명부(공통 누적 카운트)를 globalDirectory에서 불러온 뒤,
+                            // 번들된 전사원 데이터 중 누락된 사람을 병합
+                            this.loadGlobalDirectory()
+                                .then(() => fetch('./lib/employee_directory.json'))
                                 .then(res => res.json())
                                 .then(list => this.bulkImportDirectory(list))
                                 .catch(err => console.error("전사원 명부 자동 등록 실패:", err))
