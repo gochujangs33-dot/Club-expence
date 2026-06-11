@@ -258,6 +258,20 @@ const AppState = {
         }
     },
 
+    // 전사원 명부 누적 카운트는 관리자(000000) 화면이 기준 — globalDirectory를 불러와
+    // 이름별로 id/count를 동기화(전체 기준값으로 갱신), 로컬에만 있던 이름은 그대로 유지
+    loadGlobalDirectory() {
+        if (!this.firebaseDb) return Promise.resolve();
+        return this.firebaseDb.ref('globalDirectory').once('value').then(snapshot => {
+            const global = snapshot.val();
+            if (global && typeof global === 'object') {
+                Object.keys(global).forEach(name => {
+                    this.directory[name] = global[name];
+                });
+            }
+        }).catch(err => console.error("전사원 명부(공통) 로드 실패:", err));
+    },
+
     // 전사원 명부 일괄 등록: 기존에 등록된 이름은 건드리지 않고, 새 이름만 추가
     bulkImportDirectory(list) {
         let added = 0;
@@ -350,9 +364,15 @@ const AppState = {
                 this.isLoggedIn = true;
                 this.currentPin = pin;
                 this.userName = "관리자";
-                fetch('./lib/employee_directory.json')
+                this.loadGlobalDirectory()
+                    .then(() => fetch('./lib/employee_directory.json'))
                     .then(res => res.json())
                     .then(list => this.bulkImportDirectory(list))
+                    // 관리자 화면의 명부를 전체 사용자 공유 기준으로 반영
+                    .then(() => {
+                        this.firebaseDb.ref('globalDirectory').set(this.directory)
+                            .catch(err => console.error("Global directory sync failed:", err));
+                    })
                     .catch(err => console.error("전사원 명부 자동 등록 실패:", err))
                     .finally(() => resolve(true));
                 return;
@@ -420,8 +440,10 @@ const AppState = {
                             this.isLoggedIn = true;
                             this.currentPin = pin;
 
+                            // 관리자 화면 기준 누적 카운트를 먼저 반영한 뒤,
                             // 번들된 전사원 데이터 중 누락된 사람을 클라우드 명부에도 병합
-                            fetch('./lib/employee_directory.json')
+                            this.loadGlobalDirectory()
+                                .then(() => fetch('./lib/employee_directory.json'))
                                 .then(res => res.json())
                                 .then(list => this.bulkImportDirectory(list))
                                 .catch(err => console.error("전사원 명부 자동 등록 실패:", err))
@@ -1715,6 +1737,17 @@ const AppState = {
                 this.directory[att.name] = { id: curId, count: curCount + 1 };
             } else {
                 this.directory[att.name] = { id: att.employeeId, count: 1 };
+            }
+
+            // 관리자 화면(전체 공유 명부)의 누적 카운트도 함께 증가
+            if (this.isLoggedIn && this.firebaseDb) {
+                const empId = att.employeeId;
+                this.firebaseDb.ref(`globalDirectory/${att.name}`).transaction(cur => {
+                    if (cur && typeof cur === 'object') {
+                        return { id: cur.id || empId, count: (cur.count || 0) + 1 };
+                    }
+                    return { id: empId, count: 1 };
+                }).catch(err => console.error("Global directory count update failed:", err));
             }
         });
 
