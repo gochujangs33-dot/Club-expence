@@ -3096,7 +3096,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             renderAdminHistory(historyList);
             lastHistoryList = historyList;
-            renderOverallMonthlyChart(historyList);
+            renderAllCharts(historyList);
         });
 
         // 3. Fetch Club Registry & Total Budget
@@ -3106,7 +3106,7 @@ document.addEventListener('DOMContentLoaded', () => {
             updateChartsBudgetStats(lastHistoryList);
             renderClubFilters();
             renderClubHistorySelect();
-            renderOverallMonthlyChart(lastHistoryList);
+            renderAllCharts(lastHistoryList);
         });
     }
 
@@ -3250,7 +3250,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     statusEl.style.display = 'block';
                     setTimeout(() => { statusEl.style.display = 'none'; }, 2000);
                 }
-                renderOverallMonthlyChart(lastHistoryList);
+                renderAllCharts(lastHistoryList);
             }).catch(() => {
                 alert('총 클럽비용 저장에 실패했습니다. 온라인 상태를 확인해주세요.');
             });
@@ -3419,6 +3419,175 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    let clubUsageChartInstance = null;
+
+    // ── 클럽별 예산 소진율 (가로 막대) ──────────────────────────────────
+    function renderClubUsageChart(historyList) {
+        const canvas = document.getElementById('club-usage-chart');
+        if (!canvas || typeof Chart === 'undefined') return;
+
+        const clubs = Object.values(AppState.clubRegistry || {}).sort((a, b) => a.name.localeCompare(b.name));
+        const labels = clubs.map(c => c.name);
+        const usageRatio = [];
+        const usageColors = [];
+        clubs.forEach(club => {
+            const spent = (historyList || [])
+                .filter(entry => (entry.clubName || '기본 클럽') === club.name)
+                .reduce((sum, entry) => sum + (entry.finalSupportAmount || 0), 0);
+            const usedTotal = (club.priorUsed || 0) + spent;
+            const budget = club.budget || 0;
+            const ratio = budget > 0 ? (usedTotal / budget) * 100 : 0;
+            usageRatio.push(Math.round(ratio * 10) / 10);
+            usageColors.push(ratio >= 100 ? 'rgba(248, 113, 113, 0.75)' : ratio >= 80 ? 'rgba(251, 191, 36, 0.75)' : 'rgba(52, 211, 153, 0.75)');
+        });
+
+        if (clubUsageChartInstance) {
+            clubUsageChartInstance.destroy();
+        }
+        if (labels.length === 0) return;
+
+        clubUsageChartInstance = new Chart(canvas.getContext('2d'), {
+            type: 'bar',
+            data: {
+                labels,
+                datasets: [{
+                    label: '예산 소진율 (%)',
+                    data: usageRatio,
+                    backgroundColor: usageColors,
+                    borderColor: usageColors.map(c => c.replace('0.75', '1')),
+                    borderWidth: 1,
+                    borderRadius: 6
+                }]
+            },
+            options: {
+                indexAxis: 'y',
+                responsive: true,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: { callbacks: { label: (ctx) => `${ctx.parsed.x}% 소진` } }
+                },
+                scales: {
+                    x: { ticks: { color: '#cbd5e1', callback: (v) => v + '%' }, grid: { color: 'rgba(255,255,255,0.05)' }, beginAtZero: true },
+                    y: { ticks: { color: '#cbd5e1' }, grid: { display: false } }
+                }
+            }
+        });
+    }
+
+    let categoryPieChartInstance = null;
+
+    // ── 카테고리별(행사비/시설비/상품) 누적 비용 비중 (도넛) ───────────────
+    function renderCategoryPieChart(historyList) {
+        const canvas = document.getElementById('category-pie-chart');
+        if (!canvas || typeof Chart === 'undefined') return;
+
+        let eventCost = 0, facilityCost = 0, prizeCost = 0;
+        (historyList || []).forEach(entry => {
+            eventCost += entry.eventCost || 0;
+            facilityCost += entry.facilityCost || 0;
+            prizeCost += entry.prizeCost || 0;
+        });
+
+        if (categoryPieChartInstance) {
+            categoryPieChartInstance.destroy();
+        }
+        if (eventCost + facilityCost + prizeCost === 0) return;
+
+        categoryPieChartInstance = new Chart(canvas.getContext('2d'), {
+            type: 'doughnut',
+            data: {
+                labels: ['행사비', '시설 및 장비 이용료', '상품'],
+                datasets: [{
+                    data: [eventCost, facilityCost, prizeCost],
+                    backgroundColor: ['rgba(139, 92, 246, 0.75)', 'rgba(56, 189, 248, 0.75)', 'rgba(251, 191, 36, 0.75)'],
+                    borderColor: 'rgba(15, 23, 42, 0.9)',
+                    borderWidth: 2
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: { position: 'bottom', labels: { color: '#cbd5e1' } },
+                    tooltip: {
+                        callbacks: {
+                            label: (ctx) => `${ctx.label}: ${SettlementCalculator.formatCurrency(ctx.parsed)}`
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    let selfPayTrendChartInstance = null;
+
+    // ── 자부담 vs 회사지원금 추이 (월별 누적 영역 그래프) ───────────────────
+    function renderSelfPayTrendChart(historyList) {
+        const canvas = document.getElementById('selfpay-trend-chart');
+        if (!canvas || typeof Chart === 'undefined') return;
+
+        const byMonth = {};
+        (historyList || []).forEach(entry => {
+            const d = entry.date ? new Date(entry.date) : null;
+            const key = d ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` : '알 수 없음';
+            if (!byMonth[key]) byMonth[key] = { selfPay: 0, support: 0 };
+            const finalSelfPay = (entry.finalSelfPay !== undefined && entry.finalSelfPay !== null) ? entry.finalSelfPay : (entry.totalSelfPay || 0);
+            byMonth[key].selfPay += finalSelfPay;
+            byMonth[key].support += entry.finalSupportAmount || 0;
+        });
+
+        const labels = Object.keys(byMonth).sort();
+
+        if (selfPayTrendChartInstance) {
+            selfPayTrendChartInstance.destroy();
+        }
+        if (labels.length === 0) return;
+
+        selfPayTrendChartInstance = new Chart(canvas.getContext('2d'), {
+            type: 'line',
+            data: {
+                labels,
+                datasets: [
+                    {
+                        label: '회사 지원금',
+                        data: labels.map(k => byMonth[k].support),
+                        borderColor: 'rgba(52, 211, 153, 1)',
+                        backgroundColor: 'rgba(52, 211, 153, 0.25)',
+                        fill: true,
+                        tension: 0.35,
+                        stack: 'stack1'
+                    },
+                    {
+                        label: '자부담 비용',
+                        data: labels.map(k => byMonth[k].selfPay),
+                        borderColor: 'rgba(248, 113, 113, 1)',
+                        backgroundColor: 'rgba(248, 113, 113, 0.25)',
+                        fill: true,
+                        tension: 0.35,
+                        stack: 'stack1'
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: { labels: { color: '#cbd5e1' } }
+                },
+                scales: {
+                    x: { stacked: true, ticks: { color: '#cbd5e1' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+                    y: { stacked: true, ticks: { color: '#cbd5e1' }, grid: { color: 'rgba(255,255,255,0.05)' }, beginAtZero: true }
+                }
+            }
+        });
+    }
+
+    // 차트 탭의 모든 그래프를 한 번에 갱신
+    function renderAllCharts(historyList) {
+        renderOverallMonthlyChart(historyList);
+        renderClubUsageChart(historyList);
+        renderCategoryPieChart(historyList);
+        renderSelfPayTrendChart(historyList);
+    }
+
     function renderAdminHistory(historyList) {
         const container = document.getElementById('admin-history-container');
         const searchVal = (document.getElementById('admin-search-input').value || '').trim().toLowerCase();
@@ -3579,7 +3748,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     Promise.all(tasks).then(() => {
                         lastHistoryList = lastHistoryList.filter(e => String(e.id) !== String(id));
                         renderAdminHistory(lastHistoryList);
-                        renderOverallMonthlyChart(lastHistoryList);
+                        renderAllCharts(lastHistoryList);
                         updateChartsBudgetStats(lastHistoryList);
                         renderClubManagement();
                     }).catch(() => alert('삭제에 실패했습니다. 온라인 상태를 확인해주세요.'));

@@ -1579,6 +1579,19 @@ body:has(.update-banner:not(.hidden)) {
     margin-bottom: 1rem;
 }
 
+/* 차트 카드: 입체감 있는 글로우 + 살짝 떠 보이는 배경 */
+.chart-card-glow {
+    margin-top: 1rem;
+    background: linear-gradient(160deg, rgba(139, 92, 246, 0.07), rgba(15, 23, 42, 0.4));
+    border: 1px solid rgba(139, 92, 246, 0.18);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.chart-canvas-wrap {
+    position: relative;
+    width: 100%;
+}
+
 .club-filter-row {
     display: flex;
     flex-wrap: wrap;

@@ -516,7 +516,48 @@
                     <div id="club-filter-container" class="club-filter-row">
                         <!-- Populated dynamically: 전체 클럽 + per-club chips -->
                     </div>
-                    <canvas id="overall-monthly-chart" height="120"></canvas>
+                    <div class="chart-canvas-wrap">
+                        <canvas id="overall-monthly-chart" height="120"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 클럽별 예산 소진율 -->
+            <div class="card chart-card-glow" id="club-usage-chart-card">
+                <div class="card-header">
+                    <span class="card-icon">🎯</span>
+                    <h2>클럽별 예산 소진율</h2>
+                </div>
+                <div class="card-body">
+                    <div class="chart-canvas-wrap" style="max-height:340px;">
+                        <canvas id="club-usage-chart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 카테고리별 누적 비중 -->
+            <div class="card chart-card-glow" id="category-pie-chart-card">
+                <div class="card-header">
+                    <span class="card-icon">🥧</span>
+                    <h2>카테고리별 누적 비용 비중</h2>
+                </div>
+                <div class="card-body">
+                    <div class="chart-canvas-wrap" style="max-height:320px; max-width:320px; margin:0 auto;">
+                        <canvas id="category-pie-chart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 자부담 vs 회사지원금 추이 -->
+            <div class="card chart-card-glow" id="selfpay-trend-chart-card">
+                <div class="card-header">
+                    <span class="card-icon">📐</span>
+                    <h2>자부담 / 회사지원금 추이</h2>
+                </div>
+                <div class="card-body">
+                    <div class="chart-canvas-wrap">
+                        <canvas id="selfpay-trend-chart" height="120"></canvas>
+                    </div>
                 </div>
             </div>
         </div>
