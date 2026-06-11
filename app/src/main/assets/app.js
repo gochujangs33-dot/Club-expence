@@ -1293,9 +1293,71 @@ const AppState = {
         // 비용내역 = sheet2.xml (수식 보존을 위해 셀 XML 직접 치환)
         let sheet2 = await zip.file('xl/worksheets/sheet2.xml').async('string');
 
-        // K4(참석자 수): COUNTA(D5:D124) 수식의 캐시된 값이 뷰어에서 재계산되지 않는 경우가 있어
-        // 실제 참석자 수를 값으로 직접 기입
-        sheet2 = setCellValue(sheet2, 'K4', this.attendees.length, false);
+        // 엑셀 뷰어에 따라 수식의 캐시된 값(<v>)이 재계산되지 않는 경우가 있어
+        // 정산 결과에 관련된 K/L열 셀들을 앱에서 계산한 값으로 직접 기입
+        const calcResult = SettlementCalculator.calculate(
+            this.attendees.length,
+            this.expenseItems,
+            this.previousPrizeTotal,
+            this.rules
+        );
+        sheet2 = setCellValue(sheet2, 'K4', calcResult.memberCount, false);   // 참석자 수
+        sheet2 = setCellValue(sheet2, 'K6', calcResult.totalCost, false);     // 총 비용 (B)
+        sheet2 = setCellValue(sheet2, 'K7', calcResult.eventCost, false);     // 행사비 (C)
+        sheet2 = setCellValue(sheet2, 'K8', calcResult.facilityCost, false);  // 시설 및 장비 이용료 (D)
+        sheet2 = setCellValue(sheet2, 'K9', calcResult.prizeCost, false);     // 상품 (E)
+
+        // 인당 행사비 (F)=(C)/(A) 및 정산 구간별 인당 비용/자부담 비용 (서식의 30,000/60,000/120,000원,
+        // 20%/40%, 85,000원 구간 기준에 맞춰 계산 — calculateSelfPayPerPerson과 동일한 합산 결과를 가짐)
+        const F = calcResult.memberCount > 0 ? calcResult.eventCost / calcResult.memberCount : 0;
+        const L1 = 30000, L2 = 60000, L3 = 120000, R2 = 0.2, R3 = 0.4, D4 = 85000;
+        const k15 = F <= L1 ? F : 0;
+        const k16 = (F > L1 && F <= L2) ? F : (F > L2 ? L2 : 0);
+        const k17 = (F > L2 && F <= L3) ? (F - L2) : (F > L3 ? (L3 - L2) : 0);
+        const k18 = F > L3 ? F : 0;
+        const l15 = 0;
+        const l16 = k16 * R2;
+        const l17 = k17 * R3;
+        const l18 = k18 === 0 ? 0 : (k18 - D4);
+        const k20 = l15 + l16 + l17 + l18; // 인당 최소 자부담 비용
+        const k21 = k20 * calcResult.memberCount; // 총 최소 자부담 비용
+        const k22 = calcResult.totalCost > 0 ? k21 / calcResult.totalCost : ''; // 총 최소 자부담 비율
+
+        if (calcResult.memberCount > 0) {
+            sheet2 = setCellValue(sheet2, 'K12', F, false);
+            let label12;
+            if (calcResult.eventCost === 0) {
+                label12 = '';
+            } else if (F <= L1) {
+                label12 = '전액지원';
+            } else if (F <= L2) {
+                label12 = '20% 자체 부담';
+            } else if (F <= L3) {
+                label12 = "'나' 구간 자부담 비용 + 60,000원 초과 금액에 대해 40% 자체 부담";
+            } else {
+                label12 = '85,000원 이외 금액 자체 부담(최대 인당 8.5만원 지원)';
+            }
+            sheet2 = setCellValue(sheet2, 'L12', label12, true);
+        } else {
+            sheet2 = setCellValue(sheet2, 'K12', '', true);
+            sheet2 = setCellValue(sheet2, 'L12', '', true);
+        }
+
+        sheet2 = setCellValue(sheet2, 'K15', k15, false);
+        sheet2 = setCellValue(sheet2, 'K16', k16, false);
+        sheet2 = setCellValue(sheet2, 'K17', k17, false);
+        sheet2 = setCellValue(sheet2, 'K18', k18, false);
+        sheet2 = setCellValue(sheet2, 'L15', l15, false);
+        sheet2 = setCellValue(sheet2, 'L16', l16, false);
+        sheet2 = setCellValue(sheet2, 'L17', l17, false);
+        sheet2 = setCellValue(sheet2, 'L18', l18, false);
+        sheet2 = setCellValue(sheet2, 'K20', k20, false);
+        sheet2 = setCellValue(sheet2, 'K21', k21, false);
+        if (k22 === '') {
+            sheet2 = setCellValue(sheet2, 'K22', '', true);
+        } else {
+            sheet2 = setCellValue(sheet2, 'K22', k22, false);
+        }
 
         // D5부터 정회원 참석자 이름 입력 (최대 120명, E열 수식이 D열을 Global ID 명단과 대조)
         for (let idx = 0; idx < 120; idx++) {
@@ -1314,15 +1376,24 @@ const AppState = {
         });
 
         // K24(실제 자부담 비용): 앱에서 계산/수정된 총 자부담 금액을 그대로 입력
-        // (수정 없으면 자동 계산된 값, 수정했으면 사용자가 직접 수정한 값) — 나머지(L24 비율 등)는 서식 수식대로 자동 계산됨
-        const result = SettlementCalculator.calculate(
-            this.memberCount,
-            this.expenseItems,
-            this.previousPrizeTotal,
-            this.rules
-        );
-        const finalSelfPay = this.lastCalculatedSelfPay > 0 ? this.lastCalculatedSelfPay : result.totalSelfPay;
+        // (수정 없으면 자동 계산된 값, 수정했으면 사용자가 직접 수정한 값)
+        const finalSelfPay = this.lastCalculatedSelfPay > 0 ? this.lastCalculatedSelfPay : calcResult.totalSelfPay;
         sheet2 = setCellValue(sheet2, 'K24', finalSelfPay, false);
+
+        // K25(실제 자부담 비율), L25(정산 결과 안내), K30(총 회사 지원금)
+        if (calcResult.totalCost > 0) {
+            const k25 = finalSelfPay / calcResult.totalCost;
+            sheet2 = setCellValue(sheet2, 'K25', k25, false);
+            const diff = finalSelfPay - k21;
+            const label25 = diff >= 0
+                ? `정산 문제 없음. 최소 자부담 비용보다 ${diff.toLocaleString('ko-KR')}원 추가 부담함`
+                : `최소 자부담 비용 미달. ${(-diff).toLocaleString('ko-KR')}원 추가 자부담 필요.`;
+            sheet2 = setCellValue(sheet2, 'L25', label25, true);
+        } else {
+            sheet2 = setCellValue(sheet2, 'K25', '', true);
+            sheet2 = setCellValue(sheet2, 'L25', '', true);
+        }
+        sheet2 = setCellValue(sheet2, 'K30', calcResult.totalCost - finalSelfPay, false);
 
         zip.file('xl/worksheets/sheet2.xml', sheet2);
 
