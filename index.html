@@ -945,14 +945,26 @@
         });
 
         // 서비스 워커에서 SW_UPDATED 메시지 수신 (activate 직후)
+        // 같은 버전에 대해 이미 알림을 봤다면(닫기/업데이트 완료) 다시 띄우지 않음
         navigator.serviceWorker.addEventListener('message', event => {
             if (event.data?.type === 'SW_UPDATED') {
+                const version = event.data.version;
+                if (version && localStorage.getItem('app_update_seen_version') === version) {
+                    return;
+                }
+                document.getElementById('update-banner').dataset.version = version || '';
                 document.getElementById('update-banner').classList.remove('hidden');
             }
         });
 
+        function markUpdateSeen() {
+            const version = document.getElementById('update-banner').dataset.version;
+            if (version) localStorage.setItem('app_update_seen_version', version);
+        }
+
         // 업데이트 버튼 → skipWaiting 후 새로고침
         document.getElementById('update-reload-btn').addEventListener('click', () => {
+            markUpdateSeen();
             if (pendingWorker) {
                 navigator.serviceWorker.addEventListener('controllerchange', () => {
                     window.location.reload();
@@ -965,6 +977,7 @@
 
         // 닫기 버튼
         document.getElementById('update-dismiss-btn').addEventListener('click', () => {
+            markUpdateSeen();
             document.getElementById('update-banner').classList.add('hidden');
         });
     }
