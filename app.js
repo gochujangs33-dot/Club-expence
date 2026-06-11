@@ -2601,6 +2601,21 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // 관리자(PIN 000000) 모드 전용 탭 전환
+    // 관리자 대시보드 카드 접기/펼치기 (설정은 localStorage에 저장되어 유지됨)
+    document.querySelectorAll('.card-collapse-btn').forEach(btn => {
+        const cardId = btn.getAttribute('data-card');
+        const card = document.getElementById(cardId);
+        if (!card) return;
+        const storageKey = `card_collapsed_${cardId}`;
+        if (localStorage.getItem(storageKey) === '1') {
+            card.classList.add('collapsed');
+        }
+        btn.addEventListener('click', () => {
+            const collapsed = card.classList.toggle('collapsed');
+            localStorage.setItem(storageKey, collapsed ? '1' : '0');
+        });
+    });
+
     function setAdminMode(isAdmin) {
         const adminOnlyIds = ['admin-tab-btn', 'club-history-tab-btn', 'charts-tab-btn'];
         const memberOnlyIds = ['settlement-tab-btn', 'attendees-tab-btn', 'history-tab-btn'];

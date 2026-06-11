@@ -369,6 +369,38 @@ select.club-name-input option {
     font-size: 1.35rem;
 }
 
+.card-collapse-btn {
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: var(--text-secondary);
+    border-radius: 8px;
+    width: 2rem;
+    height: 2rem;
+    flex: 0 0 auto;
+    font-size: 1rem;
+    cursor: pointer;
+    transition: var(--transition-smooth);
+}
+
+.card-collapse-btn:hover {
+    background: rgba(255, 255, 255, 0.12);
+    color: var(--text-primary);
+}
+
+.card.collapsed .card-body {
+    display: none;
+}
+
+.card.collapsed .card-header {
+    margin-bottom: 0;
+    padding-bottom: 0;
+    border-bottom: none;
+}
+
+.card.collapsed .card-collapse-btn {
+    transform: rotate(-90deg);
+}
+
 .card-header h2 {
     font-family: var(--font-heading);
     font-size: 1.05rem;
