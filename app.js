@@ -383,8 +383,8 @@ const AppState = {
         return Promise.resolve();
     },
 
-    addOrUpdateClub(clubId, name, budget) {
-        this.clubRegistry[clubId] = { name: name.trim(), budget: Math.max(0, budget || 0) };
+    addOrUpdateClub(clubId, name, budget, priorUsed) {
+        this.clubRegistry[clubId] = { name: name.trim(), budget: Math.max(0, budget || 0), priorUsed: Math.max(0, priorUsed || 0) };
         this.saveClubRegistry();
     },
 
@@ -3027,6 +3027,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const clubForm = document.getElementById('club-form');
     const clubNameFormInput = document.getElementById('club-name-form-input');
     const clubBudgetFormInput = document.getElementById('club-budget-form-input');
+    const clubPriorUsedFormInput = document.getElementById('club-prior-used-form-input');
     const cancelEditClubBtn = document.getElementById('cancel-edit-club-btn');
     const clubListContainer = document.getElementById('club-list-container');
 
@@ -3054,7 +3055,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 .filter(entry => entry.clubName === club.name)
                 .reduce((sum, entry) => sum + (entry.finalSupportAmount || 0), 0);
             const budget = club.budget || 0;
-            const remaining = budget - spent;
+            const priorUsed = club.priorUsed || 0;
+            const remaining = budget - priorUsed - spent;
             const row = document.createElement('div');
             row.className = 'expense-row';
             row.style.cssText = 'padding:0.6rem 0.75rem; height:auto; align-items:center; flex-wrap:wrap;';
@@ -3065,6 +3067,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <div style="flex:1.2; min-width:100px; text-align:center;">
                     <div style="font-size:0.7rem; color:var(--text-secondary);">배정 예산</div>
                     <div style="font-size:0.85rem; font-weight:600;">${SettlementCalculator.formatCurrency(budget)}</div>
+                    ${priorUsed > 0 ? `<div style="font-size:0.7rem; color:var(--text-muted);">(이전사용 ${SettlementCalculator.formatCurrency(priorUsed)})</div>` : ''}
                 </div>
                 <div style="flex:1.2; min-width:100px; text-align:center;">
                     <div style="font-size:0.7rem; color:var(--text-secondary);">잔여 예산</div>
@@ -3086,6 +3089,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 editingClubId = clubId;
                 clubNameFormInput.value = club.name;
                 clubBudgetFormInput.value = club.budget || 0;
+                clubPriorUsedFormInput.value = club.priorUsed || 0;
                 document.getElementById('add-club-btn').innerHTML = `<span class="btn-icon">💾</span> 수정 완료`;
                 cancelEditClubBtn.classList.remove('hidden');
                 clubNameFormInput.focus();
@@ -3108,6 +3112,7 @@ document.addEventListener('DOMContentLoaded', () => {
         editingClubId = null;
         clubNameFormInput.value = '';
         clubBudgetFormInput.value = '';
+        clubPriorUsedFormInput.value = '';
         document.getElementById('add-club-btn').innerHTML = `<span class="btn-icon">➕</span> 클럽 추가`;
         cancelEditClubBtn.classList.add('hidden');
     }
@@ -3142,9 +3147,10 @@ document.addEventListener('DOMContentLoaded', () => {
             e.preventDefault();
             const name = clubNameFormInput.value.trim();
             const budget = parseInt(clubBudgetFormInput.value, 10) || 0;
+            const priorUsed = parseInt(clubPriorUsedFormInput.value, 10) || 0;
             if (!name) return;
             const clubId = editingClubId || ('club_' + Date.now());
-            AppState.addOrUpdateClub(clubId, name, budget);
+            AppState.addOrUpdateClub(clubId, name, budget, priorUsed);
             resetClubForm();
             renderClubManagement();
         });
