@@ -1174,7 +1174,7 @@ const AppState = {
             if (this.settlementHistory.length === 0) {
                 historyContainer.innerHTML = `<div class="empty-state"><span class="empty-icon">📋</span><p>저장된 정산 이력이 없습니다.</p></div>`;
             } else {
-                this.settlementHistory.forEach((entry, idx) => {
+                this.settlementHistory.forEach((entry) => {
                     const d = new Date(entry.date);
                     const dateStr = `${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
                     const card = document.createElement('div');
@@ -1193,7 +1193,6 @@ const AppState = {
                                 <span class="history-date">${dateStr}</span>
                                 ${entry.clubName ? `<span class="history-club">${this.escapeHtml(entry.clubName)}</span>` : ''}
                             </div>
-                            <button class="btn-delete history-delete-btn" data-idx="${idx}" title="이력 삭제">&times;</button>
                         </div>
                         <div class="history-summary">
                             <div class="history-stat"><span>참석 인원</span><strong>${entry.memberCount}명</strong></div>
@@ -1208,18 +1207,6 @@ const AppState = {
                         </details>
                     `;
                     historyContainer.appendChild(card);
-                });
-
-                historyContainer.querySelectorAll('.history-delete-btn').forEach(btn => {
-                    btn.addEventListener('click', (e) => {
-                        e.stopPropagation();
-                        const i = parseInt(btn.getAttribute('data-idx'), 10);
-                        if (!isNaN(i) && i >= 0 && i < this.settlementHistory.length) {
-                            this.settlementHistory.splice(i, 1);
-                            this.save();
-                            this.render();
-                        }
-                    });
                 });
             }
         }
@@ -3461,7 +3448,22 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
 
                 if (firebaseDb) {
-                    firebaseDb.ref(`globalHistory/${entry.id}`).remove().then(() => {
+                    const tasks = [firebaseDb.ref(`globalHistory/${entry.id}`).remove()];
+
+                    // 정산을 등록한 사용자의 개인 정산 이력에서도 동일 항목 제거 (관리자만 삭제 가능)
+                    if (entry.creatorPin) {
+                        tasks.push(
+                            firebaseDb.ref(`settlements/${entry.creatorPin}/settlementHistory`).once('value').then(snap => {
+                                const userHistory = snap.val();
+                                if (Array.isArray(userHistory)) {
+                                    const filtered = userHistory.filter(h => String(h.id) !== String(id));
+                                    return firebaseDb.ref(`settlements/${entry.creatorPin}/settlementHistory`).set(filtered);
+                                }
+                            })
+                        );
+                    }
+
+                    Promise.all(tasks).then(() => {
                         lastHistoryList = lastHistoryList.filter(e => String(e.id) !== String(id));
                         renderAdminHistory(lastHistoryList);
                         renderOverallMonthlyChart(lastHistoryList);
