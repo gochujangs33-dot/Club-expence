@@ -929,6 +929,9 @@
         let pendingWorker = null;
 
         navigator.serviceWorker.register('./sw.js').then(reg => {
+            // 접속 즉시 새 버전이 있는지 확인 (브라우저의 자동 검사를 기다리지 않음)
+            reg.update();
+
             // 새 서비스 워커가 발견되면
             reg.addEventListener('updatefound', () => {
                 const newWorker = reg.installing;
