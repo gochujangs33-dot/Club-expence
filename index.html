@@ -100,7 +100,7 @@
                             </div>
                             <div class="input-group">
                                 <label for="prev-prize-input">기존 상품비 누적액 (원)</label>
-                                <input type="number" id="prev-prize-input" min="0" step="1000" placeholder="예: 450000" value="0">
+                                <input type="text" inputmode="numeric" id="prev-prize-input" placeholder="예: 450,000" value="0">
                             </div>
                         </div>
                     </div>
@@ -134,7 +134,7 @@
                                 <div class="input-row">
                                     <div class="input-group flex-2">
                                         <label for="expense-amount-input">금액 (원)</label>
-                                        <input type="number" id="expense-amount-input" min="0" step="100" placeholder="예: 150000" required>
+                                        <input type="text" inputmode="numeric" id="expense-amount-input" placeholder="예: 150,000" required>
                                     </div>
                                     <div class="input-group flex-3">
                                         <label for="expense-category-select">구분 (카테고리)</label>
@@ -149,7 +149,7 @@
                                     <div class="input-group flex-1 hidden" id="corp-amount-group" style="display:flex; flex-direction:column;">
                                         <div style="display:flex; align-items:center; gap:0.6rem; flex-wrap:wrap;">
                                             <label for="expense-corporate-amount-input" style="margin:0; white-space:nowrap;">법인카드</label>
-                                            <input type="number" id="expense-corporate-amount-input" min="0" step="100" placeholder="법인카드 결제 금액" style="flex:1; min-width:120px;">
+                                            <input type="text" inputmode="numeric" id="expense-corporate-amount-input" placeholder="법인카드 결제 금액" style="flex:1; min-width:120px;">
                                             <div id="corp-receipt-group" style="display:flex; align-items:center; gap:0.4rem; flex-wrap:wrap;">
                                                 <label for="expense-receipt-corp-input" class="btn-secondary" style="margin:0; cursor:pointer; font-size:0.85rem; padding:0.45rem 0.9rem; white-space:nowrap;">영수증</label>
                                                 <input type="file" id="expense-receipt-corp-input" accept="image/*" style="display:none;">
@@ -161,7 +161,7 @@
                                     <div class="input-group flex-1 hidden" id="personal-amount-group" style="display:flex; flex-direction:column;">
                                         <div style="display:flex; align-items:center; gap:0.6rem; flex-wrap:wrap;">
                                             <label for="expense-personal-amount-input" style="margin:0; white-space:nowrap;">개인카드</label>
-                                            <input type="number" id="expense-personal-amount-input" min="0" step="100" placeholder="개인카드 결제 금액" style="flex:1; min-width:120px;">
+                                            <input type="text" inputmode="numeric" id="expense-personal-amount-input" placeholder="개인카드 결제 금액" style="flex:1; min-width:120px;">
                                             <div id="personal-receipt-group" style="display:flex; align-items:center; gap:0.4rem; flex-wrap:wrap;">
                                                 <label for="expense-receipt-personal-input" class="btn-secondary" style="margin:0; cursor:pointer; font-size:0.85rem; padding:0.45rem 0.9rem; white-space:nowrap;">영수증</label>
                                                 <input type="file" id="expense-receipt-personal-input" accept="image/*" style="display:none;">
@@ -232,7 +232,7 @@
                                 </div>
                                 <div class="input-group">
                                     <label for="setting-used-budget">기존에 사용한 누적 금액 (원)</label>
-                                    <input type="number" id="setting-used-budget" min="0" step="1000" value="0">
+                                    <input type="text" inputmode="numeric" id="setting-used-budget" value="0">
                                     <small class="input-hint">💡 이전에 이미 사용한 비용을 한 번에 입력하면, 현재 시점부터 이어서 정산을 진행할 수 있습니다.</small>
                                 </div>
                                 <div style="display:flex; justify-content:space-between; align-items:center; padding:0.35rem 0 0;">
@@ -254,7 +254,7 @@
                                 <div class="summary-item" style="flex-wrap: wrap; gap: 0.4rem;">
                                     <span class="summary-label">총 자부담 금액 (수정 가능)</span>
                                     <div style="display: inline-flex; align-items: center; gap: 0.4rem;">
-                                        <input type="number" id="result-total-self-pay-input" style="width: 130px; padding: 0.35rem 0.5rem; text-align: right; font-weight: 600; font-size: 1rem; border-radius: 8px; background: rgba(15, 23, 42, 0.5); border: 1px solid var(--card-border); color: var(--text-primary);" placeholder="0" />
+                                        <input type="text" inputmode="numeric" id="result-total-self-pay-input" style="width: 130px; padding: 0.35rem 0.5rem; text-align: right; font-weight: 600; font-size: 1rem; border-radius: 8px; background: rgba(15, 23, 42, 0.5); border: 1px solid var(--card-border); color: var(--text-primary);" placeholder="0" />
                                         <span style="font-size: 0.95rem; font-weight: 600; color: var(--text-primary);">원</span>
                                     </div>
                                 </div>
@@ -554,12 +554,12 @@
                     <div class="settings-grid">
                         <div class="input-group">
                             <label for="admin-setting-limit1">가. 지원 한도 (원 이하 자부담 0%)</label>
-                            <input type="number" id="admin-setting-limit1" min="0" step="1000" value="30000">
+                            <input type="text" inputmode="numeric" id="admin-setting-limit1" value="30000">
                         </div>
                         <div class="settings-row">
                             <div class="input-group">
                                 <label for="admin-setting-limit2">나. 구간 한도 (원)</label>
-                                <input type="number" id="admin-setting-limit2" min="0" step="1000" value="60000">
+                                <input type="text" inputmode="numeric" id="admin-setting-limit2" value="60000">
                             </div>
                             <div class="input-group">
                                 <label for="admin-setting-rate2">나. 자부담 비율 (%)</label>
@@ -569,7 +569,7 @@
                         <div class="settings-row">
                             <div class="input-group">
                                 <label for="admin-setting-limit3">다. 구간 한도 (원)</label>
-                                <input type="number" id="admin-setting-limit3" min="0" step="1000" value="120000">
+                                <input type="text" inputmode="numeric" id="admin-setting-limit3" value="120000">
                             </div>
                             <div class="input-group">
                                 <label for="admin-setting-rate3">다. 자부담 비율 (%)</label>
@@ -578,7 +578,7 @@
                         </div>
                         <div class="input-group">
                             <label for="admin-setting-deduction4">라. 초과 시 자부담 공제액 (원)</label>
-                            <input type="number" id="admin-setting-deduction4" min="0" step="1000" value="85000">
+                            <input type="text" inputmode="numeric" id="admin-setting-deduction4" value="85000">
                         </div>
                     </div>
                     <div class="settings-actions">
@@ -599,7 +599,7 @@
                         <div class="input-group flex-2">
                             <label for="club-total-budget-input">올해 사용 가능한 총 클럽비용 (원)</label>
                             <div style="display:flex; gap:0.4rem;">
-                                <input type="number" id="club-total-budget-input" min="0" step="1" placeholder="예: 50000000" style="flex:1;">
+                                <input type="text" inputmode="numeric" id="club-total-budget-input" placeholder="예: 50,000,000" style="flex:1; min-width:0;">
                                 <button type="button" id="save-club-total-budget-btn" class="btn-primary-sm">저장</button>
                             </div>
                             <small id="club-total-budget-status" class="input-hint" style="display:none; color: var(--color-secondary);">✔️ 저장되었습니다.</small>
@@ -618,13 +618,10 @@
                             </div>
                             <div class="input-group flex-1">
                                 <label for="club-budget-form-input">배정 예산 (원)</label>
-                                <input type="number" id="club-budget-form-input" min="0" step="1" placeholder="예: 5000000" required>
-                            </div>
-                            <div class="input-group flex-1">
-                                <label for="club-prior-used-form-input">이전 사용 금액 (원)</label>
-                                <input type="number" id="club-prior-used-form-input" min="0" step="1" placeholder="예: 1000000">
+                                <input type="text" inputmode="numeric" id="club-budget-form-input" placeholder="예: 5,000,000" required>
                             </div>
                         </div>
+                        <small class="input-hint">💡 "이전 사용 금액"은 각 사용자가 정산 결과 화면의 ⚙️ 설정에서 "기존에 사용한 누적 금액"으로 직접 입력합니다.</small>
                         <div class="form-actions">
                             <button type="submit" id="add-club-btn" class="btn-primary" style="flex:1;">
                                 <span class="btn-icon">➕</span> 클럽 추가
@@ -710,6 +707,26 @@
                         <span class="btn-icon">✅</span> 정산 확정 — 이력 저장 &amp; 초기화
                     </button>
                     <p style="font-size:0.75rem; color:var(--text-muted); text-align:center; margin-top:0.4rem;">누적 카운트 반영 후 현재 데이터가 초기화됩니다</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 클럽 추가 배정 금액 입력 모달 -->
+    <div id="add-club-budget-modal" class="modal hidden">
+        <div class="modal-content-card card" style="max-width: 360px; width: 90%; background: var(--bg-dark); border: 1px solid var(--card-border); margin: auto;">
+            <div class="card-header">
+                <span class="card-icon">➕</span>
+                <h2 id="add-club-budget-title" style="font-size:1rem;">추가 배정 금액</h2>
+            </div>
+            <div class="card-body">
+                <div class="input-group">
+                    <label for="add-club-budget-input">추가 배정 금액 (원)</label>
+                    <input type="text" inputmode="numeric" id="add-club-budget-input" placeholder="예: 100,000">
+                </div>
+                <div class="form-actions" style="display:flex; gap:0.5rem;">
+                    <button type="button" id="add-club-budget-confirm-btn" class="btn-primary" style="flex:1;">확인</button>
+                    <button type="button" id="add-club-budget-cancel-btn" class="btn-secondary" style="flex:1;">취소</button>
                 </div>
             </div>
         </div>

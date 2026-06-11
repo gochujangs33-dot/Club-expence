@@ -16,6 +16,26 @@ function updatePerPersonSelfPayIcon(perPersonSelfPay) {
     }
 }
 
+// 1000단위 콤마(,) 표시/파싱 헬퍼
+function formatAmount(num) {
+    return Number(num || 0).toLocaleString('ko-KR');
+}
+function parseAmount(val) {
+    if (typeof val !== 'string') return Number(val) || 0;
+    return parseInt(val.replace(/[^0-9]/g, ''), 10) || 0;
+}
+// 금액 입력란에 입력하는 즉시 1000단위 콤마(,)를 적용
+function setupCurrencyInput(el) {
+    if (!el) return;
+    el.addEventListener('input', () => {
+        const cursorFromEnd = el.value.length - el.selectionStart;
+        const num = parseAmount(el.value);
+        el.value = num === 0 ? (el.value.replace(/[^0-9]/g, '') === '' ? '' : '0') : formatAmount(num);
+        const pos = Math.max(0, el.value.length - cursorFromEnd);
+        el.setSelectionRange(pos, pos);
+    });
+}
+
 // --- Firebase Config & Initialization ---
 // 구글 Firebase 콘솔에서 발급받은 실제 설정 키값들을 아래에 입력하시면 클라우드 연동이 활성화됩니다.
 const firebaseConfig = {
@@ -512,15 +532,15 @@ const AppState = {
         if (item) {
             this.editingItemId = id;
             document.getElementById('expense-desc-input').value = item.description;
-            document.getElementById('expense-amount-input').value = item.amount;
+            document.getElementById('expense-amount-input').value = formatAmount(item.amount);
             document.getElementById('expense-category-select').value = item.category;
 
             // Card type / split payment
             const cardType = item.cardType || 'corporate';
             document.getElementById('expense-corp-check').checked = (cardType === 'corporate' || cardType === 'split');
             document.getElementById('expense-personal-check').checked = (cardType === 'personal' || cardType === 'split');
-            document.getElementById('expense-corporate-amount-input').value = item.corporateAmount ?? '';
-            document.getElementById('expense-personal-amount-input').value = item.personalAmount ?? '';
+            document.getElementById('expense-corporate-amount-input').value = (item.corporateAmount !== undefined && item.corporateAmount !== null) ? formatAmount(item.corporateAmount) : '';
+            document.getElementById('expense-personal-amount-input').value = (item.personalAmount !== undefined && item.personalAmount !== null) ? formatAmount(item.personalAmount) : '';
 
             // Load receipt preview status
             this.tempCorpReceiptImage = (cardType === 'split') ? (item.corporateReceiptImage || null) : (cardType === 'corporate' ? (item.receiptImage || null) : null);
@@ -810,7 +830,7 @@ const AppState = {
         const selfPayInput = document.getElementById('result-total-self-pay-input');
         if (selfPayInput) {
             if (document.activeElement !== selfPayInput) {
-                selfPayInput.value = Math.round(result.totalSelfPay);
+                selfPayInput.value = formatAmount(Math.round(result.totalSelfPay));
                 this.lastCalculatedSelfPay = Math.round(result.totalSelfPay);
             }
         }
@@ -1792,7 +1812,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const prizeInput = document.getElementById('prev-prize-input');
 
     memberInput.value = AppState.memberCount;
-    prizeInput.value = AppState.previousPrizeTotal;
+    prizeInput.value = formatAmount(AppState.previousPrizeTotal);
+
+    // 금액 입력란 1000단위 콤마(,) 자동 적용
+    ['prev-prize-input', 'expense-amount-input', 'expense-corporate-amount-input',
+     'expense-personal-amount-input', 'setting-used-budget', 'result-total-self-pay-input',
+     'admin-setting-limit1', 'admin-setting-limit2', 'admin-setting-limit3', 'admin-setting-deduction4',
+     'club-total-budget-input', 'club-budget-form-input'].forEach(id => {
+        setupCurrencyInput(document.getElementById(id));
+    });
 
     // Settings panel: init budget fields from saved state
     const annualBudgetInput = document.getElementById('setting-annual-budget');
@@ -1804,7 +1832,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const annualInput = document.getElementById('setting-annual-budget');
         const usedInput = document.getElementById('setting-used-budget');
         if (annualInput) annualInput.value = AppState.annualBudget;
-        if (usedInput) usedInput.value = AppState.usedBudget;
+        if (usedInput) usedInput.value = formatAmount(AppState.usedBudget);
         if (typeof updateRemainingDisplay === 'function') {
             updateRemainingDisplay();
         }
@@ -1986,7 +2014,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Save settings handler
     document.getElementById('save-settings-btn').addEventListener('click', () => {
-        const usedBudget = parseInt(document.getElementById('setting-used-budget').value, 10) || 0;
+        const usedBudget = parseAmount(document.getElementById('setting-used-budget').value);
         AppState.usedBudget = usedBudget;
         AppState.save();
         AppState.render();
@@ -1998,12 +2026,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Admin: 정산 구간/비율 설정 폼 값 채우기
     const setAdminRulesFormValues = (rules) => {
-        document.getElementById('admin-setting-limit1').value = rules.limit1;
-        document.getElementById('admin-setting-limit2').value = rules.limit2;
+        document.getElementById('admin-setting-limit1').value = formatAmount(rules.limit1);
+        document.getElementById('admin-setting-limit2').value = formatAmount(rules.limit2);
         document.getElementById('admin-setting-rate2').value = Math.round(rules.rate2 * 100);
-        document.getElementById('admin-setting-limit3').value = rules.limit3;
+        document.getElementById('admin-setting-limit3').value = formatAmount(rules.limit3);
         document.getElementById('admin-setting-rate3').value = Math.round(rules.rate3 * 100);
-        document.getElementById('admin-setting-deduction4').value = rules.deduction4;
+        document.getElementById('admin-setting-deduction4').value = formatAmount(rules.deduction4);
     };
     setAdminRulesFormValues(AppState.rules);
 
@@ -2011,12 +2039,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const adminSaveRulesBtn = document.getElementById('admin-save-rules-btn');
     if (adminSaveRulesBtn) {
         adminSaveRulesBtn.addEventListener('click', () => {
-            const limit1 = parseInt(document.getElementById('admin-setting-limit1').value, 10) || 0;
-            const limit2 = parseInt(document.getElementById('admin-setting-limit2').value, 10) || 0;
+            const limit1 = parseAmount(document.getElementById('admin-setting-limit1').value);
+            const limit2 = parseAmount(document.getElementById('admin-setting-limit2').value);
             const rate2 = (parseInt(document.getElementById('admin-setting-rate2').value, 10) || 0) / 100;
-            const limit3 = parseInt(document.getElementById('admin-setting-limit3').value, 10) || 0;
+            const limit3 = parseAmount(document.getElementById('admin-setting-limit3').value);
             const rate3 = (parseInt(document.getElementById('admin-setting-rate3').value, 10) || 0) / 100;
-            const deduction4 = parseInt(document.getElementById('admin-setting-deduction4').value, 10) || 0;
+            const deduction4 = parseAmount(document.getElementById('admin-setting-deduction4').value);
             AppState.updateRules({ limit1, limit2, rate2, limit3, rate3, deduction4 });
             alert("정산 구간 및 비율 설정이 저장되어 모든 클럽에 일괄 적용됩니다.");
         });
@@ -2035,7 +2063,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Attendance input change listeners
     prizeInput.addEventListener('input', () => {
-        const prevPrize = parseInt(prizeInput.value, 10) || 0;
+        const prevPrize = parseAmount(prizeInput.value);
         AppState.updateAttendance(AppState.memberCount, prevPrize);
     });
 
@@ -2049,11 +2077,11 @@ document.addEventListener('DOMContentLoaded', () => {
         e.preventDefault();
 
         const description = descInput.value.trim();
-        const amount = parseInt(amountInput.value, 10);
+        const amount = parseAmount(amountInput.value);
         const category = catSelect.value;
         const corpChecked = document.getElementById('expense-corp-check').checked;
         const personalChecked = document.getElementById('expense-personal-check').checked;
-        const corporateAmount = parseInt(document.getElementById('expense-corporate-amount-input').value, 10) || 0;
+        const corporateAmount = parseAmount(document.getElementById('expense-corporate-amount-input').value);
 
         if (description && !isNaN(amount) && amount > 0) {
             AppState.addExpense(description, amount, category, corpChecked, personalChecked, corporateAmount);
@@ -2492,7 +2520,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const selfPayInput = document.getElementById('result-total-self-pay-input');
 
     function applySelfPayChange() {
-        const newValue = parseInt(selfPayInput.value, 10) || 0;
+        const newValue = parseAmount(selfPayInput.value);
         const oldValue = Math.round(AppState.lastCalculatedSelfPay);
         const diff = newValue - oldValue;
 
@@ -3098,13 +3126,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const clubForm = document.getElementById('club-form');
     const clubNameFormInput = document.getElementById('club-name-form-input');
     const clubBudgetFormInput = document.getElementById('club-budget-form-input');
-    const clubPriorUsedFormInput = document.getElementById('club-prior-used-form-input');
     const cancelEditClubBtn = document.getElementById('cancel-edit-club-btn');
     const clubListContainer = document.getElementById('club-list-container');
 
     function renderClubManagement() {
         if (clubTotalBudgetInput) {
-            clubTotalBudgetInput.value = AppState.clubTotalBudget || 0;
+            clubTotalBudgetInput.value = formatAmount(AppState.clubTotalBudget || 0);
         }
 
         const clubs = Object.entries(AppState.clubRegistry || {});
@@ -3145,6 +3172,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     <div style="font-size:0.85rem; font-weight:600; color:${remaining < 0 ? 'var(--warning-text, #ff6b6b)' : 'var(--color-secondary)'};">${SettlementCalculator.formatCurrency(remaining)}</div>
                 </div>
                 <div class="expense-row-right" style="gap:0.4rem; flex:0 0 auto;">
+                    <button class="btn-add-club-budget btn-secondary" data-id="${AppState.escapeHtml(clubId)}" style="padding:0.3rem 0.6rem; font-size:0.78rem;">추가 배정</button>
                     <button class="btn-edit-club btn-secondary" data-id="${AppState.escapeHtml(clubId)}" style="padding:0.3rem 0.6rem; font-size:0.78rem;">수정</button>
                     <button class="btn-delete-club btn-text-danger" data-id="${AppState.escapeHtml(clubId)}" style="padding:0.3rem 0.6rem; font-size:0.78rem;">삭제</button>
                 </div>
@@ -3159,11 +3187,23 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (!club) return;
                 editingClubId = clubId;
                 clubNameFormInput.value = club.name;
-                clubBudgetFormInput.value = club.budget || 0;
-                clubPriorUsedFormInput.value = club.priorUsed || 0;
+                clubBudgetFormInput.value = formatAmount(club.budget || 0);
                 document.getElementById('add-club-btn').innerHTML = `<span class="btn-icon">💾</span> 수정 완료`;
                 cancelEditClubBtn.classList.remove('hidden');
                 clubNameFormInput.focus();
+            });
+        });
+        clubListContainer.querySelectorAll('.btn-add-club-budget').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const clubId = btn.getAttribute('data-id');
+                const club = AppState.clubRegistry[clubId];
+                if (!club) return;
+                openAddClubBudgetModal(club.name, (addAmount) => {
+                    if (addAmount <= 0) return;
+                    const newBudget = (club.budget || 0) + addAmount;
+                    AppState.addOrUpdateClub(clubId, club.name, newBudget, club.priorUsed || 0);
+                    renderClubManagement();
+                });
             });
         });
         clubListContainer.querySelectorAll('.btn-delete-club').forEach(btn => {
@@ -3183,14 +3223,13 @@ document.addEventListener('DOMContentLoaded', () => {
         editingClubId = null;
         clubNameFormInput.value = '';
         clubBudgetFormInput.value = '';
-        clubPriorUsedFormInput.value = '';
         document.getElementById('add-club-btn').innerHTML = `<span class="btn-icon">➕</span> 클럽 추가`;
         cancelEditClubBtn.classList.add('hidden');
     }
 
     if (clubTotalBudgetInput) {
         clubTotalBudgetInput.addEventListener('change', () => {
-            AppState.saveClubTotalBudget(parseInt(clubTotalBudgetInput.value, 10) || 0);
+            AppState.saveClubTotalBudget(parseAmount(clubTotalBudgetInput.value));
             renderClubManagement();
         });
     }
@@ -3198,7 +3237,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const saveClubTotalBudgetBtn = document.getElementById('save-club-total-budget-btn');
     if (saveClubTotalBudgetBtn) {
         saveClubTotalBudgetBtn.addEventListener('click', () => {
-            const value = parseInt(clubTotalBudgetInput.value, 10) || 0;
+            const value = parseAmount(clubTotalBudgetInput.value);
             Promise.resolve(AppState.saveClubTotalBudget(value)).then(() => {
                 renderClubManagement();
                 const statusEl = document.getElementById('club-total-budget-status');
@@ -3217,8 +3256,8 @@ document.addEventListener('DOMContentLoaded', () => {
         clubForm.addEventListener('submit', (e) => {
             e.preventDefault();
             const name = clubNameFormInput.value.trim();
-            const budget = parseInt(clubBudgetFormInput.value, 10) || 0;
-            const priorUsed = parseInt(clubPriorUsedFormInput.value, 10) || 0;
+            const budget = parseAmount(clubBudgetFormInput.value);
+            const priorUsed = (editingClubId && AppState.clubRegistry[editingClubId]) ? (AppState.clubRegistry[editingClubId].priorUsed || 0) : 0;
             if (!name) return;
             const clubId = editingClubId || ('club_' + Date.now());
             AppState.addOrUpdateClub(clubId, name, budget, priorUsed);
@@ -3587,6 +3626,31 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
 // Diff popup notification helper
+// 클럽별 "추가 배정" 금액 입력 팝업
+function openAddClubBudgetModal(clubName, onConfirm) {
+    const modal = document.getElementById('add-club-budget-modal');
+    const titleEl = document.getElementById('add-club-budget-title');
+    const input = document.getElementById('add-club-budget-input');
+    const confirmBtn = document.getElementById('add-club-budget-confirm-btn');
+    const cancelBtn = document.getElementById('add-club-budget-cancel-btn');
+    if (!modal || !input || !confirmBtn || !cancelBtn) return;
+
+    titleEl.textContent = `'${clubName}' 추가 배정 금액`;
+    input.value = '';
+    setupCurrencyInput(input);
+    modal.classList.remove('hidden');
+    input.focus();
+
+    const close = () => modal.classList.add('hidden');
+    const onConfirmClick = () => {
+        const amount = parseAmount(input.value);
+        close();
+        onConfirm(amount);
+    };
+    confirmBtn.onclick = onConfirmClick;
+    cancelBtn.onclick = close;
+}
+
 function showDiffPopup(formula, diff) {
     const popup = document.getElementById('diff-popup');
     const formulaEl = document.getElementById('diff-popup-formula');
@@ -3755,9 +3819,9 @@ function updateCardTypeUI() {
         if (totalRaw === '' && corpRaw === '') {
             personalAmountInput.value = '';
         } else {
-            const total = parseInt(totalRaw, 10) || 0;
-            const corp = parseInt(corpRaw, 10) || 0;
-            personalAmountInput.value = Math.max(total - corp, 0);
+            const total = parseAmount(totalRaw);
+            const corp = parseAmount(corpRaw);
+            personalAmountInput.value = formatAmount(Math.max(total - corp, 0));
         }
     }
 }
