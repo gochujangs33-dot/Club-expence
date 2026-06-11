@@ -370,21 +370,23 @@ select.club-name-input option {
 }
 
 .card-collapse-btn {
-    background: rgba(255, 255, 255, 0.06);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: transparent;
+    border: none;
     color: var(--text-secondary);
-    border-radius: 8px;
-    width: 2rem;
-    height: 2rem;
-    flex: 0 0 auto;
-    font-size: 1rem;
+    font-size: 1.25rem;
     cursor: pointer;
+    padding: 0.35rem;
+    border-radius: 8px;
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     transition: var(--transition-smooth);
 }
 
 .card-collapse-btn:hover {
-    background: rgba(255, 255, 255, 0.12);
-    color: var(--text-primary);
+    color: var(--color-secondary);
+    background: rgba(255, 255, 255, 0.05);
 }
 
 .card.collapsed .card-body {
@@ -395,6 +397,11 @@ select.club-name-input option {
     margin-bottom: 0;
     padding-bottom: 0;
     border-bottom: none;
+}
+
+.card-collapse-btn {
+    transform: rotate(0deg);
+    transition: transform 0.25s ease, color 0.2s ease, background 0.2s ease;
 }
 
 .card.collapsed .card-collapse-btn {
