@@ -83,8 +83,8 @@
                             <label for="event-photo-input" class="btn-secondary" style="margin-left:auto; cursor:pointer; padding:0.35rem 0.75rem; font-size:0.8rem; border-radius:8px; display:inline-flex; align-items:center; gap:0.3rem;">📷 참석자 사진 첨부</label>
                             <input type="file" id="event-photo-input" accept="image/*" style="display:none;">
                         </div>
-                        <div id="event-photo-preview" class="hidden" style="margin-bottom:0.75rem; border-radius:12px; overflow:hidden; max-height:180px; position:relative;">
-                            <img id="event-photo-img" src="" alt="행사 사진" style="width:100%; object-fit:cover; max-height:180px; display:block; border-radius:12px;">
+                        <div id="event-photo-preview" class="hidden" style="margin-bottom:0.75rem; border-radius:12px; overflow:hidden; max-height:240px; position:relative; background:rgba(15,23,42,0.6); display:flex; align-items:center; justify-content:center;">
+                            <img id="event-photo-img" src="" alt="행사 사진" style="width:100%; max-height:240px; object-fit:contain; display:block; border-radius:12px;">
                             <button id="delete-event-photo-btn" style="position:absolute; top:6px; right:6px; background:rgba(239,68,68,0.9); border:none; color:white; border-radius:50%; width:24px; height:24px; font-size:14px; cursor:pointer; display:flex; align-items:center; justify-content:center; font-weight:bold;">&times;</button>
                         </div>
                         <div class="card-body">
@@ -733,8 +733,8 @@
                 <div class="input-group">
                     <label for="feedback-photo-input" class="btn-secondary" style="cursor:pointer; display:inline-flex; align-items:center; gap:0.3rem; padding:0.4rem 0.8rem; font-size:0.85rem; border-radius:8px;">📷 사진 첨부</label>
                     <input type="file" id="feedback-photo-input" accept="image/*" style="display:none;">
-                    <div id="feedback-photo-preview" class="hidden" style="margin-top:0.6rem; border-radius:12px; overflow:hidden; max-height:200px; position:relative;">
-                        <img id="feedback-photo-img" src="" alt="첨부 사진" style="width:100%; object-fit:cover; max-height:200px; display:block; border-radius:12px;">
+                    <div id="feedback-photo-preview" class="hidden" style="margin-top:0.6rem; border-radius:12px; overflow:hidden; max-height:240px; position:relative; background:rgba(15,23,42,0.6); display:flex; align-items:center; justify-content:center;">
+                        <img id="feedback-photo-img" src="" alt="첨부 사진" style="width:100%; max-height:240px; object-fit:contain; display:block; border-radius:12px;">
                         <button id="feedback-photo-remove-btn" type="button" style="position:absolute; top:6px; right:6px; background:rgba(239,68,68,0.9); border:none; color:white; border-radius:50%; width:24px; height:24px; font-size:14px; cursor:pointer; display:flex; align-items:center; justify-content:center; font-weight:bold;">&times;</button>
                     </div>
                 </div>

@@ -1033,9 +1033,10 @@ select {
 
 /* Receipt Thumbnail Styling */
 .receipt-thumbnail {
-    width: 40px;
-    height: 40px;
-    object-fit: cover;
+    width: 44px;
+    height: 44px;
+    object-fit: contain;
+    background: rgba(15, 23, 42, 0.6);
     border-radius: 8px;
     cursor: pointer;
     border: 1px solid var(--card-border);
