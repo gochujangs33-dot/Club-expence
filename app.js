@@ -1723,8 +1723,8 @@ const AppState = {
             }
         });
 
-        // Update used budget
-        this.usedBudget = Math.max(0, this.usedBudget + result.finalSupportAmount);
+        // Update used budget (사용자가 수정한 자부담 기준 실제 지원금과 동일한 값 사용)
+        this.usedBudget = Math.max(0, this.usedBudget + newHistoryItem.finalSupportAmount);
 
         // Reset current session
         this.expenseItems = [];
@@ -2608,6 +2608,23 @@ document.addEventListener('DOMContentLoaded', () => {
         const totalCost = AppState.expenseItems.reduce((sum, item) => sum + item.amount, 0);
         const ratio = totalCost > 0 ? newValue / totalCost : 0;
         document.getElementById('result-self-pay-ratio').textContent = `${(ratio * 100).toFixed(1)}%`;
+
+        // 최종 지원금 = 총 소요 비용 - 실제 자부담 (CALCULATION_SPEC.md 4번)
+        const finalSupport = totalCost - newValue;
+        document.getElementById('result-final-support').textContent = SettlementCalculator.formatCurrency(finalSupport);
+
+        // 이번 최종 지원금 / 이후 잔여 예산 갱신 (이전 잔여 예산은 현재 정산과 무관하므로 그대로 유지)
+        if (AppState.annualBudget > 0) {
+            const prevRemaining = AppState.annualBudget - AppState.usedBudget;
+            const afterRemaining = prevRemaining - finalSupport;
+            const supportSubEl = document.getElementById('result-this-support-sub');
+            const afterRemainingEl = document.getElementById('result-after-remaining');
+            if (supportSubEl) supportSubEl.textContent = SettlementCalculator.formatCurrency(finalSupport);
+            if (afterRemainingEl) {
+                afterRemainingEl.textContent = SettlementCalculator.formatCurrency(afterRemaining);
+                afterRemainingEl.style.color = afterRemaining >= 0 ? 'var(--color-secondary)' : 'var(--warning-text)';
+            }
+        }
     }
 
     if (selfPayInput) {
