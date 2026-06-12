@@ -784,6 +784,18 @@
         </div>
     </div>
 
+    <!-- Excel Saved Confirmation Modal -->
+    <div id="excel-saved-modal" class="modal hidden">
+        <div class="modal-content-card card" style="max-width: 340px; width: 90%; background: var(--bg-dark); border: 1px solid var(--card-border); margin: auto; text-align: center; padding: 1.5rem;">
+            <p style="font-size: 1.05rem; font-weight: 600; margin-bottom: 0.4rem;">저장이 완료되었습니다.</p>
+            <p style="font-size: 0.92rem; color: var(--text-secondary); margin-bottom: 1.25rem;">화면을 초기화하시겠습니까?</p>
+            <div style="display: flex; gap: 0.75rem; justify-content: center;">
+                <button id="excel-saved-reset-btn" class="btn-primary-sm" style="padding: 0.6rem 1.5rem; font-size: 0.9rem;">예, 초기화</button>
+                <button id="excel-saved-keep-btn" class="btn-secondary" style="padding: 0.6rem 1.5rem; font-size: 0.9rem;">아니요</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Diff Popup Notification -->
     <div id="diff-popup" class="diff-popup hidden">
         <span class="diff-popup-label">자부담 변경 내역</span>

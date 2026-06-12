@@ -1674,8 +1674,8 @@ const AppState = {
         }
     },
 
-    finalizeSettlement() {
-        if (!confirm("정산을 확정하시겠습니까?\n확정하면 현재 비용 및 참석자 데이터가 초기화됩니다.")) return;
+    finalizeSettlement(skipConfirm = false) {
+        if (!skipConfirm && !confirm("정산을 확정하시겠습니까?\n확정하면 현재 비용 및 참석자 데이터가 초기화됩니다.")) return;
 
         const result = SettlementCalculator.calculate(
             this.memberCount, this.expenseItems, this.previousPrizeTotal, this.rules
@@ -2277,8 +2277,8 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    function runFinalizeSettlement() {
-        AppState.finalizeSettlement();
+    function runFinalizeSettlement(skipConfirm = false) {
+        AppState.finalizeSettlement(skipConfirm);
         if (emailReportModal) emailReportModal.classList.add('hidden');
         // Reset form UI state
         document.getElementById('expense-desc-input').value = '';
@@ -2311,6 +2311,8 @@ document.addEventListener('DOMContentLoaded', () => {
             try {
                 await AppState.downloadExcelOnly();
                 downloadExcelBtn.innerHTML = "<span class='btn-icon'>✓</span> 다운로드 완료!";
+                const excelSavedModal = document.getElementById('excel-saved-modal');
+                if (excelSavedModal) excelSavedModal.classList.remove('hidden');
             } catch (err) {
                 console.error(err);
                 downloadExcelBtn.innerHTML = "<span class='btn-icon'>❌</span> 다운로드 실패";
@@ -2320,6 +2322,22 @@ document.addEventListener('DOMContentLoaded', () => {
                     downloadExcelBtn.disabled = false;
                 }, 2000);
             }
+        });
+    }
+
+    // 엑셀 저장 완료 후 화면 초기화 여부 확인 모달
+    const excelSavedModal = document.getElementById('excel-saved-modal');
+    const excelSavedResetBtn = document.getElementById('excel-saved-reset-btn');
+    const excelSavedKeepBtn = document.getElementById('excel-saved-keep-btn');
+    if (excelSavedResetBtn) {
+        excelSavedResetBtn.addEventListener('click', () => {
+            excelSavedModal.classList.add('hidden');
+            runFinalizeSettlement(true);
+        });
+    }
+    if (excelSavedKeepBtn) {
+        excelSavedKeepBtn.addEventListener('click', () => {
+            excelSavedModal.classList.add('hidden');
         });
     }
 
