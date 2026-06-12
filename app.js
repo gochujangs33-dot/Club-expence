@@ -2938,9 +2938,9 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // Admin Dashboard Statistics and Searching
-    const adminSearchInput = document.getElementById('admin-search-input');
-    if (adminSearchInput) {
-        adminSearchInput.addEventListener('input', () => {
+    const adminUserSelect = document.getElementById('admin-user-select');
+    if (adminUserSelect) {
+        adminUserSelect.addEventListener('change', () => {
             renderAdminHistory(lastHistoryList);
         });
     }
@@ -3718,23 +3718,40 @@ document.addEventListener('DOMContentLoaded', () => {
         renderSelfPayTrendChart(historyList);
     }
 
+    // 클럽별 정산이력 탭 - 정산인(사용자) 선택 드롭다운 (선택된 클럽 기준, 사용자가 2명 이상일 때만 표시)
+    function renderAdminUserSelect(historyList, selectedClub) {
+        const select = document.getElementById('admin-user-select');
+        const group = document.getElementById('admin-user-select-group');
+        if (!select || !group) return;
+        const current = select.value;
+        const scoped = selectedClub
+            ? (historyList || []).filter(e => (e.clubName || '기본 클럽') === selectedClub)
+            : (historyList || []);
+        const names = [...new Set(scoped.map(e => e.creatorName).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+        if (names.length <= 1) {
+            group.classList.add('hidden');
+            select.innerHTML = `<option value="">전체 사용자</option>`;
+            select.value = '';
+            return;
+        }
+        group.classList.remove('hidden');
+        select.innerHTML = `<option value="">전체 사용자</option>` +
+            names.map(n => `<option value="${AppState.escapeHtml(n)}">${AppState.escapeHtml(n)}</option>`).join('');
+        select.value = names.includes(current) ? current : '';
+    }
+
     function renderAdminHistory(historyList) {
         const container = document.getElementById('admin-history-container');
-        const searchVal = (document.getElementById('admin-search-input').value || '').trim().toLowerCase();
         const clubSelect = document.getElementById('club-history-select');
         const selectedClub = clubSelect ? clubSelect.value : '';
+        renderAdminUserSelect(historyList, selectedClub);
+        const userSelect = document.getElementById('admin-user-select');
+        const selectedUser = userSelect ? userSelect.value : '';
         container.innerHTML = '';
 
         let filtered = historyList.filter(entry => {
-            if (!searchVal) return true;
-
-            // Search creator name
-            if (entry.creatorName && entry.creatorName.toLowerCase().includes(searchVal)) return true;
-
-            // Search attendees list
-            if (entry.attendees && entry.attendees.some(att => att.name && att.name.toLowerCase().includes(searchVal))) return true;
-
-            return false;
+            if (!selectedUser) return true;
+            return entry.creatorName === selectedUser;
         });
 
         if (selectedClub) {
