@@ -2578,8 +2578,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function applySelfPayChange() {
         const newValue = parseAmount(selfPayInput.value);
-        const oldValue = Math.round(AppState.lastCalculatedSelfPay);
-        const diff = newValue - oldValue;
+        // 차액은 항상 "자동 계산된 최소 자부담(totalSelfPay)" 대비로 계산 (CALCULATION_SPEC.md L25 규칙과 동일)
+        const minSelfPay = Math.round(SettlementCalculator.calculate(
+            AppState.memberCount,
+            AppState.expenseItems,
+            AppState.previousPrizeTotal,
+            AppState.rules
+        ).totalSelfPay);
+        const diff = newValue - minSelfPay;
 
         const absDiff = Math.abs(diff).toLocaleString();
         const popupMsg = diff >= 0
