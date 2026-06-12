@@ -284,6 +284,30 @@ const AppState = {
         return added;
     },
 
+    // 명부의 "올해 누적 참석 횟수"를 본인 정산 이력(올해분)만 기준으로 다시 계산
+    // — 과거 동기화 실험(v1.6.69~73) 등으로 남은 잘못된 카운트를 매 로그인 시 자동 교정
+    recalculateDirectoryCounts() {
+        const currentYear = new Date().getFullYear();
+        Object.keys(this.directory).forEach(name => {
+            const entry = this.directory[name];
+            if (typeof entry === 'object') entry.count = 0;
+            else this.directory[name] = { id: entry, count: 0 };
+        });
+        (this.settlementHistory || []).forEach(entry => {
+            const d = entry.date ? new Date(entry.date) : new Date(entry.id);
+            if (d.getFullYear() !== currentYear) return;
+            (entry.attendees || []).forEach(att => {
+                if (!att.name) return;
+                const cur = this.directory[att.name];
+                if (cur) {
+                    cur.count = (cur.count || 0) + 1;
+                } else {
+                    this.directory[att.name] = { id: att.employeeId, count: 1 };
+                }
+            });
+        });
+    },
+
     save() {
         // 1. 로컬 백업 저장 (오프라인 상태 대비)
         try {
@@ -359,7 +383,11 @@ const AppState = {
                     .then(res => res.json())
                     .then(list => this.bulkImportDirectory(list))
                     .catch(err => console.error("전사원 명부 자동 등록 실패:", err))
-                    .finally(() => resolve(true));
+                    .finally(() => {
+                        this.recalculateDirectoryCounts();
+                        this.save();
+                        resolve(true);
+                    });
                 return;
             }
 
@@ -430,7 +458,11 @@ const AppState = {
                                 .then(res => res.json())
                                 .then(list => this.bulkImportDirectory(list))
                                 .catch(err => console.error("전사원 명부 자동 등록 실패:", err))
-                                .finally(() => resolve(true));
+                                .finally(() => {
+                                    this.recalculateDirectoryCounts();
+                                    this.save();
+                                    resolve(true);
+                                });
                         })
                         .catch(err => reject(err));
                 })
@@ -1711,17 +1743,8 @@ const AppState = {
                 .catch(err => console.error("Global history push failed:", err));
         }
 
-        // Increment directory count for all current attendees
-        this.attendees.forEach(att => {
-            if (this.directory[att.name]) {
-                const cur = this.directory[att.name];
-                const curId = typeof cur === 'object' ? cur.id : cur;
-                const curCount = typeof cur === 'object' ? (cur.count || 0) : 0;
-                this.directory[att.name] = { id: curId, count: curCount + 1 };
-            } else {
-                this.directory[att.name] = { id: att.employeeId, count: 1 };
-            }
-        });
+        // 명부 누적 카운트는 정산 이력 기준으로 재계산 (잘못된 잔여 카운트가 누적되지 않도록)
+        this.recalculateDirectoryCounts();
 
         // Update used budget (사용자가 수정한 자부담 기준 실제 지원금과 동일한 값 사용)
         this.usedBudget = Math.max(0, this.usedBudget + newHistoryItem.finalSupportAmount);
