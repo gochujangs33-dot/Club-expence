@@ -63,7 +63,10 @@
                 <span id="login-status-badge" class="badge-offline" data-i18n="header.offline">📴 오프라인 모드 (기기 저장)</span>
                 <button id="header-logout-btn" class="btn-text" data-i18n="header.logout" style="font-size: 0.78rem; display: none; padding: 0.2rem 0.5rem; border-radius: 6px; background: rgba(255, 255, 255, 0.05);">로그아웃</button>
                 <button id="header-login-btn" class="btn-text" data-i18n="header.login" style="font-size: 0.78rem; padding: 0.2rem 0.5rem; border-radius: 6px; background: rgba(255, 255, 255, 0.05);">로그인</button>
-                <button id="lang-toggle-btn" class="btn-text" data-i18n="header.lang" style="font-size: 0.78rem; padding: 0.2rem 0.5rem; border-radius: 6px; background: rgba(255, 255, 255, 0.05); font-weight: 600;">ENG</button>
+                <select id="lang-select" style="font-size: 0.78rem; padding: 0.2rem 0.4rem; border-radius: 6px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.15); color: var(--text-primary); cursor: pointer;">
+                    <option value="ko">한국어</option>
+                    <option value="en">English</option>
+                </select>
             </div>
         </header>
         <!-- Tab Navigation -->
@@ -196,8 +199,7 @@
                                     <span class="card-icon">📋</span>
                                     <h2>비용 목록</h2>
                                 </div>
-                                <button id="reset-session-btn" class="btn-text-danger" data-i18n="btn.reset_session" style="margin-right:0.25rem;">🔄 현재 정산 초기화</button>
-                <button id="clear-all-btn" class="btn-text-danger" data-i18n="btn.clear_all">모두 삭제</button>
+                                <button id="reset-session-btn" class="btn-text-danger" data-i18n="btn.reset_session">🔄 정산 초기화</button>
                             </div>
                         </div>
                         <div class="card-body scroll-y">

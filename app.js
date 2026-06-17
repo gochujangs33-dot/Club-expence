@@ -492,7 +492,7 @@ const AppState = {
                     }
                 }
                 // 클럽 드롭다운 갱신
-                if (typeof renderClubOptions === 'function') renderClubOptions();
+                if (typeof window._onClubRegistryUpdate === 'function') window._onClubRegistryUpdate();
                 resolve();
             }, err => {
                 console.error("클럽 레지스트리 로딩 실패:", err);
@@ -1804,12 +1804,12 @@ document.addEventListener('DOMContentLoaded', () => {
     // 언어 설정 초기 적용
     if (typeof applyTranslations === 'function') applyTranslations();
 
-    // 언어 토글 버튼
-    const langToggleBtn = document.getElementById('lang-toggle-btn');
-    if (langToggleBtn) {
-        langToggleBtn.addEventListener('click', () => {
-            const next = getLang() === 'ko' ? 'en' : 'ko';
-            setLang(next);
+    // 언어 선택 드롭다운
+    const langSelect = document.getElementById('lang-select');
+    if (langSelect) {
+        langSelect.value = getLang();
+        langSelect.addEventListener('change', () => {
+            setLang(langSelect.value);
             if (typeof AppState !== 'undefined' && AppState.isLoggedIn) AppState.render();
         });
     }
@@ -1900,6 +1900,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const newClubInputRow = document.getElementById('new-club-input-row');
     const newClubNameInput = document.getElementById('new-club-name-input');
     const registerNewClubBtn = document.getElementById('register-new-club-btn');
+
+    // 클럽 레지스트리 실시간 업데이트 콜백 (loadClubRegistry의 on('value') 리스너에서 호출)
+    window._onClubRegistryUpdate = () => {
+        renderClubOptions();
+        if (typeof renderClubManagement === 'function') renderClubManagement();
+        if (typeof renderClubHistorySelect === 'function') renderClubHistorySelect();
+    };
 
     if (clubNameInput) {
         renderClubOptions();
