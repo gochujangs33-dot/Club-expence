@@ -592,6 +592,8 @@ const AppState = {
 
     clearAll() {
         this.expenseItems = [];
+        this.attendees = [];
+        this.memberCount = 0;
         this.cancelEdit();
         this.save();
         this.render();
