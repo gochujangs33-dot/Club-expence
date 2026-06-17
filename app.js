@@ -489,7 +489,16 @@ const AppState = {
                         // 관리자가 이름 변경 시 자동 갱신
                         const updatedName = this.clubRegistry[this.clubId].name;
                         if (updatedName && updatedName !== this.clubName) {
+                            const prevName = this.clubName;
                             this.clubName = updatedName;
+                            // 메모리 내 정산 이력도 즉시 반영 (Firebase 갱신은 renameClubInHistory가 처리)
+                            if (this.settlementHistory) {
+                                this.settlementHistory.forEach(entry => {
+                                    if (entry && ((entry.clubId && entry.clubId === this.clubId) || (!entry.clubId && entry.clubName === prevName))) {
+                                        entry.clubName = updatedName;
+                                    }
+                                });
+                            }
                             this.save();
                         }
                     } else {
@@ -538,6 +547,50 @@ const AppState = {
     deleteClub(clubId) {
         delete this.clubRegistry[clubId];
         this.saveClubRegistry();
+    },
+
+    // 클럽명 변경 시 globalHistory + 모든 유저 settlementHistory의 clubName 일괄 갱신
+    async renameClubInHistory(clubId, oldName, newName) {
+        if (!this.firebaseDb || !oldName || !newName || oldName === newName) return;
+        try {
+            const updates = {};
+
+            // globalHistory 갱신 (관리자 이력 탭 기준)
+            const histSnap = await this.firebaseDb.ref('globalHistory').once('value');
+            histSnap.forEach(child => {
+                const entry = child.val();
+                if (!entry) return;
+                const matchById = clubId && entry.clubId === clubId;
+                const matchByName = !entry.clubId && entry.clubName === oldName;
+                if (matchById || matchByName) {
+                    updates[`globalHistory/${child.key}/clubName`] = newName;
+                    if (clubId && !entry.clubId) updates[`globalHistory/${child.key}/clubId`] = clubId;
+                }
+            });
+
+            // 각 유저의 개인 settlementHistory 갱신
+            const settleSnap = await this.firebaseDb.ref('settlements').once('value');
+            settleSnap.forEach(pinChild => {
+                const pinData = pinChild.val();
+                if (!pinData || !Array.isArray(pinData.settlementHistory)) return;
+                pinData.settlementHistory.forEach((entry, idx) => {
+                    if (!entry) return;
+                    const matchById = clubId && entry.clubId === clubId;
+                    const matchByName = !entry.clubId && entry.clubName === oldName;
+                    if (matchById || matchByName) {
+                        updates[`settlements/${pinChild.key}/settlementHistory/${idx}/clubName`] = newName;
+                        if (clubId && !entry.clubId) updates[`settlements/${pinChild.key}/settlementHistory/${idx}/clubId`] = clubId;
+                    }
+                });
+            });
+
+            if (Object.keys(updates).length > 0) {
+                await this.firebaseDb.ref().update(updates);
+                console.log(`클럽명 이력 갱신: "${oldName}" → "${newName}" (${Object.keys(updates).length}건)`);
+            }
+        } catch (err) {
+            console.error('클럽명 이력 갱신 실패:', err);
+        }
     },
 
     // 선택된 클럽의 배정 예산을 현재 사용자의 "올해 클럽 지원 총예산"에 동기화
@@ -1762,6 +1815,7 @@ const AppState = {
             creatorPin: this.currentPin || "offline",
             creatorName: this.userName || "오프라인 사용자",
             clubName: this.clubName || "기본 클럽",
+            clubId: this.clubId || '',
             memberCount: this.memberCount,
             totalCost: result.totalCost,
             finalSupportAmount: result.totalCost - finalTotalSelfPay,
@@ -3500,7 +3554,14 @@ document.addEventListener('DOMContentLoaded', () => {
             const priorUsed = (editingClubId && AppState.clubRegistry[editingClubId]) ? (AppState.clubRegistry[editingClubId].priorUsed || 0) : 0;
             if (!name) return;
             const clubId = editingClubId || ('club_' + Date.now());
+
+            // 이름이 실제로 변경된 경우에만 이력 소급 갱신
+            const oldName = (editingClubId && AppState.clubRegistry[editingClubId]) ? AppState.clubRegistry[editingClubId].name : null;
             AppState.addOrUpdateClub(clubId, name, budget, priorUsed);
+            if (oldName && oldName !== name) {
+                AppState.renameClubInHistory(clubId, oldName, name);
+            }
+
             resetClubForm();
             renderClubManagement();
         });
