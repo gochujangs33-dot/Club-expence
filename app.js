@@ -625,12 +625,42 @@ const AppState = {
     },
 
     // 선택된 클럽의 배정 예산을 현재 사용자의 "올해 클럽 지원 총예산"에 동기화
+    // 클럽 레지스트리에서 현재 선택 클럽의 예산을 직접 조회 (항상 관리자 설정값 기준)
+    getClubBudget() {
+        if (this.clubId && this.clubRegistry[this.clubId]) {
+            return this.clubRegistry[this.clubId].budget || 0;
+        }
+        if (this.clubName) {
+            const club = Object.values(this.clubRegistry).find(c => c.name === this.clubName);
+            if (club) return club.budget || 0;
+        }
+        return 0;
+    },
+
+    // 현재 연도 내 이 클럽의 정산 이력 합산으로 실제 사용금액 계산
+    getClubUsedBudget() {
+        const currentYear = new Date().getFullYear();
+        const priorUsed = (() => {
+            if (this.clubId && this.clubRegistry[this.clubId]) return this.clubRegistry[this.clubId].priorUsed || 0;
+            const club = Object.values(this.clubRegistry).find(c => c.name === this.clubName);
+            return club ? (club.priorUsed || 0) : 0;
+        })();
+        const fromHistory = (this.settlementHistory || [])
+            .filter(e => {
+                if (!e || !e.date) return false;
+                const year = new Date(e.date).getFullYear();
+                if (year !== currentYear) return false;
+                if (this.clubId) return e.clubId === this.clubId || e.clubName === this.clubName;
+                return e.clubName === this.clubName;
+            })
+            .reduce((sum, e) => sum + (e.finalSupportAmount || 0), 0);
+        return priorUsed + fromHistory;
+    },
+
     syncBudgetFromClub(clubName) {
         const club = Object.values(this.clubRegistry).find(c => c.name === clubName);
         if (club) {
             this.annualBudget = club.budget;
-            // usedBudget이 0이면 관리자가 설정한 priorUsed로 초기화
-            // (클럽 전환 시 호출 전에 usedBudget=0으로 리셋하므로 항상 적용됨)
             if (this.usedBudget === 0) {
                 this.usedBudget = club.priorUsed || 0;
             }
@@ -1035,11 +1065,14 @@ const AppState = {
         document.getElementById('result-prize-cost').textContent = SettlementCalculator.formatCurrency(result.prizeCost);
         document.getElementById('result-per-person-event-cost').textContent = SettlementCalculator.formatCurrency(result.perPersonEventCost);
 
+        const clubBudget = this.getClubBudget();
+        const clubUsed = this.getClubUsedBudget();
+
         const remainingBudgetRow = document.getElementById('result-club-remaining-budget');
         if (remainingBudgetRow) {
-            if (this.annualBudget > 0) {
+            if (clubBudget > 0) {
                 remainingBudgetRow.closest('.detail-row').classList.remove('hidden');
-                const remaining = this.annualBudget - this.usedBudget;
+                const remaining = clubBudget - clubUsed;
                 remainingBudgetRow.textContent = SettlementCalculator.formatCurrency(remaining);
                 remainingBudgetRow.style.color = remaining < 0 ? 'var(--warning-text)' : 'var(--color-secondary)';
             } else {
@@ -1050,8 +1083,8 @@ const AppState = {
         // Budget remaining calculation
         const budgetSection = document.getElementById('budget-result-section');
         if (budgetSection) {
-            if (this.annualBudget > 0) {
-                const prevRemaining = this.annualBudget - this.usedBudget;
+            if (clubBudget > 0) {
+                const prevRemaining = clubBudget - clubUsed;
                 const afterRemaining = prevRemaining - result.finalSupportAmount;
                 budgetSection.classList.remove('hidden');
                 document.getElementById('result-prev-remaining').textContent = SettlementCalculator.formatCurrency(prevRemaining);
@@ -2231,8 +2264,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const setSettingsFormValues = (rules) => {
         const annualInput = document.getElementById('setting-annual-budget');
         const usedInput = document.getElementById('setting-used-budget');
-        if (annualInput) annualInput.value = AppState.annualBudget;
-        if (usedInput) usedInput.value = formatAmount(AppState.usedBudget);
+        if (annualInput) annualInput.value = formatAmount(AppState.getClubBudget());
+        if (usedInput) usedInput.value = formatAmount(AppState.getClubUsedBudget());
         if (typeof updateRemainingDisplay === 'function') {
             updateRemainingDisplay();
         }
@@ -2412,10 +2445,8 @@ document.addEventListener('DOMContentLoaded', () => {
         panel.classList.toggle('hidden');
     });
 
-    // Save settings handler
+    // Save settings handler (usedBudget은 정산 이력에서 자동 계산되므로 저장 불필요)
     document.getElementById('save-settings-btn').addEventListener('click', () => {
-        const usedBudget = parseAmount(document.getElementById('setting-used-budget').value);
-        AppState.usedBudget = usedBudget;
         AppState.save();
         AppState.render();
         if (typeof updateRemainingDisplay === 'function') updateRemainingDisplay();
@@ -2716,20 +2747,27 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function updateRemainingDisplay() {
-        const annual = parseInt(annualBudgetInput.value, 10) || 0;
-        const used = parseInt(usedBudgetInput.value, 10) || 0;
+        // 항상 관리자 설정 기준 예산 사용 (입력란 값이 아닌 registry 직접 조회)
+        const annual = AppState.getClubBudget();
+        const used = AppState.getClubUsedBudget();
+        if (annualBudgetInput) annualBudgetInput.value = formatAmount(annual);
+        if (usedBudgetInput) usedBudgetInput.value = formatAmount(used);
         if (annual > 0) {
             const rem = annual - used;
-            remainingDisplay.textContent = SettlementCalculator.formatCurrency(rem);
-            remainingDisplay.style.color = rem >= 0 ? 'var(--color-secondary)' : 'var(--warning-text)';
+            if (remainingDisplay) {
+                remainingDisplay.textContent = SettlementCalculator.formatCurrency(rem);
+                remainingDisplay.style.color = rem >= 0 ? 'var(--color-secondary)' : 'var(--warning-text)';
+            }
         } else {
-            remainingDisplay.textContent = '미설정';
-            remainingDisplay.style.color = '';
+            if (remainingDisplay) {
+                remainingDisplay.textContent = '미설정';
+                remainingDisplay.style.color = '';
+            }
         }
     }
 
     if (annualBudgetInput) {
-        annualBudgetInput.value = AppState.annualBudget;
+        annualBudgetInput.value = formatAmount(AppState.getClubBudget());
         annualBudgetInput.addEventListener('input', updateRemainingDisplay);
     }
     if (usedBudgetInput) {

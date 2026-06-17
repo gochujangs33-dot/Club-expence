@@ -236,9 +236,9 @@
                                     <small class="input-hint" data-i18n="hint.annual_budget">💡 관리자 대시보드의 클럽 관리에서 선택한 클럽에 배정한 예산이 자동으로 표시됩니다.</small>
                                 </div>
                                 <div class="input-group">
-                                    <label for="setting-used-budget" data-i18n="label.used_budget">기존에 사용한 누적 금액 (원)</label>
-                                    <input type="text" inputmode="numeric" id="setting-used-budget" value="0">
-                                    <small class="input-hint" data-i18n="hint.used_budget">💡 이전에 이미 사용한 비용을 한 번에 입력하면, 현재 시점부터 이어서 정산을 진행할 수 있습니다.</small>
+                                    <label for="setting-used-budget" data-i18n="label.used_budget">올해 누적 사용 금액 (원)</label>
+                                    <input type="text" inputmode="numeric" id="setting-used-budget" value="0" readonly class="readonly-input">
+                                    <small class="input-hint" data-i18n="hint.used_budget">💡 이번 연도 정산 이력 합산 + 관리자가 설정한 이전 사용 금액 기준으로 자동 계산됩니다.</small>
                                 </div>
                                 <div style="display:flex; justify-content:space-between; align-items:center; padding:0.35rem 0 0;">
                                     <span data-i18n="label.remaining_display" style="font-size:0.82rem; color:var(--text-secondary);">→ 현재 잔여 예산</span>
