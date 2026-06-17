@@ -1,3 +1,103 @@
+# 변경 사항 정리
+
+---
+
+## v1.6.83 — UI 정리 / 실시간 클럽 동기화 기반 구축
+
+### 변경 내용
+- "현재 정산 초기화" 버튼 라벨 → "정산 초기화"로 단축.
+- 정산 이력 탭의 "모두 삭제" 버튼 제거 (관리자 탭에서 개별 삭제하는 방식으로 통일).
+- 언어 전환 UI를 `<button>` 토글 → `<select>` 드롭다운으로 변경.
+- `window._onClubRegistryUpdate` 전역 콜백 도입:
+  `loadClubRegistry()`의 `.on('value')` 리스너가 갱신될 때마다
+  `renderClubOptions()`, `renderClubManagement()`, `renderClubHistorySelect()`를 일괄 호출해
+  관리자·유저 화면 클럽 목록이 실시간으로 동기화되도록 기반 마련.
+
+---
+
+## v1.6.84 — 숫자 입력 불가 긴급 수정
+
+### 원인
+- v1.6.83에서 `#clear-all-btn` 버튼을 HTML에서 제거했는데,
+  `app.js`의 `DOMContentLoaded` 핸들러에서 해당 요소에 `.addEventListener()`를 호출하고 있었음.
+- `null.addEventListener()` → `TypeError` 발생 → 이후 모든 이벤트 리스너(PIN 키패드, 금액 입력 등) 등록 실패.
+
+### 수정
+- `app.js`에서 `clear-all-btn` 이벤트 리스너 코드 완전 제거.
+
+---
+
+## v1.6.85 — 한국어/영어 전체 번역 지원
+
+### 어떻게?
+- `lib/i18n.js` 전면 재작성: `TRANSLATIONS.ko` / `TRANSLATIONS.en` 약 150개 키 정의.
+  - 커버 범위: 헤더, 탭, 로그인/회원가입 모달, 정산 탭, 설정 패널, 참석자 탭, 명부 탭,
+    이력 탭, 클럽별 이력 탭, 차트, 관리자 화면, 이메일·피드백·팝업·엑셀저장·초기화 모달 전체.
+- `index.html` 전체 정적 요소에 `data-i18n` / `data-i18n-ph` / `data-i18n-title` 속성 부여.
+- `applyTranslations()` 함수에 특수 처리 추가:
+  - 탭 버튼의 동적 카운트 `<span>`을 innerHTML 재구성 방식으로 보존.
+  - 카테고리 `<select>` 옵션, 클럽/관리자 선택 첫 번째 옵션 텍스트 갱신.
+- 로그인 페이지에 `#login-lang-select` 드롭다운 추가.
+- 동적으로 렌더링되는 텍스트(빈 상태 안내, 이력 카드 레이블 등)는 `t(key)` 함수로 출력.
+
+---
+
+## v1.6.86 — 언어 선택: 로그인 페이지 전용 / 전체 UI 즉시 갱신
+
+### 변경 내용
+- 헤더에 있던 `#lang-select` 드롭다운 제거
+  (로그인 이후 화면에서는 언어 전환 불필요, full-width 표시 버그도 해소).
+- 언어 변경 시 전체 UI 즉시 갱신 흐름 확립:
+  `setLang()` → `AppState.render()` → `applyTranslations()`
+  — `render()` 끝에서 `applyTranslations()`를 항상 호출해 동적 콘텐츠까지 반영.
+
+---
+
+## v1.6.87 — 클럽명 실시간 동기화 수정 + 삭제 팝업
+
+### 문제
+- 유저가 `register-new-club-btn`으로 클럽을 직접 등록할 때
+  `AppState.clubId`가 저장되지 않아, 이후 관리자가 클럽명을 수정해도 유저 화면에 반영되지 않았음.
+- `renderClubOptions()`가 레지스트리에 없는 구 클럽명을 phantom option으로 추가해
+  삭제된 클럽이 드롭다운에 계속 표시되는 문제.
+
+### 수정
+1. **`register-new-club-btn` 핸들러**: 신규 클럽 생성 시 `AppState.clubId = newClubId` 저장.
+   동일 이름 클럽이 이미 레지스트리에 있으면 기존 `clubId`를 재사용.
+2. **`loadClubRegistry()` `.on('value')` 콜백**:
+   - `clubId`가 있고 레지스트리에 존재 → 이름 변경 감지 시 `AppState.clubName` 즉시 갱신.
+   - `clubId`가 있는데 레지스트리에 없음(삭제) → `clubName` / `clubId` 초기화 후 팝업 표시.
+3. **`renderClubOptions()`**: phantom option 로직 제거. 레지스트리 기준으로만 렌더링.
+   `clubId` 기준으로 현재 선택 클럽명 갱신, 없으면 초기화 + 팝업.
+4. **`#club-not-found-modal`** 추가 (`index.html`):
+   "기존 클럽이 삭제되었습니다. 클럽을 새로 선택해 주세요." 안내 후 확인 버튼으로 닫기.
+5. `window.showClubNotFoundModal` 전역 등록 — `AppState` 내부에서도 호출 가능.
+
+---
+
+## v1.6.88 — 관리자 클럽명 변경 시 기존 정산 이력 소급 갱신
+
+### 문제
+- 관리자가 클럽명을 수정해도 과거 정산 이력의 `clubName` 필드는 변경 전 이름 그대로 남아,
+  관리자 "클럽별 정산이력" 탭에서 구 이름으로 표시되었음.
+
+### 수정
+1. **`newHistoryItem`에 `clubId` 필드 추가** (`finalizeSettlement`):
+   신규 정산부터 `clubId`가 이력에 저장되어 이름 변경 추적이 가능해짐.
+
+2. **`AppState.renameClubInHistory(clubId, oldName, newName)` 메서드 추가**:
+   - `globalHistory` 전체 스캔 → `clubId` 일치 또는 (기존 이력이라 `clubId` 없는 경우) `clubName` 일치 항목의 `clubName`을 새 이름으로 일괄 갱신.
+   - `settlements/모든PIN/settlementHistory` 전체 스캔 → 동일 조건으로 개인 이력도 갱신.
+   - Firebase 다중 경로 업데이트(`ref().update(updates)`)로 단일 트랜잭션 처리.
+
+3. **관리자 클럽 폼 submit 핸들러**:
+   `addOrUpdateClub()` 호출 전 구 이름을 저장, 이름이 실제로 변경된 경우에만 `renameClubInHistory()` 실행.
+
+4. **`loadClubRegistry()` 콜백에서 메모리 이력 즉시 반영**:
+   현재 로그인 중인 유저는 Firebase 갱신을 기다리지 않고 `AppState.settlementHistory` 배열을 즉시 수정해 화면에 바로 새 이름이 표시됨.
+
+---
+
 # 변경 사항 정리 (v1.4.1 → v1.5.2)
 
 ## 1. 비용 항목 추가 폼 재설계 (법인카드 / 개인카드)
