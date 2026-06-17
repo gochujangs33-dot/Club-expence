@@ -1338,21 +1338,24 @@ const AppState = {
                             </div>
                         </div>
                         <div class="history-summary">
-                            <div class="history-stat"><span>참석 인원</span><strong>${entry.memberCount}명</strong></div>
-                            <div class="history-stat"><span>총 소요</span><strong>${SettlementCalculator.formatCurrency(entry.totalCost)}</strong></div>
-                            <div class="history-stat"><span>최종 지원금</span><strong style="color:var(--color-secondary)">${SettlementCalculator.formatCurrency(entry.finalSupportAmount)}</strong></div>
-                            <div class="history-stat"><span>총 자부담</span><strong style="color:var(--warning-text)">${SettlementCalculator.formatCurrency(entry.totalSelfPay)}</strong></div>
+                            <div class="history-stat"><span>${t('hist.attendees')}</span><strong>${entry.memberCount}${t('unit.person')}</strong></div>
+                            <div class="history-stat"><span>${t('hist.total_cost')}</span><strong>${SettlementCalculator.formatCurrency(entry.totalCost)}</strong></div>
+                            <div class="history-stat"><span>${t('hist.final_support')}</span><strong style="color:var(--color-secondary)">${SettlementCalculator.formatCurrency(entry.finalSupportAmount)}</strong></div>
+                            <div class="history-stat"><span>${t('hist.self_pay')}</span><strong style="color:var(--warning-text)">${SettlementCalculator.formatCurrency(entry.totalSelfPay)}</strong></div>
                         </div>
                         <details class="history-details">
-                            <summary>상세 내역 보기</summary>
-                            <ul class="history-items">${itemsHtml || '<li>항목 없음</li>'}</ul>
-                            <div style="margin-top:0.5rem; display:flex; flex-wrap:wrap; gap:0.3rem;">${attendeesHtml || '참석자 없음'}</div>
+                            <summary>${t('hist.view_details')}</summary>
+                            <ul class="history-items">${itemsHtml || `<li>${t('hist.no_items')}</li>`}</ul>
+                            <div style="margin-top:0.5rem; display:flex; flex-wrap:wrap; gap:0.3rem;">${attendeesHtml || t('hist.no_attendees')}</div>
                         </details>
                     `;
                     historyContainer.appendChild(card);
                 });
             }
         }
+
+        // 정적 data-i18n 요소 동기화 (언어 변경 시 즉시 반영)
+        if (typeof applyTranslations === 'function') applyTranslations();
     },
 
     generateEmailReport() {
@@ -1804,25 +1807,18 @@ document.addEventListener('DOMContentLoaded', () => {
     // 언어 설정 초기 적용
     if (typeof applyTranslations === 'function') applyTranslations();
 
-    // 언어 선택 드롭다운 (헤더 + 로그인 모달 공유 핸들러)
-    const applyLangChange = (lang) => {
-        setLang(lang);
-        // 두 select 모두 동기화
-        const hs = document.getElementById('lang-select');
-        const ls = document.getElementById('login-lang-select');
-        if (hs) hs.value = lang;
-        if (ls) ls.value = lang;
-        if (typeof AppState !== 'undefined' && AppState.isLoggedIn) AppState.render();
-    };
-    const langSelect = document.getElementById('lang-select');
-    if (langSelect) {
-        langSelect.value = getLang();
-        langSelect.addEventListener('change', () => applyLangChange(langSelect.value));
-    }
+    // 로그인 페이지 언어 선택 드롭다운
     const loginLangSelect = document.getElementById('login-lang-select');
     if (loginLangSelect) {
         loginLangSelect.value = getLang();
-        loginLangSelect.addEventListener('change', () => applyLangChange(loginLangSelect.value));
+        loginLangSelect.addEventListener('change', () => {
+            setLang(loginLangSelect.value);
+            // 로그인 상태면 전체 화면도 즉시 재렌더
+            if (typeof AppState !== 'undefined' && AppState.isLoggedIn) {
+                AppState.render();
+            }
+            applyTranslations();
+        });
     }
 
     // 현재 정산 초기화 버튼
