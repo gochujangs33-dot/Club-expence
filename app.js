@@ -486,21 +486,31 @@ const AppState = {
                 // clubId로 현재 사용자가 선택한 클럽명을 추적
                 if (this.clubId) {
                     if (this.clubRegistry[this.clubId]) {
+                        const regEntry = this.clubRegistry[this.clubId];
+                        let changed = false;
+
                         // 관리자가 이름 변경 시 자동 갱신
-                        const updatedName = this.clubRegistry[this.clubId].name;
-                        if (updatedName && updatedName !== this.clubName) {
+                        if (regEntry.name && regEntry.name !== this.clubName) {
                             const prevName = this.clubName;
-                            this.clubName = updatedName;
+                            this.clubName = regEntry.name;
                             // 메모리 내 정산 이력도 즉시 반영 (Firebase 갱신은 renameClubInHistory가 처리)
                             if (this.settlementHistory) {
                                 this.settlementHistory.forEach(entry => {
                                     if (entry && ((entry.clubId && entry.clubId === this.clubId) || (!entry.clubId && entry.clubName === prevName))) {
-                                        entry.clubName = updatedName;
+                                        entry.clubName = regEntry.name;
                                     }
                                 });
                             }
-                            this.save();
+                            changed = true;
                         }
+
+                        // 관리자가 예산 변경 시 자동 갱신
+                        if (regEntry.budget !== undefined && regEntry.budget !== this.annualBudget) {
+                            this.annualBudget = regEntry.budget;
+                            changed = true;
+                        }
+
+                        if (changed) this.save();
                     } else {
                         // 관리자가 해당 클럽을 삭제한 경우 초기화 + 팝업
                         this.clubName = '';
