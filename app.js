@@ -297,7 +297,12 @@ const AppState = {
             if (typeof entry === 'object') entry.count = 0;
             else this.directory[name] = { id: entry, count: 0 };
         });
+        // 수정된 이력(isEdited)도 카운트에 포함 — 단 동일 id 항목은 1회만 집계
+        const seenIds = new Set();
         (this.settlementHistory || []).forEach(entry => {
+            if (!entry || !entry.id) return;
+            if (seenIds.has(entry.id)) return; // 중복 방지
+            seenIds.add(entry.id);
             const d = entry.date ? new Date(entry.date) : new Date(entry.id);
             if (d.getFullYear() !== currentYear) return;
             (entry.attendees || []).forEach(att => {
@@ -523,8 +528,9 @@ const AppState = {
                 }
                 // 클럽 드롭다운 갱신
                 if (typeof window._onClubRegistryUpdate === 'function') window._onClubRegistryUpdate();
+                const wasInitialLoad = initialLoad;
                 initialLoad = false;
-                resolve();
+                if (wasInitialLoad) resolve();
             }, err => {
                 console.error("클럽 레지스트리 로딩 실패:", err);
                 resolve();
@@ -1865,12 +1871,23 @@ const AppState = {
 
     // 이력 항목을 현재 정산 폼으로 복원 (수정 모드 진입)
     loadHistoryEntryForEdit(entry) {
+        if (!entry || typeof entry !== 'object' || !entry.id) {
+            console.error('loadHistoryEntryForEdit: 유효하지 않은 이력 항목', entry);
+            return;
+        }
         this.editingHistoryId = entry.id;
         this.expenseItems = JSON.parse(JSON.stringify(entry.expenseItems || []));
         this.attendees = JSON.parse(JSON.stringify(entry.attendees || []));
-        this.memberCount = entry.memberCount || 0;
+        // memberCount가 없으면 attendees 수로 보완 (구버전 데이터 호환)
+        this.memberCount = entry.memberCount || (entry.attendees ? entry.attendees.length : 0);
         if (entry.clubName) this.clubName = entry.clubName;
-        if (entry.clubId) this.clubId = entry.clubId;
+        // clubId 없는 구버전 데이터: 이름으로 역조회해서 복원
+        if (entry.clubId) {
+            this.clubId = entry.clubId;
+        } else if (entry.clubName) {
+            const match = Object.entries(this.clubRegistry || {}).find(([, c]) => c.name === entry.clubName);
+            this.clubId = match ? match[0] : '';
+        }
         this.lastCalculatedSelfPay = entry.totalSelfPay || 0;
         // 수정 모드 배너 표시
         const banner = document.getElementById('edit-mode-banner');
@@ -1899,12 +1916,16 @@ const AppState = {
         this.save();
         if (this.firebaseDb) {
             try {
-                await this.firebaseDb.ref(`globalHistory/${id}`).update(updatedFields);
-                await this.firebaseDb.ref(`globalHistory/${id}/isEdited`).set(true);
-                await this.firebaseDb.ref(`globalHistory/${id}/editedAt`).set(updated.editedAt);
-                await this.firebaseDb.ref(`settlements/${this.currentPin}/settlementHistory/${idx}`).update(updated);
+                // globalHistory: 개별 필드 업데이트
+                const globalUpdate = { ...updatedFields, isEdited: true, editedAt: updated.editedAt };
+                await this.firebaseDb.ref(`globalHistory/${id}`).update(globalUpdate);
+
+                // 개인 settlementHistory: Firebase는 배열을 객체로 저장하므로
+                // 인덱스 경로 대신 배열 전체를 덮어써야 올바른 위치에 저장됨
+                await this.firebaseDb.ref(`settlements/${this.currentPin}/settlementHistory`).set(this.settlementHistory);
             } catch (err) {
                 console.error('이력 수정 저장 실패:', err);
+                alert('수정 내용 저장 중 오류가 발생했습니다. 네트워크를 확인해 주세요.');
             }
         }
     },
@@ -2036,17 +2057,26 @@ document.addEventListener('DOMContentLoaded', () => {
     // 언어 설정 초기 적용
     if (typeof applyTranslations === 'function') applyTranslations();
 
-    // 로그인 페이지 언어 선택 드롭다운
-    const loginLangSelect = document.getElementById('login-lang-select');
-    if (loginLangSelect) {
-        loginLangSelect.value = getLang();
-        loginLangSelect.addEventListener('change', () => {
-            setLang(loginLangSelect.value);
-            // 로그인 상태면 전체 화면도 즉시 재렌더
-            if (typeof AppState !== 'undefined' && AppState.isLoggedIn) {
-                AppState.render();
-            }
-            applyTranslations();
+    // 로그인 페이지 언어 선택 (pill 버튼)
+    const langPillWrap = document.getElementById('login-lang-select-wrap');
+    if (langPillWrap) {
+        const updatePills = (lang) => {
+            langPillWrap.querySelectorAll('.lang-pill').forEach(btn => {
+                const isActive = btn.dataset.lang === lang;
+                btn.style.background = isActive ? 'rgba(255,255,255,0.15)' : 'transparent';
+                btn.style.color = isActive ? 'var(--text-primary)' : 'var(--text-secondary)';
+            });
+        };
+        updatePills(getLang());
+        langPillWrap.querySelectorAll('.lang-pill').forEach(btn => {
+            btn.addEventListener('click', () => {
+                setLang(btn.dataset.lang);
+                updatePills(btn.dataset.lang);
+                if (typeof AppState !== 'undefined' && AppState.isLoggedIn) {
+                    AppState.render();
+                }
+                applyTranslations();
+            });
         });
     }
 
