@@ -482,6 +482,7 @@ const AppState = {
         if (!this.firebaseDb) return Promise.resolve();
         // 실시간 리스너: 관리자가 클럽명/예산 수정 시 모든 접속자에게 즉시 반영
         return new Promise((resolve) => {
+            let initialLoad = true; // 첫 번째 수신은 초기 로드 — 삭제 팝업 억제
             this.firebaseDb.ref('clubRegistry').on('value', snapshot => {
                 this.clubRegistry = snapshot.val() || {};
                 // clubId로 현재 사용자가 선택한 클럽명을 추적
@@ -512,8 +513,8 @@ const AppState = {
                         }
 
                         if (changed) this.save();
-                    } else {
-                        // 관리자가 해당 클럽을 삭제한 경우 초기화 + 팝업
+                    } else if (!initialLoad) {
+                        // 초기 로드 이후에만 삭제로 간주 — 초기 로드 중에는 오탐 방지
                         this.clubName = '';
                         this.clubId = '';
                         this.save();
@@ -522,6 +523,7 @@ const AppState = {
                 }
                 // 클럽 드롭다운 갱신
                 if (typeof window._onClubRegistryUpdate === 'function') window._onClubRegistryUpdate();
+                initialLoad = false;
                 resolve();
             }, err => {
                 console.error("클럽 레지스트리 로딩 실패:", err);
@@ -627,10 +629,10 @@ const AppState = {
         const club = Object.values(this.clubRegistry).find(c => c.name === clubName);
         if (club) {
             this.annualBudget = club.budget;
-            // 아직 정산을 진행하지 않은 상태(누적 사용금액 0)라면, 관리자가 입력한
-            // "이전 사용 금액"을 초기값으로 동기화
-            if (this.usedBudget === 0 && club.priorUsed) {
-                this.usedBudget = club.priorUsed;
+            // usedBudget이 0이면 관리자가 설정한 priorUsed로 초기화
+            // (클럽 전환 시 호출 전에 usedBudget=0으로 리셋하므로 항상 적용됨)
+            if (this.usedBudget === 0) {
+                this.usedBudget = club.priorUsed || 0;
             }
             this.save();
         }
@@ -2078,13 +2080,13 @@ document.addEventListener('DOMContentLoaded', () => {
         const current = AppState.clubName || '';
         const clubs = Object.values(AppState.clubRegistry || {});
 
-        // 현재 선택된 클럽이 레지스트리에 없으면 초기화 + 팝업
-        // (loadClubRegistry에서 이미 처리됐으면 current가 빈문자라 조건 불충족)
+        // 현재 선택된 클럽이 레지스트리에 없으면 조용히 초기화만 (팝업 없음)
+        // 실제 삭제 감지 및 팝업은 loadClubRegistry의 clubId 기반 로직이 처리
+        // — clubId 없는 구버전 데이터 or 이름 변경 직후 타이밍 등에서 오탐 방지
         if (current && !clubs.some(c => c.name === current)) {
             AppState.clubName = '';
             AppState.clubId = '';
             AppState.save();
-            if (typeof window.showClubNotFoundModal === 'function') window.showClubNotFoundModal();
         }
 
         clubNameInput.innerHTML = `<option value="">${t('header.club_placeholder')}</option>`;
@@ -2136,9 +2138,10 @@ document.addEventListener('DOMContentLoaded', () => {
             if (newClubInputRow) newClubInputRow.classList.add('hidden');
             if (AppState.clubName !== clubNameInput.value) {
                 AppState.clubName = clubNameInput.value;
-                // clubId 저장: 이름 변경 추적에 사용
                 const selectedEntry = Object.entries(AppState.clubRegistry || {}).find(([, c]) => c.name === clubNameInput.value);
                 AppState.clubId = selectedEntry ? selectedEntry[0] : '';
+                // 클럽 전환 시 사용 금액 초기화 (새 클럽의 priorUsed로 재설정됨)
+                AppState.usedBudget = 0;
                 AppState.clearClubData();
             }
             AppState.syncBudgetFromClub(AppState.clubName);
