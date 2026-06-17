@@ -21,6 +21,7 @@
 
     <!-- Vanilla CSS stylesheet -->
     <link rel="stylesheet" href="style.css">
+    <script src="./lib/i18n.js"></script>
 </head>
 <body>
     <!-- 업데이트 알림 배너 -->
@@ -59,17 +60,18 @@
                 </div>
             </div>
             <div class="login-status-wrapper" id="login-status-wrapper" style="margin-top: 0.75rem; display: flex; align-items: center; justify-content: center; gap: 0.5rem;">
-                <span id="login-status-badge" class="badge-offline">📴 오프라인 모드 (기기 저장)</span>
-                <button id="header-logout-btn" class="btn-text" style="font-size: 0.78rem; display: none; padding: 0.2rem 0.5rem; border-radius: 6px; background: rgba(255, 255, 255, 0.05);">로그아웃</button>
-                <button id="header-login-btn" class="btn-text" style="font-size: 0.78rem; padding: 0.2rem 0.5rem; border-radius: 6px; background: rgba(255, 255, 255, 0.05);">로그인</button>
+                <span id="login-status-badge" class="badge-offline" data-i18n="header.offline">📴 오프라인 모드 (기기 저장)</span>
+                <button id="header-logout-btn" class="btn-text" data-i18n="header.logout" style="font-size: 0.78rem; display: none; padding: 0.2rem 0.5rem; border-radius: 6px; background: rgba(255, 255, 255, 0.05);">로그아웃</button>
+                <button id="header-login-btn" class="btn-text" data-i18n="header.login" style="font-size: 0.78rem; padding: 0.2rem 0.5rem; border-radius: 6px; background: rgba(255, 255, 255, 0.05);">로그인</button>
+                <button id="lang-toggle-btn" class="btn-text" data-i18n="header.lang" style="font-size: 0.78rem; padding: 0.2rem 0.5rem; border-radius: 6px; background: rgba(255, 255, 255, 0.05); font-weight: 600;">ENG</button>
             </div>
         </header>
         <!-- Tab Navigation -->
         <nav class="tab-nav">
-            <button id="settlement-tab-btn" class="tab-btn active" data-tab="tab-settlement">📊 비용 정산</button>
+            <button id="settlement-tab-btn" class="tab-btn active" data-tab="tab-settlement" data-i18n="tab.settlement">📊 비용 정산</button>
             <button id="attendees-tab-btn" class="tab-btn" data-tab="tab-attendees">👥 현재 참석자 (<span id="attendee-badge-count">0</span>명)</button>
             <button id="directory-tab-btn" class="tab-btn" data-tab="tab-directory">🗂️ 전사원 명부 (<span id="directory-badge-count">0</span>명)</button>
-            <button id="history-tab-btn" class="tab-btn" data-tab="tab-history">📋 정산 이력</button>
+            <button id="history-tab-btn" class="tab-btn" data-tab="tab-history" data-i18n="tab.history">📋 정산 이력</button>
             <button id="club-history-tab-btn" class="tab-btn hidden" data-tab="tab-club-history" style="background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(239, 68, 68, 0.15)); border-color: rgba(245, 158, 11, 0.3); color: #fbbf24;">📋 클럽별 정산이력</button>
             <button id="charts-tab-btn" class="tab-btn hidden" data-tab="tab-charts" style="background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(239, 68, 68, 0.15)); border-color: rgba(245, 158, 11, 0.3); color: #fbbf24;">📈 차트</button>
             <button id="admin-tab-btn" class="tab-btn hidden" data-tab="tab-admin" style="background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(239, 68, 68, 0.15)); border-color: rgba(245, 158, 11, 0.3); color: #fbbf24;">👑 대시보드 관리</button>
@@ -194,7 +196,8 @@
                                     <span class="card-icon">📋</span>
                                     <h2>비용 목록</h2>
                                 </div>
-                                <button id="clear-all-btn" class="btn-text-danger">모두 삭제</button>
+                                <button id="reset-session-btn" class="btn-text-danger" data-i18n="btn.reset_session" style="margin-right:0.25rem;">🔄 현재 정산 초기화</button>
+                <button id="clear-all-btn" class="btn-text-danger" data-i18n="btn.clear_all">모두 삭제</button>
                             </div>
                         </div>
                         <div class="card-body scroll-y">
@@ -247,22 +250,22 @@
                         <div class="card-body">
                             <div class="result-summary">
                                 <div class="summary-item main">
-                                    <span class="summary-label">최종 지원금 (지원 한도 내)</span>
+                                    <span class="summary-label" data-i18n="label.final_support">최종 지원금 (지원 한도 내)</span>
                                     <span class="summary-value highlight" id="result-final-support">0원</span>
                                 </div>
                                 <div class="summary-item" style="flex-wrap: wrap; gap: 0.4rem;">
-                                    <span class="summary-label">총 자부담 금액 (수정 가능)</span>
+                                    <span class="summary-label" data-i18n="label.total_self_pay">총 자부담 금액 (수정 가능)</span>
                                     <div style="display: inline-flex; align-items: center; gap: 0.4rem;">
                                         <input type="text" inputmode="numeric" id="result-total-self-pay-input" style="width: 130px; padding: 0.35rem 0.5rem; text-align: right; font-weight: 600; font-size: 1rem; border-radius: 8px; background: rgba(15, 23, 42, 0.5); border: 1px solid var(--card-border); color: var(--text-primary);" placeholder="0" />
                                         <span style="font-size: 0.95rem; font-weight: 600; color: var(--text-primary);">원</span>
                                     </div>
                                 </div>
                                 <div class="summary-item" id="result-per-person-box" style="background: linear-gradient(135deg, rgba(239, 68, 68, 0.18), rgba(249, 115, 22, 0.12)); border: 2px solid rgba(239, 68, 68, 0.5); border-radius: 12px; padding: 0.65rem 0.9rem; margin: 0.3rem 0; box-shadow: 0 0 14px rgba(239, 68, 68, 0.25);">
-                                    <span class="summary-label" style="font-weight:800; color:#f87171; font-size:1rem;"><span id="result-per-person-icon">🔥</span> 인당 자부담 비용</span>
+                                    <span class="summary-label" style="font-weight:800; color:#f87171; font-size:1rem;"><span id="result-per-person-icon">🔥</span> <span data-i18n="label.per_person_self_pay">인당 자부담 비용</span></span>
                                     <span class="summary-value highlight" id="result-per-person-self-pay" style="font-size:1.4rem; background: linear-gradient(135deg, #ef4444, #f97316); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;">0원</span>
                                 </div>
                                 <div class="summary-item">
-                                    <span class="summary-label">자부담 비율</span>
+                                    <span class="summary-label" data-i18n="label.self_pay_ratio">자부담 비율</span>
                                     <span class="summary-value" id="result-self-pay-ratio">0.0%</span>
                                 </div>
                             </div>
@@ -271,7 +274,7 @@
 
                             <div class="result-details">
                                 <div class="detail-row">
-                                    <span>총 소요 비용</span>
+                                    <span data-i18n="label.total_cost">총 소요 비용</span>
                                     <strong id="result-total-cost">0원</strong>
                                 </div>
                                 <div class="detail-row sub">
@@ -315,9 +318,7 @@
                             </div>
 
                             <div class="divider"></div>
-                            <button id="send-email-btn" class="btn-primary" style="width: 100%; margin-top: 0.5rem;">
-                                <span class="btn-icon">📥</span> 엑셀 파일로 저장
-                            </button>
+                            <button id="send-email-btn" class="btn-primary" data-i18n="btn.save_excel" style="width: 100%; margin-top: 0.5rem;">📥 엑셀 파일로 저장</button>
                         </div>
                     </div>
 
@@ -787,11 +788,24 @@
     <!-- Excel Saved Confirmation Modal -->
     <div id="excel-saved-modal" class="modal hidden">
         <div class="modal-content-card card" style="max-width: 340px; width: 90%; background: var(--bg-dark); border: 1px solid var(--card-border); margin: auto; text-align: center; padding: 1.5rem;">
-            <p style="font-size: 1.05rem; font-weight: 600; margin-bottom: 0.4rem;">저장이 완료되었습니다.</p>
-            <p style="font-size: 0.92rem; color: var(--text-secondary); margin-bottom: 1.25rem;">화면을 초기화하시겠습니까?</p>
+            <p data-i18n="excel_saved.title" style="font-size: 1.05rem; font-weight: 600; margin-bottom: 0.4rem;">저장이 완료되었습니다.</p>
+            <p data-i18n="excel_saved.question" style="font-size: 0.92rem; color: var(--text-secondary); margin-bottom: 1.25rem;">화면을 초기화하시겠습니까?</p>
             <div style="display: flex; gap: 0.75rem; justify-content: center;">
-                <button id="excel-saved-reset-btn" class="btn-primary-sm" style="padding: 0.6rem 1.5rem; font-size: 0.9rem;">예, 초기화</button>
-                <button id="excel-saved-keep-btn" class="btn-secondary" style="padding: 0.6rem 1.5rem; font-size: 0.9rem;">아니요</button>
+                <button id="excel-saved-reset-btn" class="btn-primary-sm" data-i18n="excel_saved.yes" style="padding: 0.6rem 1.5rem; font-size: 0.9rem;">예, 초기화</button>
+                <button id="excel-saved-keep-btn" class="btn-secondary" data-i18n="excel_saved.no" style="padding: 0.6rem 1.5rem; font-size: 0.9rem;">아니요</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Reset Session Confirmation Modal -->
+    <div id="reset-session-modal" class="modal hidden">
+        <div class="modal-content-card card" style="max-width: 340px; width: 90%; background: var(--bg-dark); border: 1px solid var(--card-border); margin: auto; text-align: center; padding: 1.5rem;">
+            <p data-i18n="reset.title" style="font-size: 1.05rem; font-weight: 600; margin-bottom: 0.4rem;">현재 정산을 초기화합니다.</p>
+            <p data-i18n="reset.question" style="font-size: 0.88rem; color: var(--text-secondary); margin-bottom: 1.25rem; white-space: pre-line;">비용 항목·참석자가 모두 삭제됩니다.
+정산 이력에는 저장되지 않습니다. 계속하시겠습니까?</p>
+            <div style="display: flex; gap: 0.75rem; justify-content: center;">
+                <button id="reset-session-confirm-btn" class="btn-primary-sm" data-i18n="reset.yes" style="padding: 0.6rem 1.5rem; font-size: 0.9rem;">예, 초기화</button>
+                <button id="reset-session-cancel-btn" class="btn-secondary" data-i18n="reset.no" style="padding: 0.6rem 1.5rem; font-size: 0.9rem;">취소</button>
             </div>
         </div>
     </div>

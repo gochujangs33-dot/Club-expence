@@ -6,7 +6,7 @@
  *   예) '1.0.0' → '1.1.0'
  *   그러면 앱에 자동으로 "업데이트 있음" 알림이 표시됩니다.
  */
-const APP_VERSION = '1.6.79';
+const APP_VERSION = '1.6.80';
 const CACHE_NAME  = `club-expense-v${APP_VERSION}`;
 
 const ASSETS = [
@@ -19,7 +19,8 @@ const ASSETS = [
   './lib/jszip.min.js',
   './lib/chart.min.js',
   './lib/template.xlsx',
-  './lib/employee_directory.json'
+  './lib/employee_directory.json',
+  './lib/i18n.js'
 ];
 
 // ── 설치: 필요한 파일을 캐시에 저장 ──────────────────────────────

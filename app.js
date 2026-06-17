@@ -1775,6 +1775,52 @@ const AppState = {
 
 // --- 4. Event Listeners & Initialization ---
 document.addEventListener('DOMContentLoaded', () => {
+    // 언어 설정 초기 적용
+    if (typeof applyTranslations === 'function') applyTranslations();
+
+    // 언어 토글 버튼
+    const langToggleBtn = document.getElementById('lang-toggle-btn');
+    if (langToggleBtn) {
+        langToggleBtn.addEventListener('click', () => {
+            const next = getLang() === 'ko' ? 'en' : 'ko';
+            setLang(next);
+            if (typeof AppState !== 'undefined' && AppState.isLoggedIn) AppState.render();
+        });
+    }
+
+    // 현재 정산 초기화 버튼
+    const resetSessionBtn = document.getElementById('reset-session-btn');
+    const resetSessionModal = document.getElementById('reset-session-modal');
+    const resetSessionConfirmBtn = document.getElementById('reset-session-confirm-btn');
+    const resetSessionCancelBtn = document.getElementById('reset-session-cancel-btn');
+    if (resetSessionBtn && resetSessionModal) {
+        resetSessionBtn.addEventListener('click', () => resetSessionModal.classList.remove('hidden'));
+        resetSessionCancelBtn.addEventListener('click', () => resetSessionModal.classList.add('hidden'));
+        resetSessionModal.addEventListener('click', (e) => {
+            if (e.target === resetSessionModal) resetSessionModal.classList.add('hidden');
+        });
+        resetSessionConfirmBtn.addEventListener('click', () => {
+            resetSessionModal.classList.add('hidden');
+            AppState.expenseItems = [];
+            AppState.attendees = [];
+            AppState.memberCount = 0;
+            AppState.previousPrizeTotal = 0;
+            AppState.lastCalculatedSelfPay = 0;
+            AppState.eventPhoto = null;
+            document.getElementById('expense-desc-input').value = '';
+            document.getElementById('expense-amount-input').value = '';
+            document.getElementById('expense-category-select').selectedIndex = 0;
+            document.getElementById('expense-corp-check').checked = true;
+            document.getElementById('expense-personal-check').checked = false;
+            document.getElementById('expense-corporate-amount-input').value = '';
+            document.getElementById('expense-personal-amount-input').value = '';
+            document.getElementById('prev-prize-input').value = 0;
+            if (typeof updateCardTypeUI === 'function') updateCardTypeUI();
+            AppState.save();
+            AppState.render();
+        });
+    }
+
     // PIN 키패드 클릭이 항상 동작하도록 가장 먼저 위임 방식으로 등록
     // (이후 초기화 코드에서 오류가 발생해도 키패드 입력은 막히지 않음)
     document.addEventListener('click', (e) => {
