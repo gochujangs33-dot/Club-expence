@@ -98,6 +98,107 @@
 
 ---
 
+## v1.6.89 — 클럽 예산 실시간 동기화
+
+### 변경 내용
+- `loadClubRegistry()` `.on('value')` 콜백에서 클럽 `budget` 변경을 감지해
+  `AppState.annualBudget`을 즉시 갱신.
+- 관리자가 예산을 수정하는 순간 유저 화면에도 실시간 반영됨.
+
+---
+
+## v1.6.90 — 관리자 규칙 실시간 동기화 + 정산 이력 수정 모드
+
+### 관리자 규칙 실시간 동기화
+- `AppState.loadGlobalSettings()` 추가: `globalSettings/rules` 노드를 `.on('value')`로 구독.
+  관리자가 자부담 구간·비율을 변경하면 모든 유저 화면에 즉시 반영됨.
+- `AppState.saveGlobalRules()` 추가: `updateRules()` / `resetRules()` 호출 시 Firebase에 저장.
+- `window._onGlobalSettingsUpdate` 전역 콜백 → `setSettingsFormValues()` 재호출.
+
+### 정산 이력 수정 모드
+- 정산 이력 카드에 **"✏️ 수정"** 버튼 추가.
+- 버튼 클릭 시 `AppState.loadHistoryEntryForEdit(entry)` 호출:
+  비용 항목·참석자·클럽명이 정산 탭으로 복원되고 **수정 모드 배너** 표시.
+- 수정 후 **"엑셀로 저장"** 클릭 → `AppState.editingHistoryId`가 있으면
+  신규 확정 대신 `updateHistoryEntry()` 실행해 기존 이력 덮어씀.
+- 수정된 항목에 **"수정됨"** 오렌지 뱃지 표시 (`isEdited: true` 플래그).
+- 관리자 "클럽별 정산이력"에도 수정 버튼·뱃지 동일 적용.
+
+---
+
+## v1.6.91 — 클럽 삭제 팝업 오탐 수정
+
+### 문제
+1. 클럽명 **변경** 시 (`clubId` 미설정 상태)에도 "삭제됨" 팝업이 표시되었음.
+2. 초기 로그인 직후 레지스트리 첫 로드 시에도 팝업이 뜰 수 있었음.
+3. 클럽 선택 변경 시 이전 클럽의 `usedBudget`이 남아 예산 계산 오류 발생.
+
+### 수정
+- `renderClubOptions()`에서 팝업 호출 완전 제거.
+  삭제 팝업은 `loadClubRegistry()` 콜백에서만 발생(확인된 삭제 시).
+- `loadClubRegistry()`에 `initialLoad` 플래그 도입:
+  첫 번째 `on('value')` 콜백에서는 팝업 억제.
+- 클럽 변경 핸들러에서 `AppState.usedBudget = 0` 리셋 추가.
+
+---
+
+## v1.6.92 — 예산 표시 항상 관리자 레지스트리 기준
+
+### 문제
+- `annualBudget` / `usedBudget`이 유저별 localStorage에 캐시되어
+  관리자가 설정한 값과 다르게 표시되었음.
+
+### 수정
+- `AppState.getClubBudget()` 추가:
+  `clubId → clubName → annualBudget 캐시` 3단계 폴백으로 항상 레지스트리 값 반환.
+- `AppState.getClubUsedBudget()` 추가:
+  `priorUsed(관리자 설정) + 올해 정산 이력 합산`으로 실사용액 계산.
+- 모든 예산 표시 위치(`render()`, `setSettingsFormValues()`, `updateRemainingDisplay()`)를
+  새 메서드로 교체.
+- `setting-annual-budget` 인풋을 `readonly`로 변경.
+
+---
+
+## v1.6.93 — 예산 표시 수정 (type=number 콤마 호환)
+
+### 문제
+- `setting-annual-budget` 인풋이 `type="number"`인데
+  `formatAmount()` 포맷된 문자열("800,000")을 대입하면 number 입력이 콤마를 거부해 0으로 표시됨.
+- 일부 클럽만 예산이 정상 표시되는 현상 원인.
+
+### 수정
+- `index.html`: `setting-annual-budget` 인풋을 `type="number"` → `type="text"`로 변경.
+- `app.js`: `getClubBudget()` 3단계 폴백 명확화 (clubId → 이름 → annualBudget 캐시).
+- `getClubUsedBudget()` 로직 리팩터링(가독성 개선, null 체크 강화).
+
+---
+
+## v1.6.94 — 코드 버그 3종 수정 + 언어 선택 UI 개선
+
+### 크리티컬 버그 수정
+
+**1. `updateHistoryEntry` Firebase 경로 오류 (P0)**
+- Firebase는 JS 배열을 `{0: {...}, 1: {...}}` 객체로 저장하므로,
+  배열 인덱스(`/settlementHistory/0`)로 접근하면 실제 키와 불일치 → 업데이트 실패.
+- **수정**: 개인 `settlementHistory` 저장 시 배열 전체를 `set()`으로 덮어쓰는 방식으로 변경.
+  네트워크 실패 시 사용자에게 경고 alert 추가.
+
+**2. `recalculateDirectoryCounts` 중복 카운트 (P0)**
+- 수정 이력(`isEdited: true`)과 원본 이력이 동일 `id`라도 각각 카운트되어 참석 횟수가 2배가 될 수 있었음.
+- **수정**: `seenIds` Set으로 동일 `id` 이력은 1회만 집계.
+
+**3. `loadHistoryEntryForEdit` 구버전 데이터 호환 (P1)**
+- 구버전 이력(clubId 없음)을 수정 모드로 열 때 `clubId`가 빈 채로 진입.
+- `entry.memberCount` 누락 시 참석자 수 0으로 표시.
+- **수정**: entry 유효성 검사 추가, `memberCount` → `attendees.length` 폴백,
+  `clubId` 없으면 이름으로 레지스트리에서 역조회해 복원.
+
+### UI 개선
+- 로그인 페이지 언어 선택: `<select>` 드롭다운 → pill 토글 버튼으로 변경.
+  선택된 언어는 흰 배경·밝은 색으로 강조, 미선택은 반투명 처리.
+
+---
+
 # 변경 사항 정리 (v1.4.1 → v1.5.2)
 
 ## 1. 비용 항목 추가 폼 재설계 (법인카드 / 개인카드)

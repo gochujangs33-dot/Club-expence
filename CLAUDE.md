@@ -99,4 +99,4 @@
 - [`PERMISSIONS.md`](PERMISSIONS.md) — 권한별 가능/불가 기능 정리
 - [`CHANGES.md`](CHANGES.md) — 버전별 변경 이력
 
-현재 버전: **v1.6.75** (`sw.js` `APP_VERSION`)
+현재 버전: **v1.6.94** (`sw.js` `APP_VERSION`)
