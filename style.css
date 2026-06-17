@@ -1229,8 +1229,10 @@ select {
 .history-header {
     display: flex;
     justify-content: space-between;
-    align-items: flex-start;
+    align-items: center;
+    gap: 0.5rem;
     margin-bottom: 0.75rem;
+    flex-wrap: wrap;
 }
 
 .history-date {
@@ -1542,6 +1544,18 @@ body:has(.update-banner:not(.hidden)) {
     display: inline-flex;
     align-items: center;
     gap: 0.25rem;
+}
+
+.badge-edited {
+    background: rgba(245, 158, 11, 0.15);
+    color: #fbbf24;
+    border: 1px solid rgba(245, 158, 11, 0.35);
+    padding: 0.15rem 0.5rem;
+    border-radius: 10px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
 }
 
 /* --- Admin Dashboard & Registration Form Styles --- */

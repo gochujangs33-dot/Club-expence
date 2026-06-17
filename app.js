@@ -182,6 +182,7 @@ const AppState = {
     settlementHistory: [],
     clubRegistry: {},
     clubTotalBudget: 0,
+    editingHistoryId: null,   // 수정 모드 중인 이력 항목 ID
 
     // Load initial state if storage exists (optional local storage helper)
     load() {
@@ -535,6 +536,24 @@ const AppState = {
     saveClubRegistry() {
         if (!this.firebaseDb) return;
         this.firebaseDb.ref('clubRegistry').set(this.clubRegistry).catch(err => console.error("클럽 레지스트리 저장 실패:", err));
+    },
+
+    // 관리자가 저장한 자부담 구간/비율 설정을 모든 유저에게 실시간 동기화
+    loadGlobalSettings() {
+        if (!this.firebaseDb) return;
+        this.firebaseDb.ref('globalSettings/rules').on('value', snapshot => {
+            const rules = snapshot.val();
+            if (rules && typeof rules === 'object') {
+                this.rules = { ...this.rules, ...rules };
+                if (typeof window._onGlobalSettingsUpdate === 'function') window._onGlobalSettingsUpdate();
+            }
+        }, err => console.error('globalSettings 로딩 실패:', err));
+    },
+
+    saveGlobalRules() {
+        if (!this.firebaseDb) return;
+        this.firebaseDb.ref('globalSettings/rules').set({ ...this.rules })
+            .catch(err => console.error('globalSettings 저장 실패:', err));
     },
 
     saveClubTotalBudget(value) {
@@ -952,12 +971,14 @@ const AppState = {
     updateRules(newRules) {
         this.rules = { ...newRules };
         this.save();
+        this.saveGlobalRules();
         this.render();
     },
 
     resetRules() {
         this.rules = { ...DefaultRules };
         this.save();
+        this.saveGlobalRules();
         this.render();
     },
 
@@ -1402,12 +1423,21 @@ const AppState = {
                         `<span class="expense-category-badge">${this.escapeHtml(a.name)}</span>`
                     ).join(' ');
 
+                    const editedBadge = entry.isEdited
+                        ? `<span class="badge-edited">수정됨</span>`
+                        : '';
+                    const editedAtStr = entry.isEdited && entry.editedAt
+                        ? ` <span style="font-size:0.75rem;color:var(--text-muted);">(수정: ${new Date(entry.editedAt).toLocaleDateString('ko-KR')})</span>`
+                        : '';
+
                     card.innerHTML = `
                         <div class="history-header">
-                            <div>
+                            <div style="display:flex;align-items:center;gap:0.4rem;flex-wrap:wrap;">
                                 <span class="history-date">${dateStr}</span>
                                 ${entry.clubName ? `<span class="history-club">${this.escapeHtml(entry.clubName)}</span>` : ''}
+                                ${editedBadge}${editedAtStr}
                             </div>
+                            <button class="btn-edit-history" data-id="${entry.id}" style="font-size:0.75rem;padding:0.2rem 0.6rem;background:rgba(99,102,241,0.15);border:1px solid rgba(99,102,241,0.4);color:#a5b4fc;border-radius:0.3rem;cursor:pointer;white-space:nowrap;">✏️ 수정</button>
                         </div>
                         <div class="history-summary">
                             <div class="history-stat"><span>${t('hist.attendees')}</span><strong>${entry.memberCount}${t('unit.person')}</strong></div>
@@ -1422,6 +1452,15 @@ const AppState = {
                         </details>
                     `;
                     historyContainer.appendChild(card);
+                });
+
+                // 수정 버튼 이벤트
+                historyContainer.querySelectorAll('.btn-edit-history').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        const id = Number(btn.getAttribute('data-id'));
+                        const entry = AppState.settlementHistory.find(e => e.id === id);
+                        if (entry) AppState.loadHistoryEntryForEdit(entry);
+                    });
                 });
             }
         }
@@ -1695,7 +1734,7 @@ const AppState = {
         });
     },
 
-    // 엑셀 파일만 로컬 다운로드 폴더에 저장
+    // 엑셀 파일만 로컬 다운로드 폴더에 저장 (수정 모드이면 이력도 갱신)
     async downloadExcelOnly() {
         try {
             const file = await this.generateExcelFile();
@@ -1707,6 +1746,29 @@ const AppState = {
             a.click();
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
+
+            // 수정 모드: 이력 항목 갱신
+            if (this.editingHistoryId) {
+                const result = SettlementCalculator.calculate(
+                    this.memberCount, this.expenseItems, this.previousPrizeTotal, this.rules
+                );
+                const finalTotalSelfPay = this.lastCalculatedSelfPay > 0 ? this.lastCalculatedSelfPay : result.totalSelfPay;
+                const updatedFields = {
+                    memberCount: this.memberCount,
+                    totalCost: result.totalCost,
+                    finalSupportAmount: result.totalCost - finalTotalSelfPay,
+                    totalSelfPay: finalTotalSelfPay,
+                    perPersonSelfPay: this.memberCount > 0 ? Math.round(finalTotalSelfPay / this.memberCount) : result.perPersonSelfPay,
+                    selfPayRatio: result.totalCost > 0 ? finalTotalSelfPay / result.totalCost : 0,
+                    expenseItems: JSON.parse(JSON.stringify(this.expenseItems)),
+                    attendees: JSON.parse(JSON.stringify(this.attendees)),
+                    clubName: this.clubName,
+                    clubId: this.clubId || '',
+                };
+                await this.updateHistoryEntry(this.editingHistoryId, updatedFields);
+                this.cancelEditMode();
+                this.render();
+            }
         } catch (err) {
             console.error("엑셀 파일 다운로드 실패:", err);
             alert("엑셀 파일 다운로드에 실패했습니다: " + err.message);
@@ -1758,6 +1820,59 @@ const AppState = {
         if (files.length > 0) {
             alert('정산서/사진 파일이 다운로드되었습니다. 메일 앱에서 직접 첨부해주세요.');
         }
+    },
+
+    // 이력 항목을 현재 정산 폼으로 복원 (수정 모드 진입)
+    loadHistoryEntryForEdit(entry) {
+        this.editingHistoryId = entry.id;
+        this.expenseItems = JSON.parse(JSON.stringify(entry.expenseItems || []));
+        this.attendees = JSON.parse(JSON.stringify(entry.attendees || []));
+        this.memberCount = entry.memberCount || 0;
+        if (entry.clubName) this.clubName = entry.clubName;
+        if (entry.clubId) this.clubId = entry.clubId;
+        this.lastCalculatedSelfPay = entry.totalSelfPay || 0;
+        // 수정 모드 배너 표시
+        const banner = document.getElementById('edit-mode-banner');
+        const dateEl = document.getElementById('edit-mode-date');
+        if (banner) banner.classList.remove('hidden');
+        if (dateEl) {
+            const d = new Date(entry.date);
+            dateEl.textContent = `${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')}`;
+        }
+        // 정산 탭으로 전환
+        document.querySelectorAll('.tab-nav .tab-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.tab-pane').forEach(p => p.classList.add('hidden'));
+        const settlementTab = document.querySelector('[data-tab="tab-settlement"]');
+        const settlementPane = document.getElementById('tab-settlement');
+        if (settlementTab) settlementTab.classList.add('active');
+        if (settlementPane) settlementPane.classList.remove('hidden');
+        this.render();
+    },
+
+    // 수정된 항목으로 이력 엔트리 업데이트 (Firebase globalHistory + 개인 settlementHistory)
+    async updateHistoryEntry(id, updatedFields) {
+        const idx = (this.settlementHistory || []).findIndex(e => String(e.id) === String(id));
+        if (idx < 0) return;
+        const updated = { ...this.settlementHistory[idx], ...updatedFields, isEdited: true, editedAt: new Date().toISOString() };
+        this.settlementHistory[idx] = updated;
+        this.save();
+        if (this.firebaseDb) {
+            try {
+                await this.firebaseDb.ref(`globalHistory/${id}`).update(updatedFields);
+                await this.firebaseDb.ref(`globalHistory/${id}/isEdited`).set(true);
+                await this.firebaseDb.ref(`globalHistory/${id}/editedAt`).set(updated.editedAt);
+                await this.firebaseDb.ref(`settlements/${this.currentPin}/settlementHistory/${idx}`).update(updated);
+            } catch (err) {
+                console.error('이력 수정 저장 실패:', err);
+            }
+        }
+    },
+
+    // 수정 모드 해제
+    cancelEditMode() {
+        this.editingHistoryId = null;
+        const banner = document.getElementById('edit-mode-banner');
+        if (banner) banner.classList.add('hidden');
     },
 
     // 엑셀 + 사진(참석자/영수증)을 묶어 공유 시트로 전달
@@ -2069,6 +2184,23 @@ document.addEventListener('DOMContentLoaded', () => {
             } else {
                 finish();
             }
+        });
+    }
+
+    // 관리자 자부담 구간/비율 변경 시 전체 유저 실시간 반영
+    window._onGlobalSettingsUpdate = () => {
+        if (typeof setSettingsFormValues === 'function') setSettingsFormValues(AppState.rules);
+        if (typeof setAdminRulesFormValues === 'function') setAdminRulesFormValues(AppState.rules);
+        AppState.render();
+    };
+    AppState.loadGlobalSettings();
+
+    // 수정 모드 취소 버튼
+    const editModeCancelBtn = document.getElementById('edit-mode-cancel-btn');
+    if (editModeCancelBtn) {
+        editModeCancelBtn.addEventListener('click', () => {
+            AppState.cancelEditMode();
+            AppState.render();
         });
     }
 
@@ -4063,14 +4195,20 @@ document.addEventListener('DOMContentLoaded', () => {
                 `).join('');
             }
             
+            const editedBadgeAdmin = entry.isEdited
+                ? `<span class="badge-edited">수정됨</span>` : '';
             div.innerHTML = `
                 <div class="history-header">
-                    <div>
+                    <div style="display:flex;align-items:center;gap:0.4rem;flex-wrap:wrap;">
                         <strong>${AppState.escapeHtml(entry.clubName || '기본 클럽')}</strong>
                         <span class="history-club" style="color:var(--color-secondary);">정산인: ${AppState.escapeHtml(entry.creatorName || '오프라인')}</span>
+                        ${editedBadgeAdmin}
                     </div>
-                    <span class="history-date">${new Date(entry.id).toLocaleString()}</span>
-                    <button class="btn-delete-history btn-text-danger" data-id="${entry.id}" style="padding:0.25rem 0.5rem; font-size:0.75rem;">삭제</button>
+                    <div style="display:flex;align-items:center;gap:0.4rem;">
+                        <span class="history-date">${new Date(entry.id).toLocaleString()}</span>
+                        <button class="btn-edit-history-admin" data-id="${entry.id}" style="font-size:0.75rem;padding:0.2rem 0.6rem;background:rgba(99,102,241,0.15);border:1px solid rgba(99,102,241,0.4);color:#a5b4fc;border-radius:0.3rem;cursor:pointer;white-space:nowrap;">✏️ 수정</button>
+                        <button class="btn-delete-history btn-text-danger" data-id="${entry.id}" style="padding:0.25rem 0.5rem; font-size:0.75rem;">삭제</button>
+                    </div>
                 </div>
                 <div class="history-summary">
                     <div class="history-stat">
@@ -4149,6 +4287,15 @@ document.addEventListener('DOMContentLoaded', () => {
                         renderClubManagement();
                     }).catch(() => alert('삭제에 실패했습니다. 온라인 상태를 확인해주세요.'));
                 }
+            });
+        });
+
+        // 관리자 이력 수정 버튼
+        container.querySelectorAll('.btn-edit-history-admin').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const id = Number(btn.getAttribute('data-id'));
+                const entry = lastHistoryList.find(e => Number(e.id) === id);
+                if (entry) AppState.loadHistoryEntryForEdit(entry);
             });
         });
 
