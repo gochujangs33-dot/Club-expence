@@ -2273,14 +2273,7 @@ document.addEventListener('DOMContentLoaded', () => {
         AppState.cancelEdit();
     });
 
-    // Clear all listener
-    document.getElementById('clear-all-btn').addEventListener('click', () => {
-        if (AppState.expenseItems.length > 0) {
-            if (confirm("등록된 모든 비용 항목을 삭제하시겠습니까?")) {
-                AppState.clearAll();
-            }
-        }
-    });
+    // clear-all-btn removed from UI (v1.6.83)
 
     // 법인카드/개인카드 영수증 업로드
     const setupSplitReceiptInput = (inputId, statusId, deleteBtnId, stateKey) => {
