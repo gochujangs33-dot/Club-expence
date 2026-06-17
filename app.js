@@ -178,6 +178,7 @@ const AppState = {
     reportEmail: 'finance@club.com',
     eventPhoto: null,
     clubName: '',
+    clubId: '',
     settlementHistory: [],
     clubRegistry: {},
     clubTotalBudget: 0,
@@ -226,6 +227,8 @@ const AppState = {
             if (savedEventPhoto) this.eventPhoto = savedEventPhoto;
             const savedClubName = localStorage.getItem('club_name');
             if (savedClubName) this.clubName = savedClubName;
+            const savedClubId = localStorage.getItem('club_id');
+            if (savedClubId) this.clubId = savedClubId;
             const savedHistory = localStorage.getItem('club_settlement_history');
             if (savedHistory) {
                 const parsed = JSON.parse(savedHistory);
@@ -321,6 +324,7 @@ const AppState = {
             localStorage.setItem('club_used_budget', this.usedBudget.toString());
             localStorage.setItem('club_report_email', this.reportEmail || '');
             localStorage.setItem('club_name', this.clubName);
+            localStorage.setItem('club_id', this.clubId || '');
             try { localStorage.setItem('club_settlement_history', JSON.stringify(this.settlementHistory)); } catch(_) {}
             if (this.eventPhoto) {
                 try { localStorage.setItem('club_event_photo', this.eventPhoto); } catch(_) {}
@@ -343,6 +347,7 @@ const AppState = {
                 annualBudget: this.annualBudget,
                 usedBudget: this.usedBudget,
                 clubName: this.clubName,
+                clubId: this.clubId || '',
                 reportEmail: this.reportEmail || '',
                 settlementHistory: this.settlementHistory,
                 eventPhoto: this.eventPhoto || null,
@@ -414,6 +419,7 @@ const AppState = {
                                 if (data.annualBudget !== undefined) this.annualBudget = data.annualBudget;
                                 if (data.usedBudget !== undefined) this.usedBudget = data.usedBudget;
                                 if (data.clubName !== undefined) this.clubName = data.clubName;
+                                if (data.clubId !== undefined) this.clubId = data.clubId;
                                 if (data.reportEmail !== undefined) this.reportEmail = data.reportEmail;
                                 this.settlementHistory = data.settlementHistory || [];
                                 if (data.eventPhoto) this.eventPhoto = data.eventPhoto;
@@ -473,11 +479,29 @@ const AppState = {
     // ── 클럽 레지스트리 (관리자가 등록한 전체 클럽 목록 + 예산 분배) ──────────────
     loadClubRegistry() {
         if (!this.firebaseDb) return Promise.resolve();
-        return this.firebaseDb.ref('clubRegistry').once('value').then(snapshot => {
-            this.clubRegistry = snapshot.val() || {};
-        }).then(() => this.firebaseDb.ref('clubTotalBudget').once('value')).then(snapshot => {
-            this.clubTotalBudget = snapshot.val() || 0;
-        }).catch(err => console.error("클럽 레지스트리 로딩 실패:", err));
+        // 실시간 리스너: 관리자가 클럽명/예산 수정 시 모든 접속자에게 즉시 반영
+        return new Promise((resolve) => {
+            this.firebaseDb.ref('clubRegistry').on('value', snapshot => {
+                this.clubRegistry = snapshot.val() || {};
+                // clubId로 현재 사용자가 선택한 클럽명을 추적 — 관리자가 이름 변경 시 자동 갱신
+                if (this.clubId && this.clubRegistry[this.clubId]) {
+                    const updatedName = this.clubRegistry[this.clubId].name;
+                    if (updatedName && updatedName !== this.clubName) {
+                        this.clubName = updatedName;
+                        this.save();
+                    }
+                }
+                // 클럽 드롭다운 갱신
+                if (typeof renderClubOptions === 'function') renderClubOptions();
+                resolve();
+            }, err => {
+                console.error("클럽 레지스트리 로딩 실패:", err);
+                resolve();
+            });
+            this.firebaseDb.ref('clubTotalBudget').once('value').then(snapshot => {
+                this.clubTotalBudget = snapshot.val() || 0;
+            });
+        });
     },
 
     saveClubRegistry() {
@@ -1888,6 +1912,9 @@ document.addEventListener('DOMContentLoaded', () => {
             if (newClubInputRow) newClubInputRow.classList.add('hidden');
             if (AppState.clubName !== clubNameInput.value) {
                 AppState.clubName = clubNameInput.value;
+                // clubId 저장: 이름 변경 추적에 사용
+                const selectedEntry = Object.entries(AppState.clubRegistry || {}).find(([, c]) => c.name === clubNameInput.value);
+                AppState.clubId = selectedEntry ? selectedEntry[0] : '';
                 AppState.clearClubData();
             }
             AppState.syncBudgetFromClub(AppState.clubName);
