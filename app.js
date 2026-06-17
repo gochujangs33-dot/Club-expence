@@ -483,12 +483,21 @@ const AppState = {
         return new Promise((resolve) => {
             this.firebaseDb.ref('clubRegistry').on('value', snapshot => {
                 this.clubRegistry = snapshot.val() || {};
-                // clubId로 현재 사용자가 선택한 클럽명을 추적 — 관리자가 이름 변경 시 자동 갱신
-                if (this.clubId && this.clubRegistry[this.clubId]) {
-                    const updatedName = this.clubRegistry[this.clubId].name;
-                    if (updatedName && updatedName !== this.clubName) {
-                        this.clubName = updatedName;
+                // clubId로 현재 사용자가 선택한 클럽명을 추적
+                if (this.clubId) {
+                    if (this.clubRegistry[this.clubId]) {
+                        // 관리자가 이름 변경 시 자동 갱신
+                        const updatedName = this.clubRegistry[this.clubId].name;
+                        if (updatedName && updatedName !== this.clubName) {
+                            this.clubName = updatedName;
+                            this.save();
+                        }
+                    } else {
+                        // 관리자가 해당 클럽을 삭제한 경우 초기화 + 팝업
+                        this.clubName = '';
+                        this.clubId = '';
                         this.save();
+                        if (typeof window.showClubNotFoundModal === 'function') window.showClubNotFoundModal();
                     }
                 }
                 // 클럽 드롭다운 갱신
@@ -1881,32 +1890,54 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function renderClubOptions() {
         if (!clubNameInput) return;
+
+        // clubId 기준으로 현재 클럽명 갱신 (관리자 이름 변경 반영)
+        if (AppState.clubId && AppState.clubRegistry[AppState.clubId]) {
+            AppState.clubName = AppState.clubRegistry[AppState.clubId].name;
+        }
+
         const current = AppState.clubName || '';
-        clubNameInput.innerHTML = '<option value="">클럽을 선택하세요</option>';
         const clubs = Object.values(AppState.clubRegistry || {});
+
+        // 현재 선택된 클럽이 레지스트리에 없으면 초기화 + 팝업
+        // (loadClubRegistry에서 이미 처리됐으면 current가 빈문자라 조건 불충족)
+        if (current && !clubs.some(c => c.name === current)) {
+            AppState.clubName = '';
+            AppState.clubId = '';
+            AppState.save();
+            if (typeof window.showClubNotFoundModal === 'function') window.showClubNotFoundModal();
+        }
+
+        clubNameInput.innerHTML = `<option value="">${t('header.club_placeholder')}</option>`;
         clubs.forEach(club => {
             const opt = document.createElement('option');
             opt.value = club.name;
             opt.textContent = club.name;
             clubNameInput.appendChild(opt);
         });
-        // 현재 클럽명이 레지스트리에 없으면 (예: 오프라인/마이그레이션 전) 임시로 추가
-        if (current && !clubs.some(c => c.name === current)) {
-            const opt = document.createElement('option');
-            opt.value = current;
-            opt.textContent = current;
-            clubNameInput.appendChild(opt);
-        }
         const newOpt = document.createElement('option');
         newOpt.value = '__new__';
-        newOpt.textContent = '+ 새 클럽 직접 등록';
+        newOpt.textContent = t('header.club_new');
         clubNameInput.appendChild(newOpt);
-        clubNameInput.value = current;
+        clubNameInput.value = AppState.clubName || '';
     }
 
     const newClubInputRow = document.getElementById('new-club-input-row');
     const newClubNameInput = document.getElementById('new-club-name-input');
     const registerNewClubBtn = document.getElementById('register-new-club-btn');
+
+    // 클럽이 삭제/미존재 시 팝업 (window에 등록해 AppState 내부에서도 호출 가능)
+    window.showClubNotFoundModal = function() {
+        const modal = document.getElementById('club-not-found-modal');
+        if (modal) modal.classList.remove('hidden');
+    };
+    const clubNotFoundOkBtn = document.getElementById('club-not-found-ok-btn');
+    if (clubNotFoundOkBtn) {
+        clubNotFoundOkBtn.addEventListener('click', () => {
+            const modal = document.getElementById('club-not-found-modal');
+            if (modal) modal.classList.add('hidden');
+        });
+    }
 
     // 클럽 레지스트리 실시간 업데이트 콜백 (loadClubRegistry의 on('value') 리스너에서 호출)
     window._onClubRegistryUpdate = () => {
@@ -1951,12 +1982,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 alert('클럽명을 입력해주세요.');
                 return;
             }
-            const exists = Object.values(AppState.clubRegistry || {}).some(c => c.name === name);
-            if (!exists) {
-                const clubId = 'club_' + Date.now();
-                AppState.addOrUpdateClub(clubId, name, 0);
+            let newClubId = Object.entries(AppState.clubRegistry || {}).find(([, c]) => c.name === name)?.[0];
+            if (!newClubId) {
+                newClubId = 'club_' + Date.now();
+                AppState.addOrUpdateClub(newClubId, name, 0);
             }
             AppState.clubName = name;
+            AppState.clubId = newClubId;
             AppState.clearClubData();
             AppState.syncBudgetFromClub(name);
             AppState.save();
