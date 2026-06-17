@@ -1020,7 +1020,7 @@ const AppState = {
             listContainer.innerHTML = `
                 <div class="empty-state">
                     <span class="empty-icon">💨</span>
-                    <p>등록된 비용 항목이 없습니다. 항목을 추가해 주세요.</p>
+                    <p>${t('empty.expenses')}</p>
                 </div>
             `;
         } else {
@@ -1151,7 +1151,7 @@ const AppState = {
                 attendeesContainer.innerHTML = `
                     <div class="empty-state">
                         <span class="empty-icon">👥</span>
-                        <p>현재 등록된 참석자가 없습니다. 왼쪽에서 사번과 이름을 기입하여 추가해 주세요.</p>
+                        <p>${t('empty.attendees')}</p>
                     </div>
                 `;
             } else {
@@ -1215,7 +1215,7 @@ const AppState = {
             if (dirKeys.length === 0) {
                 directoryContainer.innerHTML = `
                     <div class="empty-state" style="padding: 1rem 0;">
-                        <p style="font-size: 0.8rem;">등록된 사원 정보가 없습니다.</p>
+                        <p style="font-size: 0.8rem;">${t('empty.directory')}</p>
                     </div>
                 `;
             } else {
@@ -1315,7 +1315,7 @@ const AppState = {
         if (historyContainer) {
             historyContainer.innerHTML = '';
             if (this.settlementHistory.length === 0) {
-                historyContainer.innerHTML = `<div class="empty-state"><span class="empty-icon">📋</span><p>저장된 정산 이력이 없습니다.</p></div>`;
+                historyContainer.innerHTML = `<div class="empty-state"><span class="empty-icon">📋</span><p>${t('empty.history')}</p></div>`;
             } else {
                 this.settlementHistory.forEach((entry) => {
                     const d = new Date(entry.date);
@@ -1804,14 +1804,25 @@ document.addEventListener('DOMContentLoaded', () => {
     // 언어 설정 초기 적용
     if (typeof applyTranslations === 'function') applyTranslations();
 
-    // 언어 선택 드롭다운
+    // 언어 선택 드롭다운 (헤더 + 로그인 모달 공유 핸들러)
+    const applyLangChange = (lang) => {
+        setLang(lang);
+        // 두 select 모두 동기화
+        const hs = document.getElementById('lang-select');
+        const ls = document.getElementById('login-lang-select');
+        if (hs) hs.value = lang;
+        if (ls) ls.value = lang;
+        if (typeof AppState !== 'undefined' && AppState.isLoggedIn) AppState.render();
+    };
     const langSelect = document.getElementById('lang-select');
     if (langSelect) {
         langSelect.value = getLang();
-        langSelect.addEventListener('change', () => {
-            setLang(langSelect.value);
-            if (typeof AppState !== 'undefined' && AppState.isLoggedIn) AppState.render();
-        });
+        langSelect.addEventListener('change', () => applyLangChange(langSelect.value));
+    }
+    const loginLangSelect = document.getElementById('login-lang-select');
+    if (loginLangSelect) {
+        loginLangSelect.value = getLang();
+        loginLangSelect.addEventListener('change', () => applyLangChange(loginLangSelect.value));
     }
 
     // 현재 정산 초기화 버튼

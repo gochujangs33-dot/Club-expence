@@ -26,8 +26,8 @@
 <body>
     <!-- 업데이트 알림 배너 -->
     <div id="update-banner" class="update-banner hidden">
-        <span>🔄 새 버전이 있습니다!</span>
-        <button id="update-reload-btn">지금 업데이트</button>
+        <span data-i18n="update.msg">🔄 새 버전이 있습니다!</span>
+        <button id="update-reload-btn" data-i18n="update.btn">지금 업데이트</button>
         <button id="update-dismiss-btn" aria-label="닫기">✕</button>
     </div>
 
@@ -46,8 +46,8 @@
         <header class="app-header">
             <div class="logo-area" style="flex-wrap:nowrap;">
                 <span class="logo-icon" style="color:#ef4444; font-weight:800; font-style:normal; font-size:1.4rem; white-space:nowrap;">3M</span>
-                <h1 style="white-space:nowrap;">클럽 비용 정산</h1>
-                <button id="feedback-open-btn" style="font-size:0.72rem; padding:0.3rem 0.65rem; border-radius:20px; background:linear-gradient(135deg, var(--color-primary), var(--color-primary-light)); color:#fff; border:none; font-weight:700; cursor:pointer; white-space:nowrap; margin-left:0.4rem;">📝 요청</button>
+                <h1 data-i18n="header.title" style="white-space:nowrap;">클럽 비용 정산</h1>
+                <button id="feedback-open-btn" data-i18n="header.request" style="font-size:0.72rem; padding:0.3rem 0.65rem; border-radius:20px; background:linear-gradient(135deg, var(--color-primary), var(--color-primary-light)); color:#fff; border:none; font-weight:700; cursor:pointer; white-space:nowrap; margin-left:0.4rem;">📝 요청</button>
             </div>
             <div class="club-name-wrapper">
                 <select id="club-name-select" class="club-name-input">
@@ -75,9 +75,9 @@
             <button id="attendees-tab-btn" class="tab-btn" data-tab="tab-attendees">👥 현재 참석자 (<span id="attendee-badge-count">0</span>명)</button>
             <button id="directory-tab-btn" class="tab-btn" data-tab="tab-directory">🗂️ 전사원 명부 (<span id="directory-badge-count">0</span>명)</button>
             <button id="history-tab-btn" class="tab-btn" data-tab="tab-history" data-i18n="tab.history">📋 정산 이력</button>
-            <button id="club-history-tab-btn" class="tab-btn hidden" data-tab="tab-club-history" style="background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(239, 68, 68, 0.15)); border-color: rgba(245, 158, 11, 0.3); color: #fbbf24;">📋 클럽별 정산이력</button>
-            <button id="charts-tab-btn" class="tab-btn hidden" data-tab="tab-charts" style="background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(239, 68, 68, 0.15)); border-color: rgba(245, 158, 11, 0.3); color: #fbbf24;">📈 차트</button>
-            <button id="admin-tab-btn" class="tab-btn hidden" data-tab="tab-admin" style="background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(239, 68, 68, 0.15)); border-color: rgba(245, 158, 11, 0.3); color: #fbbf24;">👑 대시보드 관리</button>
+            <button id="club-history-tab-btn" class="tab-btn hidden" data-tab="tab-club-history" data-i18n="tab.club_history" style="background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(239, 68, 68, 0.15)); border-color: rgba(245, 158, 11, 0.3); color: #fbbf24;">📋 클럽별 정산이력</button>
+            <button id="charts-tab-btn" class="tab-btn hidden" data-tab="tab-charts" data-i18n="tab.charts" style="background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(239, 68, 68, 0.15)); border-color: rgba(245, 158, 11, 0.3); color: #fbbf24;">📈 차트</button>
+            <button id="admin-tab-btn" class="tab-btn hidden" data-tab="tab-admin" data-i18n="tab.admin" style="background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(239, 68, 68, 0.15)); border-color: rgba(245, 158, 11, 0.3); color: #fbbf24;">👑 대시보드 관리</button>
         </nav>
         <!-- Tab Content 1: Settlement Calculator -->
         <div id="tab-settlement" class="tab-pane active">
@@ -88,8 +88,8 @@
                     <div class="card" id="attendance-card">
                         <div class="card-header">
                             <span class="card-icon">👥</span>
-                            <h2>참석자 및 기존 누적 정보</h2>
-                            <label for="event-photo-input" class="btn-secondary" style="margin-left:auto; cursor:pointer; padding:0.35rem 0.75rem; font-size:0.8rem; border-radius:8px; display:inline-flex; align-items:center; gap:0.3rem;">📷 참석자 사진 첨부</label>
+                            <h2 data-i18n="section.attendance">참석자 및 기존 누적 정보</h2>
+                            <label for="event-photo-input" class="btn-secondary" data-i18n="label.event_photo" style="margin-left:auto; cursor:pointer; padding:0.35rem 0.75rem; font-size:0.8rem; border-radius:8px; display:inline-flex; align-items:center; gap:0.3rem;">📷 참석자 사진 첨부</label>
                             <input type="file" id="event-photo-input" accept="image/*" style="display:none;">
                         </div>
                         <div id="event-photo-preview" class="hidden" style="margin-bottom:0.75rem; border-radius:12px; overflow:hidden; max-height:240px; position:relative; background:rgba(15,23,42,0.6); display:flex; align-items:center; justify-content:center;">
@@ -98,12 +98,12 @@
                         </div>
                         <div class="card-body">
                             <div class="input-group">
-                                <label for="member-count-input">정회원 참석자 수 (명)</label>
+                                <label for="member-count-input" data-i18n="label.member_count">정회원 참석자 수 (명)</label>
                                 <input type="number" id="member-count-input" min="0" placeholder="예: 20" value="0" readonly class="readonly-input">
-                                <small class="input-hint">💡 '참석자 명부' 탭에서 인원을 관리하면 자동 반영됩니다.</small>
+                                <small class="input-hint" data-i18n="hint.member_count">💡 '참석자 명부' 탭에서 인원을 관리하면 자동 반영됩니다.</small>
                             </div>
                             <div class="input-group">
-                                <label for="prev-prize-input">기존 상품비 누적액 (원)</label>
+                                <label for="prev-prize-input" data-i18n="label.prev_prize">기존 상품비 누적액 (원)</label>
                                 <input type="text" inputmode="numeric" id="prev-prize-input" placeholder="예: 450,000" value="0">
                             </div>
                         </div>
@@ -114,34 +114,34 @@
                         <div class="card-header" style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:0.5rem;">
                             <div style="display:flex; align-items:center; gap:0.5rem;">
                                 <span class="card-icon">➕</span>
-                                <h2>비용 항목 추가</h2>
+                                <h2 data-i18n="section.add_expense">비용 항목 추가</h2>
                             </div>
                             <div style="display:flex; align-items:center; gap:0.6rem; font-size:0.85rem;">
                                 <label class="card-toggle" for="expense-corp-check">
                                     <input type="checkbox" id="expense-corp-check" checked>
                                     <span class="card-toggle-track"><span class="card-toggle-thumb"></span></span>
-                                    <span class="card-toggle-label">법인카드</span>
+                                    <span class="card-toggle-label" data-i18n="label.corp_card">법인카드</span>
                                 </label>
                                 <label class="card-toggle" for="expense-personal-check">
                                     <input type="checkbox" id="expense-personal-check">
                                     <span class="card-toggle-track"><span class="card-toggle-thumb"></span></span>
-                                    <span class="card-toggle-label">개인카드</span>
+                                    <span class="card-toggle-label" data-i18n="label.personal_card">개인카드</span>
                                 </label>
                             </div>
                         </div>
                         <div class="card-body">
                             <form id="expense-form" onsubmit="return false;">
                                 <div class="input-group">
-                                    <label for="expense-desc-input">내역 (항목명)</label>
-                                    <input type="text" id="expense-desc-input" placeholder="예: 저녁 식대, 대관료 등" required>
+                                    <label for="expense-desc-input" data-i18n="label.expense_desc">내역 (항목명)</label>
+                                    <input type="text" id="expense-desc-input" data-i18n-ph="ph.expense_desc" placeholder="예: 저녁 식대, 대관료 등" required>
                                 </div>
                                 <div class="input-row">
                                     <div class="input-group flex-2">
-                                        <label for="expense-amount-input">금액 (원)</label>
+                                        <label for="expense-amount-input" data-i18n="label.expense_amount">금액 (원)</label>
                                         <input type="text" inputmode="numeric" id="expense-amount-input" placeholder="예: 150,000" required>
                                     </div>
                                     <div class="input-group flex-3">
-                                        <label for="expense-category-select">구분 (카테고리)</label>
+                                        <label for="expense-category-select" data-i18n="label.expense_cat">구분 (카테고리)</label>
                                         <select id="expense-category-select">
                                             <option value="EVENT">행사비</option>
                                             <option value="FACILITY">시설 및 장비 이용료</option>
@@ -177,10 +177,10 @@
                                     </div>
                                 </div>
                                 <div class="form-actions">
-                                    <button type="submit" id="add-expense-btn" class="btn-primary">
-                                        <span class="btn-icon">✨</span> 항목 추가
+                                    <button type="submit" id="add-expense-btn" class="btn-primary" data-i18n="btn.add_expense">
+                                        ✨ 항목 추가
                                     </button>
-                                    <button type="button" id="cancel-edit-btn" class="btn-secondary hidden">
+                                    <button type="button" id="cancel-edit-btn" class="btn-secondary hidden" data-i18n="btn.cancel_edit">
                                         수정 취소
                                     </button>
                                 </div>
@@ -197,7 +197,7 @@
                             <div class="header-split">
                                 <div class="header-left">
                                     <span class="card-icon">📋</span>
-                                    <h2>비용 목록</h2>
+                                    <h2 data-i18n="section.expense_list">비용 목록</h2>
                                 </div>
                                 <button id="reset-session-btn" class="btn-text-danger" data-i18n="btn.reset_session">🔄 정산 초기화</button>
                             </div>
@@ -219,7 +219,7 @@
                             <div class="header-split">
                                 <div class="header-left">
                                     <span class="card-icon">⚡</span>
-                                    <h2>자동 정산 결과</h2>
+                                    <h2 data-i18n="section.result">자동 정산 결과</h2>
                                 </div>
                                 <button id="toggle-settings-btn" class="btn-icon-only" title="정산 구간 설정">⚙️</button>
                             </div>
@@ -227,25 +227,25 @@
                         
                         <!-- Collapsible Settings Panel -->
                         <div id="settings-panel" class="settings-panel hidden">
-                            <h3 class="settings-title">💰 연간 예산 관리</h3>
+                            <h3 class="settings-title" data-i18n="section.budget">💰 연간 예산 관리</h3>
                             <div class="settings-grid">
                                 <div class="input-group">
-                                    <label for="setting-annual-budget">올해 클럽 지원 총예산 (원)</label>
+                                    <label for="setting-annual-budget" data-i18n="label.annual_budget">올해 클럽 지원 총예산 (원)</label>
                                     <input type="number" id="setting-annual-budget" min="0" step="10000" value="0" readonly class="readonly-input">
-                                    <small class="input-hint">💡 관리자 대시보드의 클럽 관리에서 선택한 클럽에 배정한 예산이 자동으로 표시됩니다.</small>
+                                    <small class="input-hint" data-i18n="hint.annual_budget">💡 관리자 대시보드의 클럽 관리에서 선택한 클럽에 배정한 예산이 자동으로 표시됩니다.</small>
                                 </div>
                                 <div class="input-group">
-                                    <label for="setting-used-budget">기존에 사용한 누적 금액 (원)</label>
+                                    <label for="setting-used-budget" data-i18n="label.used_budget">기존에 사용한 누적 금액 (원)</label>
                                     <input type="text" inputmode="numeric" id="setting-used-budget" value="0">
-                                    <small class="input-hint">💡 이전에 이미 사용한 비용을 한 번에 입력하면, 현재 시점부터 이어서 정산을 진행할 수 있습니다.</small>
+                                    <small class="input-hint" data-i18n="hint.used_budget">💡 이전에 이미 사용한 비용을 한 번에 입력하면, 현재 시점부터 이어서 정산을 진행할 수 있습니다.</small>
                                 </div>
                                 <div style="display:flex; justify-content:space-between; align-items:center; padding:0.35rem 0 0;">
-                                    <span style="font-size:0.82rem; color:var(--text-secondary);">→ 현재 잔여 예산</span>
+                                    <span data-i18n="label.remaining_display" style="font-size:0.82rem; color:var(--text-secondary);">→ 현재 잔여 예산</span>
                                     <strong id="setting-remaining-display" style="font-size:0.95rem; color:var(--color-secondary);">미설정</strong>
                                 </div>
                             </div>
                             <div class="settings-actions">
-                                <button id="save-settings-btn" class="btn-primary-sm">설정 저장</button>
+                                <button id="save-settings-btn" class="btn-primary-sm" data-i18n="btn.save_settings">설정 저장</button>
                             </div>
                             <div class="divider"></div>
                         </div>
@@ -280,23 +280,23 @@
                                     <strong id="result-total-cost">0원</strong>
                                 </div>
                                 <div class="detail-row sub">
-                                    <span>└ 행사비 총합</span>
+                                    <span data-i18n="label.event_cost">└ 행사비 총합</span>
                                     <span id="result-event-cost">0원</span>
                                 </div>
                                 <div class="detail-row sub">
-                                    <span>└ 시설 및 장비 이용료</span>
+                                    <span data-i18n="label.facility_cost">└ 시설 및 장비 이용료</span>
                                     <span id="result-facility-cost">0원</span>
                                 </div>
                                 <div class="detail-row sub">
-                                    <span>└ 상품비 총합</span>
+                                    <span data-i18n="label.prize_cost">└ 상품비 총합</span>
                                     <span id="result-prize-cost">0원</span>
                                 </div>
                                 <div class="detail-row sub-highlight">
-                                    <span>└ 인당 행사비 (행사비 / 참석자)</span>
+                                    <span data-i18n="label.per_person_event">└ 인당 행사비 (행사비 / 참석자)</span>
                                     <span id="result-per-person-event-cost">0원</span>
                                 </div>
                                 <div class="detail-row">
-                                    <span>클럽 잔여 예산</span>
+                                    <span data-i18n="label.club_remaining">클럽 잔여 예산</span>
                                     <strong id="result-club-remaining-budget">0원</strong>
                                 </div>
                             </div>
@@ -305,15 +305,15 @@
                                 <div class="divider"></div>
                                 <div class="result-details">
                                     <div class="detail-row">
-                                        <span>이전 잔여 예산</span>
+                                        <span data-i18n="label.prev_remaining">이전 잔여 예산</span>
                                         <strong id="result-prev-remaining">-</strong>
                                     </div>
                                     <div class="detail-row sub">
-                                        <span>└ 이번 최종 지원금 (-)</span>
+                                        <span data-i18n="label.this_support_sub">└ 이번 최종 지원금 (-)</span>
                                         <span id="result-this-support-sub">0원</span>
                                     </div>
                                     <div class="detail-row sub-highlight">
-                                        <span>└ 이후 남은 잔여 금액</span>
+                                        <span data-i18n="label.after_remaining">└ 이후 남은 잔여 금액</span>
                                         <strong id="result-after-remaining">-</strong>
                                     </div>
                                 </div>
@@ -328,7 +328,7 @@
                     <div class="card warning-card hidden" id="warnings-card">
                         <div class="card-header">
                             <span class="card-icon">⚠️</span>
-                            <h2>주의사항 및 한도 경고</h2>
+                            <h2 data-i18n="section.warnings">주의사항 및 한도 경고</h2>
                         </div>
                         <div class="card-body">
                             <ul id="warnings-list" class="warnings-list-el">
@@ -348,26 +348,26 @@
                     <div class="card" id="add-attendee-card">
                         <div class="card-header">
                             <span class="card-icon">👤</span>
-                            <h2>참석자 추가</h2>
+                            <h2 data-i18n="section.add_attendee">참석자 추가</h2>
                         </div>
                         <div class="card-body">
                             <form id="attendee-form" onsubmit="return false;">
                                 <div class="input-group">
-                                    <label for="attendee-name-input">이름</label>
-                                    <input type="text" id="attendee-name-input" list="member-suggestions" placeholder="예: 홍길동" required autocomplete="off">
+                                    <label for="attendee-name-input" data-i18n="label.name">이름</label>
+                                    <input type="text" id="attendee-name-input" list="member-suggestions" data-i18n-ph="ph.name" placeholder="예: 홍길동" required autocomplete="off">
                                     <datalist id="member-suggestions">
                                         <!-- Dynamically populated from directory -->
                                     </datalist>
                                 </div>
                                 <div class="input-group">
-                                    <label for="attendee-id-input">사번</label>
-                                    <input type="text" id="attendee-id-input" placeholder="예: 12345" required>
+                                    <label for="attendee-id-input" data-i18n="label.emp_id">사번</label>
+                                    <input type="text" id="attendee-id-input" data-i18n-ph="ph.emp_id" placeholder="예: 12345" required>
                                 </div>
                                 <div class="form-actions">
-                                    <button type="submit" id="add-attendee-btn" class="btn-primary" style="flex: 1;">
-                                        <span class="btn-icon">👥</span> 참석 추가
+                                    <button type="submit" id="add-attendee-btn" class="btn-primary" data-i18n="btn.add_attendee_full" style="flex: 1;">
+                                        👥 참석 추가
                                     </button>
-                                    <button type="button" id="cancel-edit-attendee-btn" class="btn-secondary hidden" style="flex: 1;">
+                                    <button type="button" id="cancel-edit-attendee-btn" class="btn-secondary hidden" data-i18n="btn.cancel_edit" style="flex: 1;">
                                         수정 취소
                                     </button>
                                 </div>
@@ -384,9 +384,9 @@
                             <div class="header-split">
                                 <div class="header-left">
                                     <span class="card-icon">👥</span>
-                                    <h2>현재 참석자 명단 (<span id="attendee-list-count">0</span>명)</h2>
+                                    <h2><span data-i18n="section.current_attendees">현재 참석자 명단</span> (<span id="attendee-list-count">0</span><span data-i18n="unit.person">명</span>)</h2>
                                 </div>
-                                <button id="clear-attendees-btn" class="btn-text-danger">전체 비우기</button>
+                                <button id="clear-attendees-btn" class="btn-text-danger" data-i18n="btn.clear_attendees">전체 비우기</button>
                             </div>
                         </div>
                         <div class="card-body scroll-y" style="max-height: 400px;">
@@ -411,25 +411,25 @@
                     <div class="card" id="add-dir-card">
                         <div class="card-header">
                             <span class="card-icon">🗂️</span>
-                            <h2>전사원 등록</h2>
+                            <h2 data-i18n="section.dir_register">전사원 등록</h2>
                         </div>
                         <div class="card-body">
                             <form id="dir-form" onsubmit="return false;">
                                 <div class="input-group">
-                                    <label for="dir-name-input">이름</label>
-                                    <input type="text" id="dir-name-input" placeholder="예: 홍길동" required autocomplete="off">
+                                    <label for="dir-name-input" data-i18n="label.name">이름</label>
+                                    <input type="text" id="dir-name-input" data-i18n-ph="ph.name" placeholder="예: 홍길동" required autocomplete="off">
                                     <small id="dir-existing-id-hint" class="input-hint hidden"></small>
-                                    <small id="dir-same-person-warning" class="input-hint hidden" style="color: var(--warning-text, #ff6b6b);">동일한 이름이 존재합니다. 이름뒤에 (부서명)을 적어주세요.</small>
+                                    <small id="dir-same-person-warning" class="input-hint hidden" data-i18n="warn.dup_name" style="color: var(--warning-text, #ff6b6b);">동일한 이름이 존재합니다. 이름뒤에 (부서명)을 적어주세요.</small>
                                 </div>
                                 <div class="input-group">
-                                    <label for="dir-id-input">EMP ID</label>
-                                    <input type="text" id="dir-id-input" placeholder="예: 1234" required>
+                                    <label for="dir-id-input" data-i18n="label.dir_id">EMP ID</label>
+                                    <input type="text" id="dir-id-input" data-i18n-ph="ph.emp_id" placeholder="예: 1234" required>
                                 </div>
                                 <div class="form-actions">
-                                    <button type="submit" id="add-dir-btn" class="btn-primary" style="flex: 1;">
-                                        <span class="btn-icon">🗂️</span> 사원 등록
+                                    <button type="submit" id="add-dir-btn" class="btn-primary" data-i18n="btn.dir_register" style="flex: 1;">
+                                        🗂️ 사원 등록
                                     </button>
-                                    <button type="button" id="cancel-edit-dir-btn" class="btn-secondary hidden" style="flex: 1;">
+                                    <button type="button" id="cancel-edit-dir-btn" class="btn-secondary hidden" data-i18n="btn.cancel_edit" style="flex: 1;">
                                         수정 취소
                                     </button>
                                 </div>
@@ -446,7 +446,7 @@
                             <div class="header-split">
                                 <div class="header-left">
                                     <span class="card-icon">🗂️</span>
-                                    <h2>전사원 명부 (<span id="directory-count">0</span>명)</h2>
+                                    <h2><span data-i18n="section.dir_list">전사원 명부</span> (<span id="directory-count">0</span><span data-i18n="unit.person">명</span>)</h2>
                                 </div>
                             </div>
                         </div>
@@ -468,7 +468,7 @@
             <div class="card">
                 <div class="card-header">
                     <span class="card-icon">📋</span>
-                    <h2>정산 이력</h2>
+                    <h2 data-i18n="tab.history_title">정산 이력</h2>
                 </div>
                 <div class="card-body">
                     <div id="history-container"></div>
@@ -481,17 +481,17 @@
             <div class="card">
                 <div class="card-header">
                     <span class="card-icon">📋</span>
-                    <h2>클럽별 정산 이력</h2>
+                    <h2 data-i18n="tab.club_history_title">클럽별 정산 이력</h2>
                 </div>
                 <div class="card-body">
                     <div class="input-group">
-                        <label for="club-history-select">클럽 선택</label>
+                        <label for="club-history-select" data-i18n="label.club_select">클럽 선택</label>
                         <select id="club-history-select">
                             <option value="">전체 클럽 (월별)</option>
                         </select>
                     </div>
                     <div class="input-group hidden" id="admin-user-select-group">
-                        <label for="admin-user-select">정산인 선택</label>
+                        <label for="admin-user-select" data-i18n="label.user_select">정산인 선택</label>
                         <select id="admin-user-select">
                             <option value="">전체 사용자</option>
                         </select>
@@ -508,20 +508,20 @@
             <div class="card" id="overall-monthly-chart-card">
                 <div class="card-header">
                     <span class="card-icon">📊</span>
-                    <h2>월별 클럽 지출 현황</h2>
+                    <h2 data-i18n="chart.monthly_title">월별 클럽 지출 현황</h2>
                 </div>
                 <div class="card-body">
                     <div class="admin-stats-grid" style="margin-bottom:1rem;">
                         <div class="stat-card">
-                            <span class="stat-label">💰 총 예산</span>
+                            <span class="stat-label" data-i18n="stat.total_budget">💰 총 예산</span>
                             <span class="stat-val" id="charts-total-budget">0원</span>
                         </div>
                         <div class="stat-card">
-                            <span class="stat-label">💸 사용 예산</span>
+                            <span class="stat-label" data-i18n="stat.used_budget">💸 사용 예산</span>
                             <span class="stat-val" id="charts-used-budget">0원</span>
                         </div>
                         <div class="stat-card">
-                            <span class="stat-label">🟢 잔여 예산</span>
+                            <span class="stat-label" data-i18n="stat.remaining_budget">🟢 잔여 예산</span>
                             <span class="stat-val" id="charts-remaining-budget">0원</span>
                         </div>
                     </div>
@@ -538,7 +538,7 @@
             <div class="card chart-card-glow" id="club-usage-chart-card">
                 <div class="card-header">
                     <span class="card-icon">🎯</span>
-                    <h2>클럽별 예산 소진율</h2>
+                    <h2 data-i18n="chart.usage_title">클럽별 예산 소진율</h2>
                 </div>
                 <div class="card-body">
                     <div id="club-usage-filter-container" class="club-filter-row">
@@ -554,7 +554,7 @@
             <div class="card chart-card-glow" id="category-pie-chart-card">
                 <div class="card-header">
                     <span class="card-icon">🥧</span>
-                    <h2>카테고리별 누적 비용 비중</h2>
+                    <h2 data-i18n="chart.cat_title">카테고리별 누적 비용 비중</h2>
                 </div>
                 <div class="card-body">
                     <div class="chart-canvas-wrap" style="max-height:320px; max-width:320px; margin:0 auto;">
@@ -567,7 +567,7 @@
             <div class="card chart-card-glow" id="selfpay-trend-chart-card">
                 <div class="card-header">
                     <span class="card-icon">📐</span>
-                    <h2>자부담 / 회사지원금 추이</h2>
+                    <h2 data-i18n="chart.selfpay_title">자부담 / 회사지원금 추이</h2>
                 </div>
                 <div class="card-body">
                     <div class="chart-canvas-wrap" style="max-height:340px;">
@@ -579,22 +579,22 @@
 
         <!-- Tab Content 7: Admin Dashboard -->
         <div id="tab-admin" class="tab-pane hidden">
-            <h2 class="admin-mode-title">👑 전체 관리자 모드</h2>
+            <h2 class="admin-mode-title" data-i18n="admin.mode_title">👑 전체 관리자 모드</h2>
             <div class="admin-stats-grid">
                 <div class="stat-card">
-                    <span class="stat-label">👥 총 등록 가입자</span>
+                    <span class="stat-label" data-i18n="stat.total_users">👥 총 등록 가입자</span>
                     <span class="stat-val" id="admin-total-users">0명</span>
                 </div>
                 <div class="stat-card">
-                    <span class="stat-label">💰 전체 누적 지출액</span>
+                    <span class="stat-label" data-i18n="stat.total_spend">💰 전체 누적 지출액</span>
                     <span class="stat-val" id="admin-total-spend">0원</span>
                 </div>
                 <div class="stat-card">
-                    <span class="stat-label">🏢 전체 누적 지원금</span>
+                    <span class="stat-label" data-i18n="stat.total_support">🏢 전체 누적 지원금</span>
                     <span class="stat-val" id="admin-total-support">0원</span>
                 </div>
                 <div class="stat-card">
-                    <span class="stat-label">👤 전체 누적 자부담</span>
+                    <span class="stat-label" data-i18n="stat.total_selfpay">👤 전체 누적 자부담</span>
                     <span class="stat-val" id="admin-total-self-pay">0원</span>
                 </div>
             </div>
@@ -602,43 +602,43 @@
             <div class="card" id="rules-management-card">
                 <div class="card-header">
                     <span class="card-icon">⚙️</span>
-                    <h2>정산 구간 및 비율 설정 (전체 클럽 공통 적용)</h2>
+                    <h2 data-i18n="admin.rules_title">정산 구간 및 비율 설정 (전체 클럽 공통 적용)</h2>
                     <button type="button" class="card-collapse-btn" data-card="rules-management-card">▾</button>
                 </div>
                 <div class="card-body">
                     <div class="settings-grid">
                         <div class="input-group">
-                            <label for="admin-setting-limit1">가. 지원 한도 (원 이하 자부담 0%)</label>
+                            <label for="admin-setting-limit1" data-i18n="admin.rule_limit1">가. 지원 한도 (원 이하 자부담 0%)</label>
                             <input type="text" inputmode="numeric" id="admin-setting-limit1" value="30000">
                         </div>
                         <div class="settings-row">
                             <div class="input-group">
-                                <label for="admin-setting-limit2">나. 구간 한도 (원)</label>
+                                <label for="admin-setting-limit2" data-i18n="admin.rule_limit2">나. 구간 한도 (원)</label>
                                 <input type="text" inputmode="numeric" id="admin-setting-limit2" value="60000">
                             </div>
                             <div class="input-group">
-                                <label for="admin-setting-rate2">나. 자부담 비율 (%)</label>
+                                <label for="admin-setting-rate2" data-i18n="admin.rule_rate2">나. 자부담 비율 (%)</label>
                                 <input type="number" id="admin-setting-rate2" min="0" max="100" step="1" value="20">
                             </div>
                         </div>
                         <div class="settings-row">
                             <div class="input-group">
-                                <label for="admin-setting-limit3">다. 구간 한도 (원)</label>
+                                <label for="admin-setting-limit3" data-i18n="admin.rule_limit3">다. 구간 한도 (원)</label>
                                 <input type="text" inputmode="numeric" id="admin-setting-limit3" value="120000">
                             </div>
                             <div class="input-group">
-                                <label for="admin-setting-rate3">다. 자부담 비율 (%)</label>
+                                <label for="admin-setting-rate3" data-i18n="admin.rule_rate3">다. 자부담 비율 (%)</label>
                                 <input type="number" id="admin-setting-rate3" min="0" max="100" step="1" value="40">
                             </div>
                         </div>
                         <div class="input-group">
-                            <label for="admin-setting-deduction4">라. 초과 시 자부담 공제액 (원)</label>
+                            <label for="admin-setting-deduction4" data-i18n="admin.rule_deduct4">라. 초과 시 자부담 공제액 (원)</label>
                             <input type="text" inputmode="numeric" id="admin-setting-deduction4" value="85000">
                         </div>
                     </div>
                     <div class="settings-actions">
-                        <button id="admin-save-rules-btn" class="btn-primary-sm">정산 비율 저장 (일괄 적용)</button>
-                        <button id="admin-reset-rules-btn" class="btn-text">기본값 복원</button>
+                        <button id="admin-save-rules-btn" class="btn-primary-sm" data-i18n="admin.save_rules">정산 비율 저장 (일괄 적용)</button>
+                        <button id="admin-reset-rules-btn" class="btn-text" data-i18n="admin.reset_rules">기본값 복원</button>
                     </div>
                 </div>
             </div>
@@ -646,16 +646,16 @@
             <div class="card" id="club-management-card">
                 <div class="card-header">
                     <span class="card-icon">🏷️</span>
-                    <h2>클럽 관리</h2>
+                    <h2 data-i18n="admin.club_mgmt_title">클럽 관리</h2>
                     <button type="button" class="card-collapse-btn" data-card="club-management-card">▾</button>
                 </div>
                 <div class="card-body">
                     <div class="input-row" style="align-items:flex-end;">
                         <div class="input-group flex-2">
-                            <label for="club-total-budget-input">올해 사용 가능한 총 클럽비용 (원)</label>
+                            <label for="club-total-budget-input" data-i18n="admin.total_club_budget_label">올해 사용 가능한 총 클럽비용 (원)</label>
                             <div style="display:flex; gap:0.4rem;">
                                 <input type="text" inputmode="numeric" id="club-total-budget-input" placeholder="예: 50,000,000" style="flex:1; min-width:0;">
-                                <button type="button" id="save-club-total-budget-btn" class="btn-primary-sm">저장</button>
+                                <button type="button" id="save-club-total-budget-btn" class="btn-primary-sm" data-i18n="btn.save">저장</button>
                             </div>
                             <small id="club-total-budget-status" class="input-hint" style="display:none; color: var(--color-secondary);">✔️ 저장되었습니다.</small>
                         </div>
@@ -668,20 +668,20 @@
                     <form id="club-form">
                         <div class="input-row">
                             <div class="input-group flex-2">
-                                <label for="club-name-form-input">클럽명</label>
-                                <input type="text" id="club-name-form-input" placeholder="예: 동탄 All balls" required autocomplete="off">
+                                <label for="club-name-form-input" data-i18n="admin.club_name_label">클럽명</label>
+                                <input type="text" id="club-name-form-input" data-i18n-ph="ph.club_name" placeholder="예: 동탄 All balls" required autocomplete="off">
                             </div>
                             <div class="input-group flex-1">
-                                <label for="club-budget-form-input">배정 예산 (원)</label>
+                                <label for="club-budget-form-input" data-i18n="admin.club_budget_label">배정 예산 (원)</label>
                                 <input type="text" inputmode="numeric" id="club-budget-form-input" placeholder="예: 5,000,000" required>
                             </div>
                         </div>
                         <small class="input-hint">💡 "이전 사용 금액"은 각 사용자가 정산 결과 화면의 ⚙️ 설정에서 "기존에 사용한 누적 금액"으로 직접 입력합니다.</small>
                         <div class="form-actions">
-                            <button type="submit" id="add-club-btn" class="btn-primary" style="flex:1;">
-                                <span class="btn-icon">➕</span> 클럽 추가
+                            <button type="submit" id="add-club-btn" class="btn-primary" data-i18n="btn.add_club" style="flex:1;">
+                                ➕ 클럽 추가
                             </button>
-                            <button type="button" id="cancel-edit-club-btn" class="btn-secondary hidden" style="flex:1;">수정 취소</button>
+                            <button type="button" id="cancel-edit-club-btn" class="btn-secondary hidden" data-i18n="btn.cancel_edit" style="flex:1;">수정 취소</button>
                         </div>
                     </form>
                     <div id="club-list-container" class="scroll-y" style="max-height: 320px; margin-top: 0.75rem; display:flex; flex-direction:column; gap:0.5rem;">
@@ -693,17 +693,17 @@
             <div class="card" id="users-management-card">
                 <div class="card-header">
                     <span class="card-icon">👥</span>
-                    <h2>가입 회원 관리 (이름 / PIN 수정)</h2>
+                    <h2 data-i18n="admin.user_mgmt_title">가입 회원 관리 (이름 / PIN 수정)</h2>
                     <button type="button" class="card-collapse-btn" data-card="users-management-card">▾</button>
                 </div>
                 <div class="card-body scroll-y" style="max-height: 400px; padding: 0;">
                     <table class="admin-table">
                         <thead>
                             <tr>
-                                <th>이름</th>
-                                <th>6자리 PIN</th>
-                                <th>가입일</th>
-                                <th>관리</th>
+                                <th data-i18n="th.name">이름</th>
+                                <th data-i18n="th.pin">6자리 PIN</th>
+                                <th data-i18n="th.join_date">가입일</th>
+                                <th data-i18n="th.manage">관리</th>
                             </tr>
                         </thead>
                         <tbody id="admin-users-list">
@@ -727,41 +727,41 @@
         <div class="modal-content-card card" style="max-width: 600px; width: 95%; background: var(--bg-dark); border: 1px solid var(--card-border); margin: auto;">
             <div class="card-header">
                 <span class="card-icon">📧</span>
-                <h2>이메일 정산서 초안</h2>
+                <h2 data-i18n="modal.email_title">이메일 정산서 초안</h2>
                 <span class="modal-close" id="close-email-modal" style="position: static; font-size: 28px; cursor: pointer; margin-left: auto; color: var(--text-secondary);">&times;</span>
             </div>
             <div class="card-body">
                 <div class="input-group">
-                    <label for="email-to-field">수신자</label>
+                    <label for="email-to-field" data-i18n="modal.email_to">수신자</label>
                     <input type="text" id="email-to-field" readonly class="readonly-input">
                 </div>
                 <div class="input-group">
-                    <label for="email-subject-field">제목</label>
+                    <label for="email-subject-field" data-i18n="modal.email_subject">제목</label>
                     <input type="text" id="email-subject-field" readonly class="readonly-input">
                 </div>
                 <div class="input-group">
-                    <label for="email-body-field">본문 내용 (복사 가능)</label>
+                    <label for="email-body-field" data-i18n="modal.email_body">본문 내용 (복사 가능)</label>
                     <textarea id="email-body-field" rows="10" style="background: rgba(15, 23, 42, 0.6); border: 1px solid var(--card-border); color: var(--text-primary); border-radius: 12px; padding: 0.75rem 1rem; font-size: 0.9rem; font-family: monospace; resize: vertical;" readonly></textarea>
                 </div>
                 <div class="form-actions" style="margin-top: 0.5rem; display: flex; gap: 0.75rem;">
-                    <button id="download-excel-btn" class="btn-primary" style="flex: 1;">
-                        <span class="btn-icon">💾</span> 엑셀 다운로드
+                    <button id="download-excel-btn" class="btn-primary" data-i18n="btn.excel_download" style="flex: 1;">
+                        💾 엑셀 다운로드
                     </button>
-                    <button id="trigger-mailto-btn" class="btn-secondary" style="flex: 1;">
-                        <span class="btn-icon">✉️</span> 메일 앱 열기
+                    <button id="trigger-mailto-btn" class="btn-secondary" data-i18n="btn.open_mail" style="flex: 1;">
+                        ✉️ 메일 앱 열기
                     </button>
                 </div>
                 <div style="margin-top: 0.75rem;">
-                    <button id="share-report-btn" class="btn-primary" style="width:100%; background: linear-gradient(135deg, hsl(38,92%,50%), hsl(282,84%,61%));">
-                        <span class="btn-icon">📤</span> 엑셀+사진 첨부하여 공유
+                    <button id="share-report-btn" class="btn-primary" data-i18n="btn.share_report" style="width:100%; background: linear-gradient(135deg, hsl(38,92%,50%), hsl(282,84%,61%));">
+                        📤 엑셀+사진 첨부하여 공유
                     </button>
-                    <p id="share-report-status" style="font-size:0.75rem; color:var(--text-muted); text-align:center; margin-top:0.4rem;">엑셀 정산표 + 참석자/영수증 사진을 묶어 공유 시트로 보냅니다 (메일 앱 선택 가능)</p>
+                    <p id="share-report-status" data-i18n="hint.share_report" style="font-size:0.75rem; color:var(--text-muted); text-align:center; margin-top:0.4rem;">엑셀 정산표 + 참석자/영수증 사진을 묶어 공유 시트로 보냅니다 (메일 앱 선택 가능)</p>
                 </div>
                 <div style="margin-top: 0.75rem;">
-                    <button id="finalize-settlement-btn" class="btn-primary" style="width:100%; background: linear-gradient(135deg, hsl(152,70%,40%), hsl(190,95%,40%));">
-                        <span class="btn-icon">✅</span> 정산 확정 — 이력 저장 &amp; 초기화
+                    <button id="finalize-settlement-btn" class="btn-primary" data-i18n="btn.finalize" style="width:100%; background: linear-gradient(135deg, hsl(152,70%,40%), hsl(190,95%,40%));">
+                        ✅ 정산 확정 — 이력 저장 &amp; 초기화
                     </button>
-                    <p style="font-size:0.75rem; color:var(--text-muted); text-align:center; margin-top:0.4rem;">누적 카운트 반영 후 현재 데이터가 초기화됩니다</p>
+                    <p data-i18n="hint.finalize" style="font-size:0.75rem; color:var(--text-muted); text-align:center; margin-top:0.4rem;">누적 카운트 반영 후 현재 데이터가 초기화됩니다</p>
                 </div>
             </div>
         </div>
@@ -814,7 +814,7 @@
 
     <!-- Diff Popup Notification -->
     <div id="diff-popup" class="diff-popup hidden">
-        <span class="diff-popup-label">자부담 변경 내역</span>
+        <span class="diff-popup-label" data-i18n="popup.diff_label">자부담 변경 내역</span>
         <span class="diff-popup-formula" id="diff-popup-formula"></span>
     </div>
 
@@ -823,13 +823,13 @@
         <div class="modal-content-card card" style="max-width: 480px; width: 95%; background: var(--bg-dark); border: 1px solid var(--card-border); margin: auto;">
             <div class="card-header">
                 <span class="card-icon">📩</span>
-                <h2>요청사항 보내기</h2>
+                <h2 data-i18n="modal.feedback_title">요청사항 보내기</h2>
                 <span class="modal-close" id="close-feedback-modal" style="position: static; font-size: 28px; cursor: pointer; margin-left: auto; color: var(--text-secondary);">&times;</span>
             </div>
             <div class="card-body">
                 <div class="input-group">
-                    <label for="feedback-message-input">메시지</label>
-                    <textarea id="feedback-message-input" rows="5" placeholder="개발자/관리자에게 전달할 요청사항이나 버그를 적어주세요." style="background: rgba(15, 23, 42, 0.6); border: 1px solid var(--card-border); color: var(--text-primary); border-radius: 12px; padding: 0.75rem 1rem; font-size: 0.9rem; resize: vertical;"></textarea>
+                    <label for="feedback-message-input" data-i18n="modal.feedback_label">메시지</label>
+                    <textarea id="feedback-message-input" rows="5" data-i18n-ph="modal.feedback_ph" placeholder="개발자/관리자에게 전달할 요청사항이나 버그를 적어주세요." style="background: rgba(15, 23, 42, 0.6); border: 1px solid var(--card-border); color: var(--text-primary); border-radius: 12px; padding: 0.75rem 1rem; font-size: 0.9rem; resize: vertical;"></textarea>
                 </div>
                 <div class="input-group">
                     <label for="feedback-photo-input" class="btn-secondary" style="cursor:pointer; display:inline-flex; align-items:center; gap:0.3rem; padding:0.4rem 0.8rem; font-size:0.85rem; border-radius:8px;">📷 사진 첨부</label>
@@ -840,8 +840,8 @@
                     </div>
                 </div>
                 <div class="form-actions" style="margin-top: 0.5rem;">
-                    <button id="feedback-submit-btn" class="btn-primary" style="flex:1;">
-                        <span class="btn-icon">📨</span> 요청 보내기
+                    <button id="feedback-submit-btn" class="btn-primary" data-i18n="btn.feedback_send" style="flex:1;">
+                        📨 요청 보내기
                     </button>
                 </div>
                 <p id="feedback-status" style="font-size:0.78rem; color:var(--text-muted); text-align:center; margin-top:0.4rem;"></p>
@@ -854,12 +854,12 @@
         <div class="modal-content-card card" style="max-width: 440px; width: 95%; background: var(--bg-dark); border: 1px solid rgba(245,158,11,0.4); margin: auto; box-shadow: 0 0 24px rgba(245,158,11,0.25);">
             <div class="card-header">
                 <span class="card-icon">📩</span>
-                <h2>새 요청사항 도착</h2>
+                <h2 data-i18n="modal.new_request_title">새 요청사항 도착</h2>
             </div>
             <div class="card-body">
                 <div id="feedback-popup-body"></div>
                 <div class="form-actions" style="margin-top: 0.75rem;">
-                    <button id="feedback-popup-confirm-btn" class="btn-primary" style="flex:1;">확인</button>
+                    <button id="feedback-popup-confirm-btn" class="btn-primary" data-i18n="btn.confirm" style="flex:1;">확인</button>
                 </div>
             </div>
         </div>
@@ -887,10 +887,16 @@
         <div class="modal-content-card card pin-modal-card" style="max-width: 340px; width: 90%; background: var(--bg-dark); border: 1px solid var(--card-border); margin: auto;">
             <!-- 로그인 모드 -->
             <div id="login-mode-section">
-                <div class="card-header" style="justify-content: center; text-align: center; flex-direction: column; gap: 0.5rem; border-bottom: none; padding-bottom: 0;">
+                <div style="display:flex; justify-content:flex-end; padding:0.5rem 0.75rem 0;">
+                    <select id="login-lang-select" style="font-size:0.75rem; padding:0.15rem 0.35rem; border-radius:6px; background:rgba(255,255,255,0.07); border:1px solid rgba(255,255,255,0.15); color:var(--text-secondary); cursor:pointer;">
+                        <option value="ko">한국어</option>
+                        <option value="en">English</option>
+                    </select>
+                </div>
+                <div class="card-header" style="justify-content: center; text-align: center; flex-direction: column; gap: 0.5rem; border-bottom: none; padding-bottom: 0; padding-top: 0;">
                     <span class="card-icon" style="font-size: 2.2rem; margin: 0;">🔒</span>
-                    <h2 style="font-size: 1.35rem; font-family: 'Outfit', sans-serif;">클럽 정산 로그인</h2>
-                    <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.1rem; text-align: center;">데이터 저장 및 실시간 동기화를 위해<br>6자리 PIN 번호를 입력하세요.</p>
+                    <h2 data-i18n="login.title" style="font-size: 1.35rem; font-family: 'Outfit', sans-serif;">클럽 정산 로그인</h2>
+                    <p data-i18n="login.subtitle" style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.1rem; text-align: center;">데이터 저장 및 실시간 동기화를 위해<br>6자리 PIN 번호를 입력하세요.</p>
                 </div>
                 <div class="card-body" style="padding-top: 0.5rem; gap: 1rem;">
                     <div class="pin-display-container">
@@ -901,7 +907,7 @@
                         <div class="pin-dot"></div>
                         <div class="pin-dot"></div>
                     </div>
-                    <div id="pin-error-text" class="form-error-msg hidden" style="text-align: center; margin: 0 0 0.5rem; font-size: 0.8rem; padding: 0.35rem;">비밀번호가 올바르지 않거나 네트워크 오류입니다.</div>
+                    <div id="pin-error-text" class="form-error-msg hidden" data-i18n="login.error" style="text-align: center; margin: 0 0 0.5rem; font-size: 0.8rem; padding: 0.35rem;">비밀번호가 올바르지 않거나 네트워크 오류입니다.</div>
                     <div class="pin-keypad">
                         <button type="button" class="pin-key" data-value="1">1</button>
                         <button type="button" class="pin-key" data-value="2">2</button>
@@ -917,7 +923,7 @@
                         <button type="button" class="pin-key" data-value="back">⌫</button>
                     </div>
                     <div style="margin-top: 0.5rem; display: flex; flex-direction: column; gap: 0.5rem; width: 100%;">
-                        <div id="go-to-register" class="auth-toggle-link">처음 사용하시나요? 회원 등록하기</div>
+                        <div id="go-to-register" class="auth-toggle-link" data-i18n="login.go_register">처음 사용하시나요? 회원 등록하기</div>
                     </div>
                 </div>
             </div>
@@ -926,22 +932,22 @@
             <div id="register-mode-section" class="hidden">
                 <div class="card-header" style="justify-content: center; text-align: center; flex-direction: column; gap: 0.5rem; border-bottom: none; padding-bottom: 0;">
                     <span class="card-icon" style="font-size: 2.2rem; margin: 0;">📝</span>
-                    <h2 style="font-size: 1.35rem; font-family: 'Outfit', sans-serif;">신규 회원 등록</h2>
-                    <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.1rem; text-align: center;">이름과 로그인용 6자리 PIN 번호를 등록하세요.<br>💡 사번이 CG001234 형식이라면 'CG'를 뺀 001234를 PIN으로 입력하세요.</p>
+                    <h2 data-i18n="register.title" style="font-size: 1.35rem; font-family: 'Outfit', sans-serif;">신규 회원 등록</h2>
+                    <p data-i18n="register.subtitle" style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.1rem; text-align: center;">이름과 로그인용 6자리 PIN 번호를 등록하세요.<br>💡 사번이 CG001234 형식이라면 'CG'를 뺀 001234를 PIN으로 입력하세요.</p>
                 </div>
                 <div class="card-body" style="padding-top: 0.5rem; gap: 1rem;">
                     <div class="register-form-container">
                         <div class="input-group">
-                            <label for="register-name-input">이름</label>
-                            <input type="text" id="register-name-input" placeholder="예: 홍길동" autocomplete="off">
+                            <label for="register-name-input" data-i18n="label.name">이름</label>
+                            <input type="text" id="register-name-input" data-i18n-ph="ph.name" placeholder="예: 홍길동" autocomplete="off">
                         </div>
                         <div class="input-group">
-                            <label for="register-pin-input">6자리 PIN 번호</label>
-                            <input type="password" id="register-pin-input" pattern="[0-9]*" inputmode="numeric" maxlength="6" placeholder="숫자 6자리 입력">
+                            <label for="register-pin-input" data-i18n="register.pin_label">6자리 PIN 번호</label>
+                            <input type="password" id="register-pin-input" pattern="[0-9]*" inputmode="numeric" maxlength="6" data-i18n-ph="register.pin_ph" placeholder="숫자 6자리 입력">
                         </div>
                         <div id="register-error-text" class="form-error-msg hidden" style="text-align: center; margin: 0; font-size: 0.8rem; padding: 0.35rem;"></div>
-                        <button id="submit-register-btn" class="btn-primary" style="width:100%; padding:0.65rem; border-radius:10px; font-weight:600;">회원 등록 완료</button>
-                        <div id="go-to-login" class="auth-toggle-link">이미 가입하셨나요? 로그인하기</div>
+                        <button id="submit-register-btn" class="btn-primary" data-i18n="register.submit" style="width:100%; padding:0.65rem; border-radius:10px; font-weight:600;">회원 등록 완료</button>
+                        <div id="go-to-login" class="auth-toggle-link" data-i18n="register.go_login">이미 가입하셨나요? 로그인하기</div>
                     </div>
                 </div>
             </div>
