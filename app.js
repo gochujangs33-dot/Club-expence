@@ -940,7 +940,7 @@ const AppState = {
 
     deleteFromDirectory(name) {
         if (this.userName !== '관리자' && this.currentPin !== '002531') {
-            alert("명부 삭제는 관리자 또는 개발자만 가능합니다.");
+            alert(t('alert.directory_delete_restricted'));
             return;
         }
         try {
@@ -976,7 +976,7 @@ const AppState = {
 
     startEditDirectory(name) {
         if (this.userName !== '관리자') {
-            alert("이름/사번 수정은 관리자만 가능합니다.");
+            alert(t('alert.edit_restricted_admin_only'));
             return;
         }
         const data = this.directory[name];
@@ -1818,7 +1818,7 @@ const AppState = {
             }
         } catch (err) {
             console.error("엑셀 파일 다운로드 실패:", err);
-            alert("엑셀 파일 다운로드에 실패했습니다: " + err.message);
+            alert(t('alert.excel_download_failed') + err.message);
             throw err;
         }
     },
@@ -1865,7 +1865,7 @@ const AppState = {
             URL.revokeObjectURL(url);
         });
         if (files.length > 0) {
-            alert('정산서/사진 파일이 다운로드되었습니다. 메일 앱에서 직접 첨부해주세요.');
+            alert(t('alert.files_downloaded'));
         }
     },
 
@@ -1925,7 +1925,7 @@ const AppState = {
                 await this.firebaseDb.ref(`settlements/${this.currentPin}/settlementHistory`).set(this.settlementHistory);
             } catch (err) {
                 console.error('이력 수정 저장 실패:', err);
-                alert('수정 내용 저장 중 오류가 발생했습니다. 네트워크를 확인해 주세요.');
+                alert(t('alert.save_error_network'));
             }
         }
     },
@@ -1985,7 +1985,7 @@ const AppState = {
     },
 
     finalizeSettlement(skipConfirm = false) {
-        if (!skipConfirm && !confirm("정산을 확정하시겠습니까?\n확정하면 현재 비용 및 참석자 데이터가 초기화됩니다.")) return;
+        if (!skipConfirm && !confirm(t('confirm.finalize_settlement'))) return;
 
         const result = SettlementCalculator.calculate(
             this.memberCount, this.expenseItems, this.previousPrizeTotal, this.rules
@@ -2230,7 +2230,7 @@ document.addEventListener('DOMContentLoaded', () => {
         registerNewClubBtn.addEventListener('click', () => {
             const name = (newClubNameInput.value || '').trim();
             if (!name) {
-                alert('클럽명을 입력해주세요.');
+                alert(t('alert.enter_club_name'));
                 return;
             }
             let newClubId = Object.entries(AppState.clubRegistry || {}).find(([, c]) => c.name === name)?.[0];
@@ -2469,7 +2469,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Clear attendees handler
     document.getElementById('clear-attendees-btn').addEventListener('click', () => {
         if (AppState.attendees.length > 0) {
-            if (confirm("등록된 모든 참석자 명단을 비우시겠습니까?")) {
+            if (confirm(t('confirm.clear_all_attendees'))) {
                 AppState.clearAttendees();
             }
         }
@@ -2513,7 +2513,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const rate3 = (parseInt(document.getElementById('admin-setting-rate3').value, 10) || 0) / 100;
             const deduction4 = parseAmount(document.getElementById('admin-setting-deduction4').value);
             AppState.updateRules({ limit1, limit2, rate2, limit3, rate3, deduction4 });
-            alert("정산 구간 및 비율 설정이 저장되어 모든 클럽에 일괄 적용됩니다.");
+            alert(t('alert.rules_saved'));
         });
     }
 
@@ -2521,7 +2521,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const adminResetRulesBtn = document.getElementById('admin-reset-rules-btn');
     if (adminResetRulesBtn) {
         adminResetRulesBtn.addEventListener('click', () => {
-            if (confirm("정산 기준 및 비율을 초기 기본값으로 복원하시겠습니까? (모든 클럽에 적용됩니다)")) {
+            if (confirm(t('confirm.reset_rules'))) {
                 AppState.resetRules();
                 setAdminRulesFormValues(AppState.rules);
             }
@@ -2643,23 +2643,27 @@ document.addEventListener('DOMContentLoaded', () => {
     if (sendEmailBtn) {
         sendEmailBtn.addEventListener('click', async () => {
             const originalText = sendEmailBtn.innerHTML;
-            sendEmailBtn.innerHTML = "<span class='btn-icon'>⏳</span> 생성 중...";
+            sendEmailBtn.innerHTML = `<span class='btn-icon'>⏳</span> ${t('state.generating')}`;
             sendEmailBtn.disabled = true;
             try {
                 await AppState.downloadExcelOnly();
-                sendEmailBtn.innerHTML = "<span class='btn-icon'>✓</span> 저장 완료!";
+                sendEmailBtn.innerHTML = `<span class='btn-icon'>✓</span> ${t('state.saved')}`;
 
                 const todayStr = new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' });
                 runFinalizeSettlement();
-                alert(
-                    `📂 ${todayStr} 정산 엑셀 파일이 생성되어 다운로드 폴더에 저장되었습니다.\n\n` +
-                    `✅ 전체 항목이 초기화되었습니다.\n` +
-                    `📧 저장된 파일을 이메일로 보내주세요.\n` +
-                    `📋 이번 정산 내역은 [정산 이력] 탭에서 확인하실 수 있습니다.`
-                );
+                if (getLang() === 'en') {
+                    alert(`📂 ${todayStr} — Excel file saved.\n\n✅ Session cleared.\n📧 Please email the saved file.\n📋 View this record in the History tab.`);
+                } else {
+                    alert(
+                        `📂 ${todayStr} 정산 엑셀 파일이 생성되어 다운로드 폴더에 저장되었습니다.\n\n` +
+                        `✅ 전체 항목이 초기화되었습니다.\n` +
+                        `📧 저장된 파일을 이메일로 보내주세요.\n` +
+                        `📋 이번 정산 내역은 [정산 이력] 탭에서 확인하실 수 있습니다.`
+                    );
+                }
             } catch (err) {
                 console.error(err);
-                sendEmailBtn.innerHTML = "<span class='btn-icon'>❌</span> 저장 실패";
+                sendEmailBtn.innerHTML = `<span class='btn-icon'>❌</span> ${t('state.save_failed')}`;
             } finally {
                 setTimeout(() => {
                     sendEmailBtn.innerHTML = originalText;
@@ -2709,16 +2713,16 @@ document.addEventListener('DOMContentLoaded', () => {
     if (downloadExcelBtn) {
         downloadExcelBtn.addEventListener('click', async () => {
             const originalText = downloadExcelBtn.innerHTML;
-            downloadExcelBtn.innerHTML = "<span class='btn-icon'>⏳</span> 생성 중...";
+            downloadExcelBtn.innerHTML = `<span class='btn-icon'>⏳</span> ${t('state.generating')}`;
             downloadExcelBtn.disabled = true;
             try {
                 await AppState.downloadExcelOnly();
-                downloadExcelBtn.innerHTML = "<span class='btn-icon'>✓</span> 다운로드 완료!";
+                downloadExcelBtn.innerHTML = `<span class='btn-icon'>✓</span> ${t('state.downloading')}`;
                 const excelSavedModal = document.getElementById('excel-saved-modal');
                 if (excelSavedModal) excelSavedModal.classList.remove('hidden');
             } catch (err) {
                 console.error(err);
-                downloadExcelBtn.innerHTML = "<span class='btn-icon'>❌</span> 다운로드 실패";
+                downloadExcelBtn.innerHTML = `<span class='btn-icon'>❌</span> ${t('state.download_failed')}`;
             } finally {
                 setTimeout(() => {
                     downloadExcelBtn.innerHTML = originalText;
@@ -2898,10 +2902,10 @@ document.addEventListener('DOMContentLoaded', () => {
         feedbackDeleteSelectedBtn.addEventListener('click', () => {
             const checked = document.querySelectorAll('.feedback-select-checkbox:checked');
             if (checked.length === 0) {
-                alert('삭제할 항목을 선택해주세요.');
+                alert(t('alert.select_items_to_delete'));
                 return;
             }
-            if (!confirm(`선택한 ${checked.length}건의 요청사항을 삭제하시겠습니까?`)) return;
+            if (!confirm(getLang() === 'en' ? `Delete ${checked.length} request(s)?` : `선택한 ${checked.length}건의 요청사항을 삭제하시겠습니까?`)) return;
             const updates = {};
             checked.forEach(cb => { updates[cb.getAttribute('data-key')] = null; });
             firebaseDb.ref('requests').update(updates).then(() => renderFeedbackList());
@@ -3133,7 +3137,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     AppState.loadFromFirebase(pin).then(() => {
                         pinModal.classList.add('hidden');
                         statusBadge.className = 'badge-online';
-                        statusBadge.innerHTML = `🌐 온라인 (${AppState.userName || '알 수 없음'} / PIN: ${pin})`;
+                        statusBadge.innerHTML = `${t('status.online')} (${AppState.userName || t('status.unknown') || '?'} / PIN: ${pin})`;
                         logoutBtn.style.display = 'inline-block';
                         loginBtn.style.display = 'none';
                         resetPinInput();
@@ -3294,7 +3298,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     logoutBtn.addEventListener('click', () => {
-        if (confirm("로그아웃 하시겠습니까? (로컬 기기 모드로 전환됩니다)")) {
+        if (confirm(t('confirm.logout'))) {
             switchToOfflineMode();
         }
     });
@@ -3359,7 +3363,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     name: name,
                     registeredAt: Date.now()
                 }).then(() => {
-                    alert(`${name}님, 회원 등록이 완료되었습니다!`);
+                    alert(`${name}${t('alert.register_success')}`);
                     
                     // Automatically log in
                     AppState.isLoggedIn = true;
@@ -3369,7 +3373,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     setAdminMode(false);
                     pinModal.classList.add('hidden');
                     statusBadge.className = 'badge-online';
-                    statusBadge.innerHTML = `🌐 온라인 (${name} / PIN: ${pin})`;
+                    statusBadge.innerHTML = `${t('status.online')} (${name} / PIN: ${pin})`;
                     logoutBtn.style.display = 'inline-block';
                     loginBtn.style.display = 'none';
                     
@@ -3411,7 +3415,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const newPin = prompt('6자리 PIN 번호 수정', oldPin);
         if (newPin === null) return;
         if (!/^\d{6}$/.test(newPin)) {
-            alert('PIN 번호는 6자리 숫자여야 합니다.');
+            alert(t('alert.pin_digit_required'));
             return;
         }
 
@@ -3425,7 +3429,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             return firebaseDb.ref(`users/${newPin}`).once('value').then(existing => {
                 if (existing.exists()) {
-                    alert('이미 사용 중인 PIN 번호입니다.');
+                    alert(t('alert.pin_already_used'));
                     return Promise.reject(new Error('duplicate-pin'));
                 }
                 return firebaseDb.ref(`settlements/${oldPin}`).once('value').then(settlementSnap => {
@@ -3445,13 +3449,13 @@ document.addEventListener('DOMContentLoaded', () => {
         }).catch(err => {
             if (err && err.message !== 'duplicate-pin') {
                 console.error('회원 정보 수정 실패:', err);
-                alert('회원 정보 수정에 실패했습니다.');
+                alert(t('alert.edit_user_failed'));
             }
         });
     }
 
     function deleteAdminUser(pin, name) {
-        if (!confirm(`'${name}' (${pin}) 회원을 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`)) return;
+        if (!confirm(getLang() === 'en' ? `Delete user '${name}' (${pin})? This cannot be undone.` : `'${name}' (${pin}) 회원을 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`)) return;
         Promise.all([
             firebaseDb.ref(`users/${pin}`).remove(),
             firebaseDb.ref(`settlements/${pin}`).remove()
@@ -3459,7 +3463,7 @@ document.addEventListener('DOMContentLoaded', () => {
             renderAdminDashboard();
         }).catch(err => {
             console.error('회원 삭제 실패:', err);
-            alert('회원 삭제에 실패했습니다.');
+            alert(t('alert.delete_user_failed'));
         });
     }
 
@@ -3479,7 +3483,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const deleteSelectedBtn = document.getElementById('feedback-delete-selected-btn');
 
             if (requestList.length === 0) {
-                listContainer.innerHTML = '<p style="font-size:0.85rem; color:var(--text-muted); text-align:center; padding:1rem 0;">요청사항이 없습니다.</p>';
+                listContainer.innerHTML = `<p style="font-size:0.85rem; color:var(--text-muted); text-align:center; padding:1rem 0;">${t('empty.no_requests')}</p>`;
                 if (deleteSelectedBtn) deleteSelectedBtn.classList.add('hidden');
             } else {
                 if (deleteSelectedBtn) deleteSelectedBtn.classList.remove('hidden');
@@ -3516,7 +3520,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 listContainer.querySelectorAll('.btn-delete-feedback').forEach(btn => {
                     btn.addEventListener('click', () => {
                         const key = btn.getAttribute('data-key');
-                        if (!confirm('이 요청사항을 삭제하시겠습니까?')) return;
+                        if (!confirm(getLang() === 'en' ? 'Delete this request?' : '이 요청사항을 삭제하시겠습니까?')) return;
                         firebaseDb.ref(`requests/${key}`).remove().then(() => renderFeedbackList());
                     });
                 });
@@ -3658,7 +3662,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!clubListContainer) return;
         clubListContainer.innerHTML = '';
         if (clubs.length === 0) {
-            clubListContainer.innerHTML = `<div class="empty-state"><span class="empty-icon">🏷️</span><p>등록된 클럽이 없습니다.</p></div>`;
+            clubListContainer.innerHTML = `<div class="empty-state"><span class="empty-icon">🏷️</span><p>${t('empty.no_clubs')}</p></div>`;
             return;
         }
         clubs.sort((a, b) => a[1].name.localeCompare(b[1].name)).forEach(([clubId, club]) => {
@@ -3724,7 +3728,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const clubId = btn.getAttribute('data-id');
                 const club = AppState.clubRegistry[clubId];
                 if (!club) return;
-                if (confirm(`'${club.name}' 클럽을 삭제하시겠습니까?`)) {
+                if (confirm(getLang() === 'en' ? `Delete club '${club.name}'?` : `'${club.name}' 클럽을 삭제하시겠습니까?`)) {
                     AppState.deleteClub(clubId);
                     renderClubManagement();
                 }
@@ -3760,7 +3764,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 renderAllCharts(lastHistoryList);
             }).catch(() => {
-                alert('총 클럽비용 저장에 실패했습니다. 온라인 상태를 확인해주세요.');
+                alert(t('alert.total_budget_save_failed'));
             });
         });
     }
@@ -4328,7 +4332,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 const id = btn.getAttribute('data-id');
                 const entry = historyList.find(e => String(e.id) === String(id));
                 if (!entry) return;
-                if (!confirm(`이 정산 기록을 삭제하시겠습니까?\n참석자 ${entry.memberCount}명의 누적 참석 횟수도 함께 차감됩니다.`)) return;
+                if (!confirm(getLang() === 'en'
+                    ? `Delete this record? Attendee counts (${entry.memberCount} persons) will be decreased.`
+                    : `이 정산 기록을 삭제하시겠습니까?\n참석자 ${entry.memberCount}명의 누적 참석 횟수도 함께 차감됩니다.`)) return;
 
                 if (entry.attendees) {
                     entry.attendees.forEach(att => {
@@ -4362,7 +4368,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         renderAllCharts(lastHistoryList);
                         updateChartsBudgetStats(lastHistoryList);
                         renderClubManagement();
-                    }).catch(() => alert('삭제에 실패했습니다. 온라인 상태를 확인해주세요.'));
+                    }).catch(() => alert(t('alert.delete_failed_network')));
                 }
             });
         });

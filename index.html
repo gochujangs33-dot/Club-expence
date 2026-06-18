@@ -51,12 +51,12 @@
             </div>
             <div class="club-name-wrapper">
                 <select id="club-name-select" class="club-name-input">
-                    <option value="">클럽을 선택하세요</option>
-                    <option value="__new__">+ 새 클럽 직접 등록</option>
+                    <option value="" data-i18n="header.club_placeholder">클럽을 선택하세요</option>
+                    <option value="__new__" data-i18n="header.club_new">+ 새 클럽 직접 등록</option>
                 </select>
                 <div id="new-club-input-row" class="new-club-input-row hidden">
-                    <input type="text" id="new-club-name-input" placeholder="클럽명 입력" autocomplete="off">
-                    <button type="button" id="register-new-club-btn" class="btn-secondary">등록</button>
+                    <input type="text" id="new-club-name-input" data-i18n-ph="ph.new_club_name" placeholder="클럽명 입력" autocomplete="off">
+                    <button type="button" id="register-new-club-btn" class="btn-secondary" data-i18n="header.club_register">등록</button>
                 </div>
             </div>
             <div class="login-status-wrapper" id="login-status-wrapper" style="margin-top: 0.75rem; display: flex; align-items: center; justify-content: center; gap: 0.5rem;">
@@ -79,8 +79,8 @@
         <div id="tab-settlement" class="tab-pane active">
             <!-- 수정 모드 배너 -->
             <div id="edit-mode-banner" class="hidden" style="background:linear-gradient(135deg,rgba(245,158,11,0.2),rgba(239,68,68,0.15)); border:1px solid rgba(245,158,11,0.5); border-radius:0.5rem; padding:0.6rem 1rem; margin-bottom:0.75rem; display:flex; align-items:center; justify-content:space-between; gap:0.5rem;">
-                <span style="font-size:0.88rem; color:#fbbf24;">✏️ <strong>수정 모드</strong> — <span id="edit-mode-date"></span> 정산 수정 중</span>
-                <button id="edit-mode-cancel-btn" style="font-size:0.78rem; padding:0.25rem 0.7rem; background:rgba(239,68,68,0.2); border:1px solid rgba(239,68,68,0.4); color:#f87171; border-radius:0.3rem; cursor:pointer;">취소</button>
+                <span style="font-size:0.88rem; color:#fbbf24;">✏️ <strong data-i18n="label.edit_mode">수정 모드</strong> — <span id="edit-mode-date"></span> <span data-i18n="label.editing_in_progress">정산 수정 중</span></span>
+                <button id="edit-mode-cancel-btn" data-i18n="btn.cancel" style="font-size:0.78rem; padding:0.25rem 0.7rem; background:rgba(239,68,68,0.2); border:1px solid rgba(239,68,68,0.4); color:#f87171; border-radius:0.3rem; cursor:pointer;">취소</button>
             </div>
             <div class="layout-grid">
                 <!-- Left Panel: Inputs -->
@@ -153,28 +153,28 @@
                                 <div class="input-row">
                                     <div class="input-group flex-1 hidden" id="corp-amount-group" style="display:flex; flex-direction:column;">
                                         <div style="display:flex; align-items:center; gap:0.6rem; flex-wrap:wrap;">
-                                            <label for="expense-corporate-amount-input" style="margin:0; white-space:nowrap;">법인카드</label>
+                                            <label for="expense-corporate-amount-input" data-i18n="label.corp_card" style="margin:0; white-space:nowrap;">법인카드</label>
                                             <input type="text" inputmode="numeric" id="expense-corporate-amount-input" placeholder="법인카드 결제 금액" style="flex:1; min-width:120px;">
                                             <div id="corp-receipt-group" style="display:flex; align-items:center; gap:0.4rem; flex-wrap:wrap;">
-                                                <label for="expense-receipt-corp-input" class="btn-secondary" style="margin:0; cursor:pointer; font-size:0.85rem; padding:0.45rem 0.9rem; white-space:nowrap;">영수증</label>
+                                                <label for="expense-receipt-corp-input" class="btn-secondary" data-i18n="btn.receipt" style="margin:0; cursor:pointer; font-size:0.85rem; padding:0.45rem 0.9rem; white-space:nowrap;">영수증</label>
                                                 <input type="file" id="expense-receipt-corp-input" accept="image/*" style="display:none;">
-                                                <small id="receipt-corp-status" class="input-hint hidden" style="color: var(--color-secondary); font-weight: 500;">✓ 영수증 대기 완료</small>
-                                                <button type="button" id="delete-receipt-corp-btn" class="btn-text-danger hidden" style="font-size:0.78rem; padding:0.15rem 0.5rem;">× 영수증 삭제</button>
+                                                <small id="receipt-corp-status" class="input-hint hidden" data-i18n="hint.receipt_ready" style="color: var(--color-secondary); font-weight: 500;">✓ 영수증 대기 완료</small>
+                                                <button type="button" id="delete-receipt-corp-btn" class="btn-text-danger hidden" data-i18n="btn.delete_receipt" style="font-size:0.78rem; padding:0.15rem 0.5rem;">× 영수증 삭제</button>
                                             </div>
                                         </div>
                                     </div>
                                     <div class="input-group flex-1 hidden" id="personal-amount-group" style="display:flex; flex-direction:column;">
                                         <div style="display:flex; align-items:center; gap:0.6rem; flex-wrap:wrap;">
-                                            <label for="expense-personal-amount-input" style="margin:0; white-space:nowrap;">개인카드</label>
+                                            <label for="expense-personal-amount-input" data-i18n="label.personal_card" style="margin:0; white-space:nowrap;">개인카드</label>
                                             <input type="text" inputmode="numeric" id="expense-personal-amount-input" placeholder="개인카드 결제 금액" style="flex:1; min-width:120px;">
                                             <div id="personal-receipt-group" style="display:flex; align-items:center; gap:0.4rem; flex-wrap:wrap;">
-                                                <label for="expense-receipt-personal-input" class="btn-secondary" style="margin:0; cursor:pointer; font-size:0.85rem; padding:0.45rem 0.9rem; white-space:nowrap;">영수증</label>
+                                                <label for="expense-receipt-personal-input" class="btn-secondary" data-i18n="btn.receipt" style="margin:0; cursor:pointer; font-size:0.85rem; padding:0.45rem 0.9rem; white-space:nowrap;">영수증</label>
                                                 <input type="file" id="expense-receipt-personal-input" accept="image/*" style="display:none;">
-                                                <small id="receipt-personal-status" class="input-hint hidden" style="color: var(--color-secondary); font-weight: 500;">✓ 영수증 대기 완료</small>
-                                                <button type="button" id="delete-receipt-personal-btn" class="btn-text-danger hidden" style="font-size:0.78rem; padding:0.15rem 0.5rem;">× 영수증 삭제</button>
+                                                <small id="receipt-personal-status" class="input-hint hidden" data-i18n="hint.receipt_ready" style="color: var(--color-secondary); font-weight: 500;">✓ 영수증 대기 완료</small>
+                                                <button type="button" id="delete-receipt-personal-btn" class="btn-text-danger hidden" data-i18n="btn.delete_receipt" style="font-size:0.78rem; padding:0.15rem 0.5rem;">× 영수증 삭제</button>
                                             </div>
                                         </div>
-                                        <small class="input-hint" id="split-auto-hint" style="display:none;">총금액 - 법인카드 금액로 자동 계산됨</small>
+                                        <small class="input-hint" id="split-auto-hint" data-i18n="hint.split_auto" style="display:none;">총금액 - 법인카드 금액로 자동 계산됨</small>
                                     </div>
                                 </div>
                                 <div class="form-actions">
@@ -208,7 +208,7 @@
                                 <!-- Dynamically populated rows -->
                                 <div class="empty-state">
                                     <span class="empty-icon">💨</span>
-                                    <p>등록된 비용 항목이 없습니다. 항목을 추가해 주세요.</p>
+                                    <p data-i18n="empty.expenses">등록된 비용 항목이 없습니다. 항목을 추가해 주세요.</p>
                                 </div>
                             </div>
                         </div>
@@ -395,7 +395,7 @@
                                 <!-- Dynamically populated list of attendees -->
                                 <div class="empty-state">
                                     <span class="empty-icon">👥</span>
-                                    <p>현재 등록된 참석자가 없습니다. 왼쪽에서 사번과 이름을 기입하여 추가해 주세요.</p>
+                                    <p data-i18n="empty.attendees">현재 등록된 참석자가 없습니다. 왼쪽에서 사번과 이름을 기입하여 추가해 주세요.</p>
                                 </div>
                             </div>
                         </div>
@@ -455,7 +455,7 @@
                             <div id="directory-container" class="expense-items-container">
                                 <!-- Dynamically populated list of cumulative employees -->
                                 <div class="empty-state">
-                                    <p>등록된 사원 정보가 없습니다. 왼쪽에서 사원을 등록해 주세요.</p>
+                                    <p data-i18n="empty.directory">등록된 사원 정보가 없습니다. 왼쪽에서 사원을 등록해 주세요.</p>
                                 </div>
                             </div>
                         </div>
