@@ -84,8 +84,71 @@ const DefaultRules = {
     deduction4: 85000    // 라. 초과 시 자부담 공제액 (8만 5천 원)
 };
 
-// --- 2. Settlement Calculator Logic ---
-const SettlementCalculator = {
+// ⛔ CALCULATION_LOCKED ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// 아래 SettlementCalculator / SettlementValidator 블록은
+// 관리자(사용자)의 명시적 서면 요청 없이는 절대 수정 금지.
+// 수정이 필요하면 CALCULATION_SPEC.md를 먼저 갱신하고 검증 예시값과 대조 후 진행.
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+// --- 2-A. 독립 검증기 (SettlementCalculator와 별도 로직으로 교차 검증) ---
+// calculate() 완료 직후 자동 호출되어 결과값의 수학적 정합성을 재확인한다.
+const SettlementValidator = Object.freeze({
+    // 허용 오차: 반올림 차이 최대 ±1원
+    TOLERANCE: 1,
+
+    // 인당 자부담 독립 계산 (SettlementCalculator.calculateSelfPayPerPerson 와 동일 공식)
+    _selfPay(cost, rules) {
+        if (cost <= rules.limit1) return 0;
+        if (cost <= rules.limit2) return cost * rules.rate2;
+        if (cost <= rules.limit3) return rules.limit2 * rules.rate2 + (cost - rules.limit2) * rules.rate3;
+        return cost - rules.deduction4;
+    },
+
+    validate(memberCount, expenseItems, rules, result) {
+        const errs = [];
+        const r = result;
+        const T = this.TOLERANCE;
+
+        // ① 카테고리별 비용 합계
+        const expTotal    = expenseItems.reduce((s, i) => s + i.amount, 0);
+        const expEvent    = expenseItems.filter(i => i.category === 'EVENT').reduce((s, i) => s + i.amount, 0);
+        const expFacility = expenseItems.filter(i => i.category === 'FACILITY').reduce((s, i) => s + i.amount, 0);
+        const expPrize    = expenseItems.filter(i => i.category === 'PRIZE').reduce((s, i) => s + i.amount, 0);
+
+        if (Math.abs(r.totalCost    - expTotal)    > T) errs.push(`totalCost: 기대 ${expTotal}, 실제 ${r.totalCost}`);
+        if (Math.abs(r.eventCost    - expEvent)    > T) errs.push(`eventCost: 기대 ${expEvent}, 실제 ${r.eventCost}`);
+        if (Math.abs(r.facilityCost - expFacility) > T) errs.push(`facilityCost: 기대 ${expFacility}, 실제 ${r.facilityCost}`);
+        if (Math.abs(r.prizeCost    - expPrize)    > T) errs.push(`prizeCost: 기대 ${expPrize}, 실제 ${r.prizeCost}`);
+
+        // ② 인당 행사비
+        const expPPE = memberCount > 0 ? expEvent / memberCount : 0;
+        if (Math.abs(r.perPersonEventCost - expPPE) > T) errs.push(`perPersonEventCost: 기대 ${expPPE}, 실제 ${r.perPersonEventCost}`);
+
+        // ③ 인당 자부담 (4단계 구간)
+        const expSP = this._selfPay(expPPE, rules);
+        if (Math.abs(r.perPersonSelfPay - expSP) > T) errs.push(`perPersonSelfPay: 기대 ${expSP}, 실제 ${r.perPersonSelfPay}`);
+
+        // ④ 총 자부담 (반올림)
+        const expTSP = Math.round(expSP * memberCount);
+        if (Math.abs(r.totalSelfPay - expTSP) > T) errs.push(`totalSelfPay: 기대 ${expTSP}, 실제 ${r.totalSelfPay}`);
+
+        // ⑤ 최종 지원금
+        const expSupport = expTotal - expTSP;
+        if (Math.abs(r.finalSupportAmount - expSupport) > T) errs.push(`finalSupportAmount: 기대 ${expSupport}, 실제 ${r.finalSupportAmount}`);
+
+        // ⑥ 자부담 비율
+        const expRatio = expTotal > 0 ? expTSP / expTotal : 0;
+        if (Math.abs(r.selfPayRatio - expRatio) > 0.0001) errs.push(`selfPayRatio: 기대 ${expRatio.toFixed(4)}, 실제 ${r.selfPayRatio.toFixed(4)}`);
+
+        if (errs.length > 0) {
+            console.error('🚨 [정산 계산 검증 실패] — 즉시 확인 필요!\n' + errs.join('\n'));
+        }
+        return { valid: errs.length === 0, errors: errs };
+    }
+});
+
+// --- 2-B. Settlement Calculator Logic ---
+const SettlementCalculator = Object.freeze({
     calculate(memberCount, expenseItems, previousPrizeTotal = 0, rules = DefaultRules) {
         const totalCost = expenseItems.reduce((sum, item) => sum + item.amount, 0);
         const eventCost = expenseItems
@@ -99,7 +162,7 @@ const SettlementCalculator = {
             .reduce((sum, item) => sum + item.amount, 0);
 
         const perPersonEventCost = memberCount > 0 ? eventCost / memberCount : 0.0;
-        
+
         const selfPayPerPerson = this.calculateSelfPayPerPerson(perPersonEventCost, rules);
         const totalSelfPay = Math.round(selfPayPerPerson * memberCount);
         const selfPayRatio = totalCost > 0 ? totalSelfPay / totalCost : 0.0;
@@ -110,17 +173,15 @@ const SettlementCalculator = {
         if (prizeCost > 0 && memberCount < 20) {
             warnings.push("정회원 20명 이상 참석 시에만 상품비 사용이 가능합니다.");
         }
-
         if (prizeCost + previousPrizeTotal > 500000) {
             const exceeded = (prizeCost + previousPrizeTotal) - 500000;
             warnings.push(`상품비 연간 한도 500,000원을 초과했습니다. 초과 금액: ${this.formatCurrency(exceeded)}`);
         }
-
         if (facilityCost > 1000000) {
             warnings.push("시설 및 장비 이용료가 1,000,000원을 초과하여 별도 협의가 필요합니다.");
         }
 
-        return {
+        const result = {
             memberCount,
             totalCost,
             eventCost,
@@ -133,6 +194,13 @@ const SettlementCalculator = {
             finalSupportAmount,
             warnings
         };
+
+        // ━━ 자동 교차 검증 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        const validation = SettlementValidator.validate(memberCount, expenseItems, rules, result);
+        result._validation = validation; // 호출자가 필요시 참조 가능
+        // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+        return result;
     },
 
     calculateSelfPayPerPerson(cost, rules = DefaultRules) {
@@ -152,7 +220,8 @@ const SettlementCalculator = {
     formatCurrency(value) {
         return new Intl.NumberFormat('ko-KR').format(Math.round(value)) + '원';
     }
-};
+});
+// ⛔ CALCULATION_LOCKED END ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 // --- 3. App State Management ---
 const AppState = {
@@ -1056,6 +1125,17 @@ const AppState = {
             this.previousPrizeTotal,
             this.rules
         );
+
+        // 검증 실패 시 UI 경고 표시
+        const calcErrBanner = document.getElementById('calc-validation-error-banner');
+        if (calcErrBanner) {
+            if (result._validation && !result._validation.valid) {
+                calcErrBanner.textContent = '⚠️ 계산 오류 감지: ' + result._validation.errors.join(' / ');
+                calcErrBanner.classList.remove('hidden');
+            } else {
+                calcErrBanner.classList.add('hidden');
+            }
+        }
 
         // Update Results UI
         document.getElementById('result-final-support').textContent = SettlementCalculator.formatCurrency(result.finalSupportAmount);

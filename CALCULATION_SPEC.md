@@ -6,6 +6,12 @@
 > 만약 템플릿 구조가 바뀌어 셀 위치가 달라지면, 계산식 자체는 그대로 두고
 > `app.js`의 `setCellValue` 셀 참조(ref)만 새 위치에 맞게 수정합니다.
 
+> **코드 보호 마커 (v1.6.99+)**: `app.js`의 `// ⛔ CALCULATION_LOCKED` ~
+> `// ⛔ CALCULATION_LOCKED END` 사이의 `SettlementValidator` 및 `SettlementCalculator`
+> 블록은 수정 금지. 두 객체 모두 `Object.freeze()`로 런타임 변경도 차단됨.
+> `calculate()` 호출 시 `SettlementValidator.validate()`가 자동 실행되어 계산 정합성을 교차 검증하며,
+> 불일치 발생 시 콘솔 오류(`🚨`)와 화면 경고 배너(`#calc-validation-error-banner`)를 표시한다.
+
 ---
 
 ## 1. 정산 규칙 (Rules)

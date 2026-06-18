@@ -18,10 +18,18 @@
      "어떤 변수에서 왔는지"를 코드로 직접 확인하기 전까지 맞다고 가정하지 말 것.
 
 1. **모든 답변/커밋 메시지 설명은 한국어로 작성** (코드 식별자/주석은 기존 스타일 유지).
-2. **계산 로직 & 엑셀 매핑은 절대 임의 변경 금지**
+2. **계산 로직 & 엑셀 매핑은 절대 임의 변경 금지** ⛔
    - 기준 문서: [`CALCULATION_SPEC.md`](CALCULATION_SPEC.md), [`계산식_명세서.md`](계산식_명세서.md)
-   - `SettlementCalculator.calculate`, `calculateSelfPayPerPerson`, `generateExcelFile`의 셀 매핑(K4~K30, L12~L25 등)은
-     **사용자가 명시적으로 요청하지 않는 한 절대 수정하지 않음**.
+   - **코드에서 `// ⛔ CALCULATION_LOCKED` ~ `// ⛔ CALCULATION_LOCKED END` 사이의 모든 코드는**
+     **사용자의 명시적 서면 요청 없이는 1행도 수정·삭제·재작성 불가**.
+   - 보호 대상 함수 목록 (app.js):
+     - `SettlementValidator._selfPay` — 4구간 자부담 독립 재계산
+     - `SettlementValidator.validate` — 계산 결과 교차 검증
+     - `SettlementCalculator.calculate` — 핵심 정산 계산
+     - `SettlementCalculator.calculateSelfPayPerPerson` — 인당 자부담 4구간
+     - `generateExcelFile` 내 `setCellValue` 셀 매핑(K4~K30, L12~L25 등)
+   - `SettlementValidator`가 검증 실패(`_validation.valid === false`)를 반환하면
+     **커밋 전에 반드시 원인을 찾아 수정**해야 하며, 경고를 무시하고 배포하지 않음.
    - 템플릿 셀 좌표가 바뀌는 경우에도 계산식 자체는 그대로 두고 `setCellValue` 의 ref만 수정.
 3. **웹 전용 배포 — APK 자산 동기화 금지**
    - `app/src/main/assets/` 디렉터리에 변경 파일을 복사/동기화하지 않음 (과거에는 했었지만 현재는 GitHub Pages 웹앱만 운영).
@@ -40,7 +48,7 @@
 ```
 1. 파일 수정 (app.js / index.html / style.css 등)
 2. node --check app.js   ← 문법 오류 확인
-3. sw.js 의 APP_VERSION 1 증가 (현재 1.6.75)
+3. sw.js 의 APP_VERSION 1 증가 (현재 1.6.99)
 4. git add -A && git commit -q -m "..." && git push -q
 ```
 
@@ -99,4 +107,4 @@
 - [`PERMISSIONS.md`](PERMISSIONS.md) — 권한별 가능/불가 기능 정리
 - [`CHANGES.md`](CHANGES.md) — 버전별 변경 이력
 
-현재 버전: **v1.6.94** (`sw.js` `APP_VERSION`)
+현재 버전: **v1.6.99** (`sw.js` `APP_VERSION`)

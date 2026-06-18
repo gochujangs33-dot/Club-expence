@@ -77,6 +77,8 @@
         </nav>
         <!-- Tab Content 1: Settlement Calculator -->
         <div id="tab-settlement" class="tab-pane active">
+            <!-- 계산 검증 오류 배너 (정상 시 hidden) -->
+            <div id="calc-validation-error-banner" class="hidden" style="background:rgba(239,68,68,0.15); border:1px solid rgba(239,68,68,0.6); border-radius:0.5rem; padding:0.55rem 1rem; margin-bottom:0.6rem; font-size:0.82rem; color:#f87171; font-weight:600;"></div>
             <!-- 수정 모드 배너 -->
             <div id="edit-mode-banner" class="hidden" style="background:linear-gradient(135deg,rgba(245,158,11,0.2),rgba(239,68,68,0.15)); border:1px solid rgba(245,158,11,0.5); border-radius:0.5rem; padding:0.6rem 1rem; margin-bottom:0.75rem; display:flex; align-items:center; justify-content:space-between; gap:0.5rem;">
                 <span style="font-size:0.88rem; color:#fbbf24;">✏️ <strong data-i18n="label.edit_mode">수정 모드</strong> — <span id="edit-mode-date"></span> <span data-i18n="label.editing_in_progress">정산 수정 중</span></span>
