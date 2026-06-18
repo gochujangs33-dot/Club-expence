@@ -658,10 +658,10 @@
                                 <input type="text" inputmode="numeric" id="club-total-budget-input" placeholder="예: 50,000,000" style="flex:1; min-width:0;">
                                 <button type="button" id="save-club-total-budget-btn" class="btn-primary-sm" data-i18n="btn.save">저장</button>
                             </div>
-                            <small id="club-total-budget-status" class="input-hint" style="display:none; color: var(--color-secondary);">✔️ 저장되었습니다.</small>
+                            <small id="club-total-budget-status" class="input-hint" data-i18n="state.saved_check" style="display:none; color: var(--color-secondary);">✔️ 저장되었습니다.</small>
                         </div>
                         <div class="input-group flex-1" style="margin:0;">
-                            <span style="font-size:0.82rem; color:var(--text-secondary);">배정 합계 / 미배정</span>
+                            <span id="club-budget-summary-label" style="font-size:0.82rem; color:var(--text-secondary);" data-i18n="label.allocated_unallocated">배정 합계 / 미배정</span>
                             <strong id="club-budget-summary" style="display:block; font-size:0.95rem; color:var(--color-secondary);">0원 / 0원</strong>
                         </div>
                     </div>
