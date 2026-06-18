@@ -1471,10 +1471,10 @@ const AppState = {
                     ).join(' ');
 
                     const editedBadge = entry.isEdited
-                        ? `<span class="badge-edited">수정됨</span>`
+                        ? `<span class="badge-edited">${t('badge.edited')}</span>`
                         : '';
                     const editedAtStr = entry.isEdited && entry.editedAt
-                        ? ` <span style="font-size:0.75rem;color:var(--text-muted);">(수정: ${new Date(entry.editedAt).toLocaleDateString('ko-KR')})</span>`
+                        ? ` <span style="font-size:0.75rem;color:var(--text-muted);">(${t('label.edited_at')}: ${new Date(entry.editedAt).toLocaleDateString()})</span>`
                         : '';
 
                     card.innerHTML = `
@@ -1484,7 +1484,7 @@ const AppState = {
                                 ${entry.clubName ? `<span class="history-club">${this.escapeHtml(entry.clubName)}</span>` : ''}
                                 ${editedBadge}${editedAtStr}
                             </div>
-                            <button class="btn-edit-history" data-id="${entry.id}" style="font-size:0.75rem;padding:0.2rem 0.6rem;background:rgba(99,102,241,0.15);border:1px solid rgba(99,102,241,0.4);color:#a5b4fc;border-radius:0.3rem;cursor:pointer;white-space:nowrap;">✏️ 수정</button>
+                            <button class="btn-edit-history" data-id="${entry.id}" style="font-size:0.75rem;padding:0.2rem 0.6rem;background:rgba(99,102,241,0.15);border:1px solid rgba(99,102,241,0.4);color:#a5b4fc;border-radius:0.3rem;cursor:pointer;white-space:nowrap;">✏️ ${t('btn.edit')}</button>
                         </div>
                         <div class="history-summary">
                             <div class="history-stat"><span>${t('hist.attendees')}</span><strong>${entry.memberCount}${t('unit.person')}</strong></div>
@@ -3270,7 +3270,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function switchToOfflineMode() {
         pinModal.classList.add('hidden');
         statusBadge.className = 'badge-offline';
-        statusBadge.innerHTML = `📴 오프라인 모드 (기기 저장)`;
+        statusBadge.textContent = t('header.offline');
         logoutBtn.style.display = 'none';
         loginBtn.style.display = 'inline-block';
         document.getElementById('admin-tab-btn').classList.add('hidden');
@@ -3680,18 +3680,18 @@ document.addEventListener('DOMContentLoaded', () => {
                     <span class="expense-row-title" style="font-size:0.9rem; white-space:normal; line-height:1.3;">${AppState.escapeHtml(club.name)}</span>
                 </div>
                 <div style="flex:1.2; min-width:100px; text-align:center;">
-                    <div style="font-size:0.7rem; color:var(--text-secondary);">배정 예산</div>
+                    <div style="font-size:0.7rem; color:var(--text-secondary);">${t('club.assigned_budget')}</div>
                     <div style="font-size:0.85rem; font-weight:600;">${SettlementCalculator.formatCurrency(budget)}</div>
-                    ${priorUsed > 0 ? `<div style="font-size:0.7rem; color:var(--text-muted);">(이전사용 ${SettlementCalculator.formatCurrency(priorUsed)})</div>` : ''}
+                    ${priorUsed > 0 ? `<div style="font-size:0.7rem; color:var(--text-muted);">(${t('club.prior_used')} ${SettlementCalculator.formatCurrency(priorUsed)})</div>` : ''}
                 </div>
                 <div style="flex:1.2; min-width:100px; text-align:center;">
-                    <div style="font-size:0.7rem; color:var(--text-secondary);">잔여 예산</div>
+                    <div style="font-size:0.7rem; color:var(--text-secondary);">${t('club.remaining_budget')}</div>
                     <div style="font-size:0.85rem; font-weight:600; color:${remaining < 0 ? 'var(--warning-text, #ff6b6b)' : 'var(--color-secondary)'};">${SettlementCalculator.formatCurrency(remaining)}</div>
                 </div>
                 <div class="expense-row-right" style="gap:0.4rem; flex:0 0 auto;">
-                    <button class="btn-add-club-budget btn-secondary" data-id="${AppState.escapeHtml(clubId)}" style="padding:0.3rem 0.6rem; font-size:0.78rem;">추가 배정</button>
-                    <button class="btn-edit-club btn-secondary" data-id="${AppState.escapeHtml(clubId)}" style="padding:0.3rem 0.6rem; font-size:0.78rem;">수정</button>
-                    <button class="btn-delete-club btn-text-danger" data-id="${AppState.escapeHtml(clubId)}" style="padding:0.3rem 0.6rem; font-size:0.78rem;">삭제</button>
+                    <button class="btn-add-club-budget btn-secondary" data-id="${AppState.escapeHtml(clubId)}" style="padding:0.3rem 0.6rem; font-size:0.78rem;">${t('btn.add_budget')}</button>
+                    <button class="btn-edit-club btn-secondary" data-id="${AppState.escapeHtml(clubId)}" style="padding:0.3rem 0.6rem; font-size:0.78rem;">${t('btn.edit')}</button>
+                    <button class="btn-delete-club btn-text-danger" data-id="${AppState.escapeHtml(clubId)}" style="padding:0.3rem 0.6rem; font-size:0.78rem;">${t('btn.delete')}</button>
                 </div>
             `;
             clubListContainer.appendChild(row);
@@ -3705,7 +3705,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 editingClubId = clubId;
                 clubNameFormInput.value = club.name;
                 clubBudgetFormInput.value = formatAmount(club.budget || 0);
-                document.getElementById('add-club-btn').innerHTML = `<span class="btn-icon">💾</span> 수정 완료`;
+                document.getElementById('add-club-btn').innerHTML = t('btn.edit_done');
                 cancelEditClubBtn.classList.remove('hidden');
                 clubNameFormInput.focus();
             });
@@ -3740,7 +3740,7 @@ document.addEventListener('DOMContentLoaded', () => {
         editingClubId = null;
         clubNameFormInput.value = '';
         clubBudgetFormInput.value = '';
-        document.getElementById('add-club-btn').innerHTML = `<span class="btn-icon">➕</span> 클럽 추가`;
+        document.getElementById('add-club-btn').innerHTML = t('btn.add_club_active');
         cancelEditClubBtn.classList.add('hidden');
     }
 
@@ -4277,43 +4277,43 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             
             const editedBadgeAdmin = entry.isEdited
-                ? `<span class="badge-edited">수정됨</span>` : '';
+                ? `<span class="badge-edited">${t('badge.edited')}</span>` : '';
             div.innerHTML = `
                 <div class="history-header">
                     <div style="display:flex;align-items:center;gap:0.4rem;flex-wrap:wrap;">
-                        <strong>${AppState.escapeHtml(entry.clubName || '기본 클럽')}</strong>
-                        <span class="history-club" style="color:var(--color-secondary);">정산인: ${AppState.escapeHtml(entry.creatorName || '오프라인')}</span>
+                        <strong>${AppState.escapeHtml(entry.clubName || t('label.default_club'))}</strong>
+                        <span class="history-club" style="color:var(--color-secondary);">${t('label.settler')}: ${AppState.escapeHtml(entry.creatorName || t('status.offline'))}</span>
                         ${editedBadgeAdmin}
                     </div>
                     <div style="display:flex;align-items:center;gap:0.4rem;">
                         <span class="history-date">${new Date(entry.id).toLocaleString()}</span>
-                        <button class="btn-edit-history-admin" data-id="${entry.id}" style="font-size:0.75rem;padding:0.2rem 0.6rem;background:rgba(99,102,241,0.15);border:1px solid rgba(99,102,241,0.4);color:#a5b4fc;border-radius:0.3rem;cursor:pointer;white-space:nowrap;">✏️ 수정</button>
-                        <button class="btn-delete-history btn-text-danger" data-id="${entry.id}" style="padding:0.25rem 0.5rem; font-size:0.75rem;">삭제</button>
+                        <button class="btn-edit-history-admin" data-id="${entry.id}" style="font-size:0.75rem;padding:0.2rem 0.6rem;background:rgba(99,102,241,0.15);border:1px solid rgba(99,102,241,0.4);color:#a5b4fc;border-radius:0.3rem;cursor:pointer;white-space:nowrap;">✏️ ${t('btn.edit')}</button>
+                        <button class="btn-delete-history btn-text-danger" data-id="${entry.id}" style="padding:0.25rem 0.5rem; font-size:0.75rem;">${t('btn.delete')}</button>
                     </div>
                 </div>
                 <div class="history-summary">
                     <div class="history-stat">
-                        <span>총 소요 비용</span>
+                        <span>${t('hist.total_cost')}</span>
                         <strong>${SettlementCalculator.formatCurrency(entry.totalCost)}</strong>
                     </div>
                     <div class="history-stat">
-                        <span>회사 지원금</span>
+                        <span>${t('hist.final_support')}</span>
                         <strong>${SettlementCalculator.formatCurrency(entry.finalSupportAmount)}</strong>
                     </div>
                     <div class="history-stat">
-                        <span>총 자부담</span>
+                        <span>${t('hist.self_pay')}</span>
                         <strong>${SettlementCalculator.formatCurrency(entry.totalSelfPay)}</strong>
                     </div>
                     <div class="history-stat">
-                        <span>인당 자부담 (인원: ${entry.memberCount}명)</span>
+                        <span>${t('hist.per_person_self_pay')} (${t('hist.attendees')}: ${entry.memberCount}${t('unit.person')})</span>
                         <strong>${SettlementCalculator.formatCurrency(entry.perPersonSelfPay)}</strong>
                     </div>
                 </div>
                 <div class="history-details" style="margin-top:0.5rem;">
                     <details>
-                        <summary style="font-size:0.82rem; color:var(--color-secondary); cursor:pointer;">상세 지출 및 참석자 명단 보기</summary>
+                        <summary style="font-size:0.82rem; color:var(--color-secondary); cursor:pointer;">${t('hist.view_details_admin')}</summary>
                         <div style="padding:0.5rem 0; font-size:0.83rem; line-height:1.4;">
-                            <strong>참석자:</strong> <span style="color:var(--text-secondary);">${AppState.escapeHtml(attendeesHtml || '없음')}</span>
+                            <strong>${t('hist.attendees_label')}:</strong> <span style="color:var(--text-secondary);">${AppState.escapeHtml(attendeesHtml || t('hist.no_attendees'))}</span>
                             <ul class="history-items" style="margin-top:0.5rem; border-top:1px solid rgba(255,255,255,0.05); padding-top:0.5rem; display:flex; flex-direction:column; gap:0.25rem;">
                                 ${itemsHtml}
                             </ul>
