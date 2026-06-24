@@ -3316,9 +3316,12 @@ document.addEventListener('DOMContentLoaded', () => {
         const diff = newValue - minSelfPay;
 
         const absDiff = Math.abs(diff).toLocaleString();
-        const popupMsg = diff >= 0
-            ? `정산에 문제없음\n자부담금액보다 ${absDiff}원 추가 부담함`
-            : `⚠️ 정산에 문제 있음 ⚠️\n자부담금액보다 ${absDiff}원 적게 부담함`;
+        const minFmt = minSelfPay.toLocaleString();
+        const popupMsg = diff > 0
+            ? `원래 총 자부담: ${minFmt}원 + ${absDiff}원 초과\n정산에 문제 없음`
+            : diff === 0
+            ? `총 자부담: ${minFmt}원 (자동 계산값과 동일)\n정산에 문제 없음`
+            : `⚠️ 정산에 문제 있음 ⚠️\n원래 총 자부담: ${minFmt}원보다 ${absDiff}원 적게 부담함`;
         showDiffPopup(popupMsg, diff);
 
         AppState.lastCalculatedSelfPay = newValue;
