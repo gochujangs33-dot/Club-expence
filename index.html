@@ -324,29 +324,32 @@
 
                             <div class="divider"></div>
 
-                            <!-- 2차 임시 정산 -->
-                            <div id="second-round-section" style="margin-bottom: 0.75rem;">
-                                <div style="display:flex; align-items:center; gap:0.5rem; margin-bottom:0.6rem;">
-                                    <span style="font-size:0.82rem; font-weight:600; color:var(--text-secondary);">🍽️ 2차 임시 금액</span>
-                                    <input type="text" id="second-round-input" inputmode="numeric" placeholder="0" style="width:110px; padding:0.3rem 0.5rem; font-size:0.85rem; text-align:right; background:var(--bg-input); border:1px solid var(--border); border-radius:6px; color:var(--text-primary);">
-                                    <span style="font-size:0.82rem; color:var(--text-secondary);">원</span>
-                                    <button id="second-round-clear" style="font-size:0.75rem; padding:0.2rem 0.5rem; background:transparent; border:1px solid var(--border); border-radius:5px; color:var(--text-muted); cursor:pointer;">지우기</button>
+                            <!-- 추가 차수 임시 정산 -->
+                            <div id="extra-rounds-section" style="margin-bottom:0.75rem;">
+                                <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:0.55rem;">
+                                    <span style="font-size:0.82rem; font-weight:600; color:var(--text-secondary);">🍽️ 추가 차수 임시 정산</span>
+                                    <button id="add-extra-round-btn" style="font-size:0.75rem; padding:0.25rem 0.65rem; background:rgba(168,85,247,0.15); border:1px solid rgba(168,85,247,0.4); border-radius:6px; color:var(--color-secondary,#a855f7); cursor:pointer; font-weight:600;">+ 차수 추가</button>
                                 </div>
-                                <div id="second-round-result" class="hidden" style="background:rgba(168,85,247,0.08); border:1px solid rgba(168,85,247,0.25); border-radius:8px; padding:0.65rem 0.85rem; font-size:0.83rem;">
-                                    <div style="display:flex; justify-content:space-between; margin-bottom:0.35rem; color:var(--text-secondary);">
-                                        <span>1차 + 2차 합산 총액</span>
-                                        <strong id="sr-total" style="color:var(--text-primary);">-</strong>
+                                <div id="extra-rounds-list"></div>
+                                <div id="extra-rounds-summary" class="hidden" style="background:rgba(168,85,247,0.08); border:1px solid rgba(168,85,247,0.25); border-radius:8px; padding:0.7rem 0.9rem; font-size:0.83rem; margin-top:0.5rem;">
+                                    <div style="display:flex; justify-content:space-between; margin-bottom:0.3rem; color:var(--text-secondary); font-size:0.78rem;">
+                                        <span>전체 합산 총액 (1차 포함)</span>
+                                        <strong id="er-total" style="color:var(--text-primary);">-</strong>
                                     </div>
-                                    <div style="display:flex; justify-content:space-between; margin-bottom:0.35rem;">
-                                        <span style="color:#4ade80;">💳 법인카드 결제</span>
-                                        <strong id="sr-corp" style="color:#4ade80;">-</strong>
+                                    <div style="display:flex; justify-content:space-between; margin-bottom:0.3rem;">
+                                        <span style="color:#4ade80;">💳 법인카드 총 결제</span>
+                                        <strong id="er-corp" style="color:#4ade80;">-</strong>
                                     </div>
-                                    <div style="display:flex; justify-content:space-between;">
-                                        <span style="color:#f97316;">💰 개인카드 결제</span>
-                                        <strong id="sr-personal" style="color:#f97316;">-</strong>
+                                    <div style="display:flex; justify-content:space-between; margin-bottom:0.3rem;">
+                                        <span style="color:#f97316;">💰 개인카드 총 결제</span>
+                                        <strong id="er-personal" style="color:#f97316;">-</strong>
                                     </div>
-                                    <div style="margin-top:0.45rem; padding-top:0.4rem; border-top:1px solid rgba(168,85,247,0.2); font-size:0.75rem; color:var(--text-muted);">
-                                        ※ 법인카드는 1차 최종 지원금 한도 내 결제 / 2차는 전액 개인카드
+                                    <div style="display:flex; justify-content:space-between; font-size:0.78rem; color:var(--text-muted);">
+                                        <span>남은 법인카드 한도</span>
+                                        <strong id="er-corp-remain" style="color:var(--text-muted);">-</strong>
+                                    </div>
+                                    <div style="margin-top:0.4rem; padding-top:0.35rem; border-top:1px solid rgba(168,85,247,0.2); font-size:0.72rem; color:var(--text-muted);">
+                                        ※ 법인카드는 클럽 잔여 예산 한도 내 순서대로 소진
                                     </div>
                                 </div>
                             </div>

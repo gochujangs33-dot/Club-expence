@@ -3373,44 +3373,142 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // 2차 임시 정산 핸들러
-    const secondRoundInput = document.getElementById('second-round-input');
-    const secondRoundResult = document.getElementById('second-round-result');
-    const secondRoundClear = document.getElementById('second-round-clear');
+    // 추가 차수 임시 정산 핸들러
+    const extraRoundsList = document.getElementById('extra-rounds-list');
+    const extraRoundsSummary = document.getElementById('extra-rounds-summary');
+    const addExtraRoundBtn = document.getElementById('add-extra-round-btn');
+    let extraRoundCount = 0;
 
-    function updateSecondRound() {
-        const secondAmt = parseAmount(secondRoundInput ? secondRoundInput.value : '0') || 0;
-        if (!secondRoundResult) return;
-        if (secondAmt <= 0) {
-            secondRoundResult.classList.add('hidden');
+    function getExtraRoundBases() {
+        // 1차 법인카드 = 최종 지원금, 1차 개인카드 = 자부담
+        const corp1 = parseAmount((document.getElementById('result-final-support') || {}).textContent || '0') || 0;
+        const self1 = parseAmount((document.getElementById('result-total-self-pay-input') || {}).value || '0') || 0;
+        // 클럽 잔여 예산 = 이후 남은 잔여 금액 (추가 차수에 쓸 수 있는 법인카드 한도)
+        const remainBudget = parseAmount((document.getElementById('result-after-remaining') || {}).textContent || '0') || 0;
+        return { corp1, self1, remainBudget };
+    }
+
+    function recalcExtraRounds() {
+        if (!extraRoundsList) return;
+        const inputs = extraRoundsList.querySelectorAll('.extra-round-input');
+        if (inputs.length === 0) {
+            if (extraRoundsSummary) extraRoundsSummary.classList.add('hidden');
             return;
         }
-        // 1차 결과에서 최종 지원금과 자부담 읽기
-        const corpText = document.getElementById('result-final-support') ? document.getElementById('result-final-support').textContent : '0';
-        const selfText = document.getElementById('result-total-self-pay-input') ? document.getElementById('result-total-self-pay-input').value : '0';
-        const corp1 = parseAmount(corpText) || 0;   // 법인카드 = 1차 최종 지원금
-        const self1 = parseAmount(selfText) || 0;   // 개인카드 = 1차 자부담
 
-        const total = corp1 + self1 + secondAmt;    // 1차 + 2차 합산
-        const corpPay = corp1;                       // 법인카드는 1차 지원금 한도만
-        const personalPay = self1 + secondAmt;       // 개인카드 = 1차자부담 + 2차전액
+        const { corp1, self1, remainBudget } = getExtraRoundBases();
+        let corpBudgetLeft = remainBudget; // 추가 차수에 쓸 수 있는 법인카드 남은 한도
+        let totalExtra = 0;
+        let corpExtra = 0;
+        let personalExtra = 0;
 
-        document.getElementById('sr-total').textContent = total.toLocaleString() + '원';
-        document.getElementById('sr-corp').textContent = corpPay.toLocaleString() + '원';
-        document.getElementById('sr-personal').textContent = personalPay.toLocaleString() + '원';
-        secondRoundResult.classList.remove('hidden');
-    }
+        inputs.forEach((input, i) => {
+            const amt = parseAmount(input.value) || 0;
+            const corpForRound = Math.min(corpBudgetLeft, amt); // 남은 한도만큼 법인카드
+            const personalForRound = amt - corpForRound;
+            corpBudgetLeft -= corpForRound;
 
-    if (secondRoundInput) {
-        setupCurrencyInput(secondRoundInput);
-        secondRoundInput.addEventListener('input', updateSecondRound);
-        secondRoundInput.addEventListener('blur', updateSecondRound);
-    }
-    if (secondRoundClear) {
-        secondRoundClear.addEventListener('click', () => {
-            if (secondRoundInput) secondRoundInput.value = '';
-            if (secondRoundResult) secondRoundResult.classList.add('hidden');
+            totalExtra += amt;
+            corpExtra += corpForRound;
+            personalExtra += personalForRound;
+
+            // 각 행의 법인/개인 표시 업데이트
+            const row = input.closest('.extra-round-row');
+            if (row) {
+                const corpEl = row.querySelector('.er-row-corp');
+                const persEl = row.querySelector('.er-row-pers');
+                if (amt > 0) {
+                    if (corpEl) corpEl.textContent = '💳 ' + corpForRound.toLocaleString() + '원';
+                    if (persEl) persEl.textContent = '💰 ' + personalForRound.toLocaleString() + '원';
+                } else {
+                    if (corpEl) corpEl.textContent = '';
+                    if (persEl) persEl.textContent = '';
+                }
+            }
         });
+
+        const hasAnyAmount = totalExtra > 0;
+        if (!hasAnyAmount) {
+            if (extraRoundsSummary) extraRoundsSummary.classList.add('hidden');
+            return;
+        }
+
+        const totalAll = corp1 + self1 + totalExtra;
+        const corpAll = corp1 + corpExtra;
+        const personalAll = self1 + personalExtra;
+
+        const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+        set('er-total', totalAll.toLocaleString() + '원');
+        set('er-corp', corpAll.toLocaleString() + '원');
+        set('er-personal', personalAll.toLocaleString() + '원');
+        const remainEl = document.getElementById('er-corp-remain');
+        if (remainEl) {
+            remainEl.textContent = corpBudgetLeft.toLocaleString() + '원';
+            remainEl.style.color = corpBudgetLeft > 0 ? '#4ade80' : 'var(--text-muted)';
+        }
+        if (extraRoundsSummary) extraRoundsSummary.classList.remove('hidden');
+    }
+
+    function addExtraRound() {
+        if (!extraRoundsList) return;
+        extraRoundCount++;
+        const roundNum = extraRoundCount + 1; // 2차부터 시작
+
+        const row = document.createElement('div');
+        row.className = 'extra-round-row';
+        row.style.cssText = 'display:flex; align-items:center; gap:0.4rem; margin-bottom:0.4rem; flex-wrap:wrap;';
+
+        const label = document.createElement('span');
+        label.textContent = `${roundNum}차`;
+        label.style.cssText = 'font-size:0.8rem; font-weight:600; color:var(--text-secondary); min-width:2rem;';
+
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.inputMode = 'numeric';
+        input.className = 'extra-round-input';
+        input.placeholder = '0';
+        input.style.cssText = 'width:100px; padding:0.3rem 0.5rem; font-size:0.85rem; text-align:right; background:var(--bg-input); border:1px solid var(--border); border-radius:6px; color:var(--text-primary);';
+
+        const won = document.createElement('span');
+        won.textContent = '원';
+        won.style.cssText = 'font-size:0.8rem; color:var(--text-secondary);';
+
+        const corpSpan = document.createElement('span');
+        corpSpan.className = 'er-row-corp';
+        corpSpan.style.cssText = 'font-size:0.78rem; color:#4ade80; font-weight:600;';
+
+        const persSpan = document.createElement('span');
+        persSpan.className = 'er-row-pers';
+        persSpan.style.cssText = 'font-size:0.78rem; color:#f97316; font-weight:600;';
+
+        const delBtn = document.createElement('button');
+        delBtn.textContent = '×';
+        delBtn.style.cssText = 'padding:0.15rem 0.45rem; font-size:0.9rem; background:transparent; border:1px solid var(--border); border-radius:4px; color:var(--text-muted); cursor:pointer; margin-left:auto;';
+        delBtn.addEventListener('click', () => {
+            row.remove();
+            // 라벨 재번호 매기기
+            extraRoundsList.querySelectorAll('.extra-round-row').forEach((r, i) => {
+                const lbl = r.querySelector('span');
+                if (lbl) lbl.textContent = `${i + 2}차`;
+            });
+            extraRoundCount = extraRoundsList.querySelectorAll('.extra-round-row').length;
+            recalcExtraRounds();
+        });
+
+        setupCurrencyInput(input);
+        input.addEventListener('input', recalcExtraRounds);
+        input.addEventListener('blur', recalcExtraRounds);
+
+        row.append(label, input, won, corpSpan, persSpan, delBtn);
+        extraRoundsList.appendChild(row);
+        input.focus();
+        recalcExtraRounds();
+    }
+
+    if (addExtraRoundBtn) {
+        addExtraRoundBtn.addEventListener('click', addExtraRound);
+        // 기본으로 2차 1개 추가
+        addExtraRound();
     }
 
     // Close diff popup on touch/click anywhere
