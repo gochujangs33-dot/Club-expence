@@ -336,24 +336,47 @@ const AppState = {
     },
 
     // 전사원 명부 일괄 등록: 기존에 등록된 이름은 건드리지 않고, 새 이름만 추가
+    // 동명이인은 ids 배열에 누적 보관 (사번 선택 드롭다운용)
     bulkImportDirectory(list) {
         let added = 0;
         let updated = 0;
         list.forEach(([name, employeeId]) => {
             if (!name || !employeeId) return;
+            const eid = String(employeeId);
             const entry = this.directory[name];
             if (entry === undefined) {
-                this.directory[name] = { id: employeeId, count: 0 };
+                this.directory[name] = { id: eid, count: 0, ids: [eid] };
                 added++;
-            } else if (typeof entry === 'object' && entry.id !== employeeId && !/^\d{4}$/.test(String(entry.id))) {
-                entry.id = employeeId;
-                updated++;
+            } else if (typeof entry === 'object') {
+                if (!entry.ids) entry.ids = [String(entry.id)];
+                if (!entry.ids.includes(eid)) {
+                    entry.ids.push(eid); // 동명이인 사번 누적
+                    updated++;
+                }
+                if (entry.id !== eid && !/^\d{4}$/.test(String(entry.id))) {
+                    entry.id = eid;
+                }
             }
         });
         if (added || updated) this.save();
         this.render();
         this.updateDatalist();
         return added;
+    },
+
+    // 검색어에 맞는 사원 목록 반환 (동명이인 포함 — 사번 선택 드롭다운용)
+    getAllDirectoryMatches(query) {
+        if (!query) return [];
+        const q = query.trim();
+        const results = [];
+        Object.entries(this.directory).forEach(([name, val]) => {
+            if (!name.includes(q)) return;
+            const ids = (typeof val === 'object' && Array.isArray(val.ids) && val.ids.length > 0)
+                ? val.ids
+                : [typeof val === 'object' ? String(val.id) : String(val)];
+            ids.forEach(id => results.push({ name, id }));
+        });
+        return results;
     },
 
     // 명부의 "올해 누적 참석 횟수"를 본인 정산 이력(올해분)만 기준으로 다시 계산
@@ -995,15 +1018,7 @@ const AppState = {
     },
 
     updateDatalist() {
-        const datalist = document.getElementById('member-suggestions');
-        if (datalist) {
-            datalist.innerHTML = '';
-            Object.keys(this.directory).forEach(name => {
-                const option = document.createElement('option');
-                option.value = name;
-                datalist.appendChild(option);
-            });
-        }
+        // 커스텀 드롭다운 방식으로 전환 — datalist는 더 이상 사용 안 함
     },
 
     deleteFromDirectory(name) {
@@ -2402,16 +2417,61 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    // Attendee autocomplete search
+    // Attendee autocomplete — 커스텀 드롭다운 (동명이인 사번 선택 지원)
     const attendeeNameInput = document.getElementById('attendee-name-input');
     const attendeeIdInput = document.getElementById('attendee-id-input');
+    const attendeeDropdown = document.getElementById('attendee-name-dropdown');
+
+    function hideAttendeeDropdown() {
+        if (attendeeDropdown) attendeeDropdown.classList.add('hidden');
+    }
+
+    function showAttendeeDropdown(entries) {
+        if (!attendeeDropdown) return;
+        attendeeDropdown.innerHTML = '';
+        entries.forEach(entry => {
+            const item = document.createElement('div');
+            item.className = 'attendee-dropdown-item';
+            // 동명이인이면 사번도 함께 표시
+            const hasDupe = entries.filter(e => e.name === entry.name).length > 1;
+            item.textContent = hasDupe ? `${entry.name} (사번: ${entry.id})` : entry.name;
+            item.addEventListener('mousedown', (e) => {
+                e.preventDefault();
+                attendeeNameInput.value = entry.name;
+                attendeeIdInput.value = entry.id;
+                hideAttendeeDropdown();
+            });
+            attendeeDropdown.appendChild(item);
+        });
+        attendeeDropdown.classList.remove('hidden');
+    }
 
     attendeeNameInput.addEventListener('input', () => {
-        const name = attendeeNameInput.value.trim();
-        if (AppState.directory[name]) {
-            const val = AppState.directory[name];
-            attendeeIdInput.value = typeof val === 'object' ? val.id : val;
+        const query = attendeeNameInput.value.trim();
+        if (!query) { hideAttendeeDropdown(); return; }
+
+        const matches = AppState.getAllDirectoryMatches(query);
+        if (matches.length === 0) { hideAttendeeDropdown(); return; }
+
+        // 정확히 일치하는 이름
+        const exactMatches = matches.filter(m => m.name === query);
+        if (exactMatches.length === 1) {
+            // 단일 매칭 → 사번 자동 입력, 드롭다운 불필요
+            attendeeIdInput.value = exactMatches[0].id;
+            hideAttendeeDropdown();
+            return;
         }
+        if (exactMatches.length > 1) {
+            // 동명이인 → 사번 선택 드롭다운
+            showAttendeeDropdown(exactMatches);
+            return;
+        }
+        // 부분 일치 → 검색 제안 드롭다운
+        showAttendeeDropdown(matches.slice(0, 8));
+    });
+
+    attendeeNameInput.addEventListener('blur', () => {
+        setTimeout(hideAttendeeDropdown, 150);
     });
 
     function showAttendeeError(msg) {

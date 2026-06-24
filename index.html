@@ -355,12 +355,10 @@
                         </div>
                         <div class="card-body">
                             <form id="attendee-form" onsubmit="return false;">
-                                <div class="input-group">
+                                <div class="input-group" style="position:relative;">
                                     <label for="attendee-name-input" data-i18n="label.name">이름</label>
-                                    <input type="text" id="attendee-name-input" list="member-suggestions" data-i18n-ph="ph.name" placeholder="예: 홍길동" required autocomplete="off">
-                                    <datalist id="member-suggestions">
-                                        <!-- Dynamically populated from directory -->
-                                    </datalist>
+                                    <input type="text" id="attendee-name-input" data-i18n-ph="ph.name" placeholder="예: 홍길동" required autocomplete="off">
+                                    <div id="attendee-name-dropdown" class="hidden attendee-dropdown"></div>
                                 </div>
                                 <div class="input-group">
                                     <label for="attendee-id-input" data-i18n="label.emp_id">사번</label>
