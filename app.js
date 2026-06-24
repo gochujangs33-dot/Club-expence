@@ -50,11 +50,12 @@ const firebaseConfig = {
 
 let firebaseDb = null;
 try {
-    // 플레이스홀더 상태가 아닌 경우에만 Firebase 초기화 실행
     if (firebaseConfig.apiKey && firebaseConfig.apiKey !== "YOUR_API_KEY") {
         firebase.initializeApp(firebaseConfig);
         firebaseDb = firebase.database();
-        console.log("Firebase Realtime Database initialized successfully.");
+        // 익명 로그인 — DB 규칙 "auth != null" 충족용 (사용자에게 보이지 않음)
+        firebase.auth().signInAnonymously().catch(err => console.warn("익명 로그인 실패:", err));
+        console.log("Firebase initialized successfully.");
     }
 } catch (error) {
     console.error("Firebase initialization failed:", error);
