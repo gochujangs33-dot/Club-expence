@@ -400,7 +400,22 @@ const AppState = {
                 }
             }
         });
-        if (added || updated) this.save();
+        // 사후 정리: JSON에 없는 이름인데 모든 사번이 JSON에 등록돼 있으면 삭제
+        // (예: "이진호(PS)"가 로컬/Firebase에 남아있어도 로그인 시 자동 제거)
+        const jsonIdSet = new Set(list.map(([, id]) => String(id)));
+        let cleaned = 0;
+        Object.keys(this.directory).forEach(n => {
+            if (jsonNameSet.has(n)) return;
+            const e = this.directory[n];
+            const ids = (typeof e === 'object' && Array.isArray(e.ids))
+                ? e.ids.map(String)
+                : [String(typeof e === 'object' ? e.id : e)];
+            if (ids.every(id => jsonIdSet.has(id))) {
+                delete this.directory[n];
+                cleaned++;
+            }
+        });
+        if (added || updated || cleaned) this.save();
         this.render();
         this.updateDatalist();
         return added;
@@ -2513,13 +2528,50 @@ document.addEventListener('DOMContentLoaded', () => {
         if (attendeeDropdown) attendeeDropdown.classList.add('hidden');
     }
 
+    // 동명이인 사번 선택 팝업
+    function showEmpIdPickerPopup(name, entries, onSelect) {
+        const existing = document.getElementById('emp-id-picker-popup');
+        if (existing) existing.remove();
+
+        const overlay = document.createElement('div');
+        overlay.id = 'emp-id-picker-popup';
+        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9999;display:flex;align-items:center;justify-content:center;';
+
+        const box = document.createElement('div');
+        box.style.cssText = 'background:var(--bg-card,#1e1e2e);border:1px solid var(--border,#444);border-radius:14px;padding:1.4rem 1.6rem;min-width:240px;max-width:320px;box-shadow:0 12px 40px rgba(0,0,0,0.5);';
+
+        const title = document.createElement('p');
+        title.style.cssText = 'font-size:0.88rem;font-weight:700;margin:0 0 1rem;color:var(--color-secondary,#a855f7);';
+        title.textContent = `"${name}" 동명이인 — 사번을 선택하세요`;
+        box.appendChild(title);
+
+        entries.forEach(entry => {
+            const btn = document.createElement('button');
+            btn.style.cssText = 'display:block;width:100%;margin-bottom:0.5rem;padding:0.65rem 0.9rem;background:var(--bg-input,#2a2a3e);border:1px solid var(--border,#444);border-radius:8px;color:var(--text-primary,#eee);font-size:0.88rem;text-align:left;cursor:pointer;transition:background 0.15s;';
+            btn.innerHTML = `<span style="font-weight:600;">${AppState.escapeHtml(entry.name)}</span><span style="color:var(--text-secondary,#888);margin-left:0.5rem;">EMP ID: ${AppState.escapeHtml(entry.id)}</span>`;
+            btn.addEventListener('mouseenter', () => btn.style.background = 'var(--color-secondary-light,rgba(168,85,247,0.18))');
+            btn.addEventListener('mouseleave', () => btn.style.background = 'var(--bg-input,#2a2a3e)');
+            btn.addEventListener('click', () => { onSelect(entry); overlay.remove(); });
+            box.appendChild(btn);
+        });
+
+        const cancelBtn = document.createElement('button');
+        cancelBtn.style.cssText = 'display:block;width:100%;margin-top:0.4rem;padding:0.5rem;background:transparent;border:1px solid var(--border,#444);color:var(--text-secondary,#888);border-radius:8px;cursor:pointer;font-size:0.82rem;';
+        cancelBtn.textContent = '취소';
+        cancelBtn.addEventListener('click', () => overlay.remove());
+        box.appendChild(cancelBtn);
+
+        overlay.appendChild(box);
+        overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+        document.body.appendChild(overlay);
+    }
+
     function showAttendeeDropdown(entries) {
         if (!attendeeDropdown) return;
         attendeeDropdown.innerHTML = '';
         entries.forEach(entry => {
             const item = document.createElement('div');
             item.className = 'attendee-dropdown-item';
-            // 동명이인이면 사번도 함께 표시
             const hasDupe = entries.filter(e => e.name === entry.name).length > 1;
             item.textContent = hasDupe ? `${entry.name} (사번: ${entry.id})` : entry.name;
             item.addEventListener('mousedown', (e) => {
@@ -2540,20 +2592,23 @@ document.addEventListener('DOMContentLoaded', () => {
         const matches = AppState.getAllDirectoryMatches(query);
         if (matches.length === 0) { hideAttendeeDropdown(); return; }
 
-        // 정확히 일치하는 이름
         const exactMatches = matches.filter(m => m.name === query);
         if (exactMatches.length === 1) {
-            // 단일 매칭 → 사번 자동 입력, 드롭다운 불필요
+            // 단일 → 사번 자동 입력
             attendeeIdInput.value = exactMatches[0].id;
             hideAttendeeDropdown();
             return;
         }
         if (exactMatches.length > 1) {
-            // 동명이인 → 사번 선택 드롭다운
-            showAttendeeDropdown(exactMatches);
+            // 동명이인 → 팝업 선택
+            hideAttendeeDropdown();
+            showEmpIdPickerPopup(query, exactMatches, (entry) => {
+                attendeeNameInput.value = entry.name;
+                attendeeIdInput.value = entry.id;
+            });
             return;
         }
-        // 부분 일치 → 검색 제안 드롭다운
+        // 부분 일치 → 인라인 드롭다운 제안
         showAttendeeDropdown(matches.slice(0, 8));
     });
 
@@ -2627,21 +2682,36 @@ document.addEventListener('DOMContentLoaded', () => {
     const dirExistingIdHint = document.getElementById('dir-existing-id-hint');
     const dirSamePersonWarning = document.getElementById('dir-same-person-warning');
 
-    function getExistingId(name) {
+    function getExistingIds(name) {
         const entry = AppState.directory[name];
-        if (entry === undefined) return null;
-        return typeof entry === 'object' ? entry.id : entry;
+        if (!entry) return [];
+        if (typeof entry === 'object' && Array.isArray(entry.ids)) return entry.ids.map(String);
+        return [String(typeof entry === 'object' ? entry.id : entry)];
     }
 
     function updateDirNameHint() {
         const name = dirNameInput.value.trim();
-        const id = dirIdInput.value.trim();
-        const existingId = name ? getExistingId(name) : null;
-        if (existingId !== null) {
-            dirExistingIdHint.textContent = `등록된 EMP ID: ${existingId}`;
+        const currentId = dirIdInput.value.trim();
+        const existingIds = name ? getExistingIds(name) : [];
+
+        if (existingIds.length === 1) {
+            // 단일 → EMP ID 자동 입력
+            if (!currentId) dirIdInput.value = existingIds[0];
+            dirExistingIdHint.textContent = `등록된 EMP ID: ${existingIds[0]}`;
             dirExistingIdHint.classList.remove('hidden');
-            const showWarning = AppState.editingDirName === null && id !== '' && id !== existingId;
+            const showWarning = AppState.editingDirName === null && dirIdInput.value !== '' && !existingIds.includes(dirIdInput.value);
             dirSamePersonWarning.classList.toggle('hidden', !showWarning);
+        } else if (existingIds.length > 1) {
+            // 동명이인 → 팝업으로 사번 선택 (EMP ID 빈 경우)
+            dirExistingIdHint.textContent = `동명이인 ${existingIds.length}명 (EMP ID: ${existingIds.join(', ')})`;
+            dirExistingIdHint.classList.remove('hidden');
+            dirSamePersonWarning.classList.add('hidden');
+            if (!currentId) {
+                showEmpIdPickerPopup(name, existingIds.map(id => ({ name, id })), (entry) => {
+                    dirIdInput.value = entry.id;
+                    updateDirNameHint();
+                });
+            }
         } else {
             dirExistingIdHint.classList.add('hidden');
             dirSamePersonWarning.classList.add('hidden');
@@ -2654,8 +2724,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!name || !id) return;
 
         if (AppState.editingDirName === null) {
-            const existingId = getExistingId(name);
-            if (existingId !== null && existingId === id) {
+            const existingIds = getExistingIds(name);
+            if (existingIds.includes(id)) {
                 showDirError(`이미 동일한 이름과 EMP ID로 등록되어 있습니다: ${name} (${id})`);
                 return;
             }
