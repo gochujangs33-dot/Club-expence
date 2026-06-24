@@ -3373,6 +3373,46 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // 2차 임시 정산 핸들러
+    const secondRoundInput = document.getElementById('second-round-input');
+    const secondRoundResult = document.getElementById('second-round-result');
+    const secondRoundClear = document.getElementById('second-round-clear');
+
+    function updateSecondRound() {
+        const secondAmt = parseAmount(secondRoundInput ? secondRoundInput.value : '0') || 0;
+        if (!secondRoundResult) return;
+        if (secondAmt <= 0) {
+            secondRoundResult.classList.add('hidden');
+            return;
+        }
+        // 1차 결과에서 최종 지원금과 자부담 읽기
+        const corpText = document.getElementById('result-final-support') ? document.getElementById('result-final-support').textContent : '0';
+        const selfText = document.getElementById('result-total-self-pay-input') ? document.getElementById('result-total-self-pay-input').value : '0';
+        const corp1 = parseAmount(corpText) || 0;   // 법인카드 = 1차 최종 지원금
+        const self1 = parseAmount(selfText) || 0;   // 개인카드 = 1차 자부담
+
+        const total = corp1 + self1 + secondAmt;    // 1차 + 2차 합산
+        const corpPay = corp1;                       // 법인카드는 1차 지원금 한도만
+        const personalPay = self1 + secondAmt;       // 개인카드 = 1차자부담 + 2차전액
+
+        document.getElementById('sr-total').textContent = total.toLocaleString() + '원';
+        document.getElementById('sr-corp').textContent = corpPay.toLocaleString() + '원';
+        document.getElementById('sr-personal').textContent = personalPay.toLocaleString() + '원';
+        secondRoundResult.classList.remove('hidden');
+    }
+
+    if (secondRoundInput) {
+        setupCurrencyInput(secondRoundInput);
+        secondRoundInput.addEventListener('input', updateSecondRound);
+        secondRoundInput.addEventListener('blur', updateSecondRound);
+    }
+    if (secondRoundClear) {
+        secondRoundClear.addEventListener('click', () => {
+            if (secondRoundInput) secondRoundInput.value = '';
+            if (secondRoundResult) secondRoundResult.classList.add('hidden');
+        });
+    }
+
     // Close diff popup on touch/click anywhere
     document.addEventListener('pointerdown', () => {
         const popup = document.getElementById('diff-popup');
