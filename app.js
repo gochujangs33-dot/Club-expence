@@ -55,16 +55,20 @@ try {
     if (firebaseConfig.apiKey && firebaseConfig.apiKey !== "YOUR_API_KEY") {
         firebase.initializeApp(firebaseConfig);
         firebaseDb = firebase.database();
-        // onAuthStateChanged: 기존 익명 세션 복원 또는 신규 익명 로그인 후 resolve
+        // user가 확정된 시점(onAuthStateChanged 재발화)에 resolve — DB 클라이언트 토큰 동기화 보장
         firebaseAuthReady = new Promise((resolve) => {
             const unsub = firebase.auth().onAuthStateChanged((user) => {
-                unsub(); // 최초 1회만
                 if (user) {
+                    unsub();
                     resolve();
                 } else {
                     firebase.auth().signInAnonymously()
-                        .then(resolve)
-                        .catch(err => { console.warn("익명 로그인 실패:", err); resolve(); });
+                        .catch(err => {
+                            console.warn("익명 로그인 실패:", err);
+                            unsub();
+                            resolve();
+                        });
+                    // signInAnonymously 성공 시 onAuthStateChanged가 user!=null로 재발화 → 위 if(user) 분기에서 resolve
                 }
             });
         });
