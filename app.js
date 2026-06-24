@@ -1040,16 +1040,41 @@ const AppState = {
     },
 
     addDirectoryEntry(name, employeeId) {
+        const eid = String(employeeId);
         if (this.editingDirName !== null) {
             const currentData = this.directory[this.editingDirName];
             const currentCount = typeof currentData === 'object' ? (currentData.count || 0) : 1;
-            
-            if (this.editingDirName !== name) {
+            const nameChanged = this.editingDirName !== name;
+
+            if (nameChanged) {
                 delete this.directory[this.editingDirName];
+
+                const existing = this.directory[name];
+                if (existing) {
+                    // 대상 이름이 이미 존재 → 동명이인으로 ids[] 병합
+                    if (typeof existing !== 'object') {
+                        this.directory[name] = { id: String(existing), count: existing.count || 0, ids: [String(existing)] };
+                    }
+                    if (!this.directory[name].ids) this.directory[name].ids = [String(this.directory[name].id)];
+                    if (!this.directory[name].ids.includes(eid)) this.directory[name].ids.push(eid);
+                } else {
+                    this.directory[name] = { id: eid, count: currentCount, ids: [eid] };
+                }
+            } else {
+                // 이름 그대로, 사번만 변경
+                const ids = (currentData && currentData.ids) ? currentData.ids.map(String) : [eid];
+                if (!ids.includes(eid)) ids[0] = eid;
+                this.directory[name] = { id: eid, count: currentCount, ids };
             }
-            this.directory[name] = { id: employeeId, count: currentCount };
         } else {
-            this.directory[name] = { id: employeeId, count: 0 };
+            const existing = this.directory[name];
+            if (existing && typeof existing === 'object') {
+                // 이미 존재하는 이름 → 사번 추가
+                if (!existing.ids) existing.ids = [String(existing.id)];
+                if (!existing.ids.includes(eid)) existing.ids.push(eid);
+            } else {
+                this.directory[name] = { id: eid, count: 0, ids: [eid] };
+            }
         }
         this.cancelEditDirectory();
         this.save();
