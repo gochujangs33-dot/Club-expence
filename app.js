@@ -5080,16 +5080,42 @@ function updateCardTypeUI() {
 
     const isSplit = corpOn && personalOn;
     splitAutoHint.style.display = isSplit ? '' : 'none';
-    personalAmountInput.readOnly = isSplit;
 
-    if (isSplit) {
-        const totalRaw = document.getElementById('expense-amount-input').value;
-        const corpRaw = document.getElementById('expense-corporate-amount-input').value;
+    const corpAmountInput = document.getElementById('expense-corporate-amount-input');
+    const totalRaw = document.getElementById('expense-amount-input').value;
+    const total = parseAmount(totalRaw) || 0;
+
+    if (!isSplit && corpOn) {
+        // 법인카드만: 총액 = 법인카드 자동 입력 (읽기 전용)
+        if (corpAmountInput) {
+            corpAmountInput.value = total > 0 ? formatAmount(total) : '';
+            corpAmountInput.readOnly = true;
+            corpAmountInput.style.opacity = '0.65';
+        }
+        personalAmountInput.readOnly = false;
+    } else if (!isSplit && personalOn) {
+        // 개인카드만: 총액 = 개인카드 자동 입력 (읽기 전용)
+        if (corpAmountInput) {
+            corpAmountInput.readOnly = false;
+            corpAmountInput.style.opacity = '';
+        }
+        personalAmountInput.value = total > 0 ? formatAmount(total) : '';
+        personalAmountInput.readOnly = true;
+        personalAmountInput.style.opacity = '0.65';
+    } else {
+        // 분배 모드: 법인카드 수동 입력, 개인카드 자동 계산
+        if (corpAmountInput) {
+            corpAmountInput.readOnly = false;
+            corpAmountInput.style.opacity = '';
+        }
+        personalAmountInput.readOnly = true;
+        personalAmountInput.style.opacity = '0.65';
+
+        const corpRaw = corpAmountInput ? corpAmountInput.value : '';
         if (totalRaw === '' && corpRaw === '') {
             personalAmountInput.value = '';
         } else {
-            const total = parseAmount(totalRaw);
-            const corp = parseAmount(corpRaw);
+            const corp = parseAmount(corpRaw) || 0;
             personalAmountInput.value = formatAmount(Math.max(total - corp, 0));
         }
     }
