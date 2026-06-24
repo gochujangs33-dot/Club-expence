@@ -3379,15 +3379,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const addExtraRoundBtn = document.getElementById('add-extra-round-btn');
     let extraRoundCount = 0;
 
-    function getExtraRoundBases() {
-        // 1차 법인카드 = 최종 지원금, 1차 개인카드 = 자부담
-        const corp1 = parseAmount((document.getElementById('result-final-support') || {}).textContent || '0') || 0;
-        const self1 = parseAmount((document.getElementById('result-total-self-pay-input') || {}).value || '0') || 0;
-        // 클럽 잔여 예산 = 이후 남은 잔여 금액 (추가 차수에 쓸 수 있는 법인카드 한도)
-        const remainBudget = parseAmount((document.getElementById('result-after-remaining') || {}).textContent || '0') || 0;
-        return { corp1, self1, remainBudget };
-    }
-
     function recalcExtraRounds() {
         if (!extraRoundsList) return;
         const inputs = extraRoundsList.querySelectorAll('.extra-round-input');
@@ -3396,23 +3387,38 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        const { corp1, self1, remainBudget } = getExtraRoundBases();
-        let corpBudgetLeft = remainBudget; // 추가 차수에 쓸 수 있는 법인카드 남은 한도
+        const corp1 = parseAmount((document.getElementById('result-final-support') || {}).textContent || '0') || 0;
+        const self1 = parseAmount((document.getElementById('result-total-self-pay-input') || {}).value || '0') || 0;
+        const memberCount = AppState.memberCount || 0;
+        const rules = AppState.rules || DefaultRules;
+
         let totalExtra = 0;
         let corpExtra = 0;
         let personalExtra = 0;
 
-        inputs.forEach((input, i) => {
+        inputs.forEach(input => {
             const amt = parseAmount(input.value) || 0;
-            const corpForRound = Math.min(corpBudgetLeft, amt); // 남은 한도만큼 법인카드
-            const personalForRound = amt - corpForRound;
-            corpBudgetLeft -= corpForRound;
+            let corpForRound = 0;
+            let personalForRound = 0;
+
+            if (amt > 0 && memberCount > 0) {
+                // 각 차수도 동일한 자부담 계산식 (인원수 기반) 적용
+                const roundResult = SettlementCalculator.calculate(
+                    memberCount,
+                    [{ amount: amt, category: ExpenseCategory.EVENT }],
+                    0,
+                    rules
+                );
+                corpForRound = roundResult.finalSupportAmount;
+                personalForRound = roundResult.totalSelfPay;
+            } else if (amt > 0) {
+                personalForRound = amt;
+            }
 
             totalExtra += amt;
             corpExtra += corpForRound;
             personalExtra += personalForRound;
 
-            // 각 행의 법인/개인 표시 업데이트
             const row = input.closest('.extra-round-row');
             if (row) {
                 const corpEl = row.querySelector('.er-row-corp');
@@ -3427,25 +3433,15 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
 
-        const hasAnyAmount = totalExtra > 0;
-        if (!hasAnyAmount) {
+        if (totalExtra <= 0) {
             if (extraRoundsSummary) extraRoundsSummary.classList.add('hidden');
             return;
         }
 
-        const totalAll = corp1 + self1 + totalExtra;
-        const corpAll = corp1 + corpExtra;
-        const personalAll = self1 + personalExtra;
-
         const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
-        set('er-total', totalAll.toLocaleString() + '원');
-        set('er-corp', corpAll.toLocaleString() + '원');
-        set('er-personal', personalAll.toLocaleString() + '원');
-        const remainEl = document.getElementById('er-corp-remain');
-        if (remainEl) {
-            remainEl.textContent = corpBudgetLeft.toLocaleString() + '원';
-            remainEl.style.color = corpBudgetLeft > 0 ? '#4ade80' : 'var(--text-muted)';
-        }
+        set('er-total', (corp1 + self1 + totalExtra).toLocaleString() + '원');
+        set('er-corp', (corp1 + corpExtra).toLocaleString() + '원');
+        set('er-personal', (self1 + personalExtra).toLocaleString() + '원');
         if (extraRoundsSummary) extraRoundsSummary.classList.remove('hidden');
     }
 
