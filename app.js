@@ -1021,15 +1021,20 @@ const AppState = {
         // 커스텀 드롭다운 방식으로 전환 — datalist는 더 이상 사용 안 함
     },
 
-    deleteFromDirectory(name) {
+    deleteFromDirectory(name, id) {
         if (this.userName !== '관리자' && this.currentPin !== '002531') {
             alert(t('alert.directory_delete_restricted'));
             return;
         }
         try {
-            delete this.directory[name];
-            if (this.editingDirName === name) {
-                this.cancelEditDirectory();
+            const entry = this.directory[name];
+            if (id && typeof entry === 'object' && Array.isArray(entry.ids) && entry.ids.length > 1) {
+                // 동명이인 중 특정 사번만 제거
+                entry.ids = entry.ids.filter(i => String(i) !== String(id));
+                if (String(entry.id) === String(id)) entry.id = entry.ids[0];
+            } else {
+                delete this.directory[name];
+                if (this.editingDirName === name) this.cancelEditDirectory();
             }
             this.save();
             this.render();
@@ -1061,10 +1066,16 @@ const AppState = {
                     this.directory[name] = { id: eid, count: currentCount, ids: [eid] };
                 }
             } else {
-                // 이름 그대로, 사번만 변경
-                const ids = (currentData && currentData.ids) ? currentData.ids.map(String) : [eid];
-                if (!ids.includes(eid)) ids[0] = eid;
-                this.directory[name] = { id: eid, count: currentCount, ids };
+                // 이름 그대로, 특정 사번만 변경 (editingDirId → eid)
+                let ids = (currentData && Array.isArray(currentData.ids)) ? currentData.ids.map(String) : [String(currentData && currentData.id ? currentData.id : eid)];
+                const oldId = this.editingDirId ? String(this.editingDirId) : null;
+                if (oldId && ids.includes(oldId)) {
+                    ids = ids.map(i => i === oldId ? eid : i);
+                } else if (!ids.includes(eid)) {
+                    ids.push(eid);
+                }
+                const primaryId = (oldId && String(currentData.id) === oldId) ? eid : String(currentData.id || eid);
+                this.directory[name] = { id: primaryId, count: currentCount, ids };
             }
         } else {
             const existing = this.directory[name];
@@ -1082,7 +1093,7 @@ const AppState = {
         this.updateDatalist();
     },
 
-    startEditDirectory(name) {
+    startEditDirectory(name, id) {
         if (this.userName !== '관리자') {
             alert(t('alert.edit_restricted_admin_only'));
             return;
@@ -1090,7 +1101,8 @@ const AppState = {
         const data = this.directory[name];
         if (data !== undefined) {
             this.editingDirName = name;
-            const idVal = typeof data === 'object' ? data.id : data;
+            this.editingDirId = id ? String(id) : String(typeof data === 'object' ? data.id : data);
+            const idVal = this.editingDirId;
             document.getElementById('dir-name-input').value = name;
             document.getElementById('dir-id-input').value = idVal;
 
@@ -1478,24 +1490,37 @@ const AppState = {
                     </div>
                 `;
             } else {
+                // ids[]가 여러 개면 사번마다 별도 행으로 렌더링
+                const dirRows = [];
                 dirKeys.forEach(name => {
                     const entry = this.directory[name];
-                    const idValue = typeof entry === 'object' ? entry.id : entry;
+                    const ids = (typeof entry === 'object' && Array.isArray(entry.ids) && entry.ids.length > 0)
+                        ? entry.ids.map(String)
+                        : [String(typeof entry === 'object' ? entry.id : entry)];
+                    ids.forEach(id => dirRows.push({ name, id }));
+                });
+                directoryCount.textContent = dirRows.length;
+
+                const canDeleteDir = (this.userName === '관리자' || this.currentPin === '002531');
+
+                dirRows.forEach(({ name, id }) => {
+                    const entry = this.directory[name];
                     const countValue = typeof entry === 'object' ? (entry.count || 0) : 0;
-                    const isAdded = this.attendees.some(att => att.name === name);
-                    
+                    const isAdded = this.attendees.some(att => att.name === name && String(att.employeeId) === id);
+
                     const row = document.createElement('div');
                     row.className = 'expense-row';
+                    row.dataset.dirName = name;
+                    row.dataset.dirId = id;
                     row.style.padding = '0.5rem 0.75rem';
                     row.style.cursor = 'pointer';
-                    
+
                     const addBtnHtml = isAdded
                         ? `<button class="btn-primary-sm" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; background: var(--text-muted); cursor: not-allowed;" disabled>✓ 추가됨</button>`
-                        : `<button class="btn-add-to-current btn-primary-sm" data-name="${this.escapeHtml(name)}" data-id="${this.escapeHtml(idValue)}" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">추가</button>`;
+                        : `<button class="btn-add-to-current btn-primary-sm" data-name="${this.escapeHtml(name)}" data-id="${this.escapeHtml(id)}" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">추가</button>`;
 
-                    const canDeleteDir = (this.userName === '관리자' || this.currentPin === '002531');
                     const deleteDirBtnHtml = canDeleteDir
-                        ? `<button class="btn-delete-from-directory btn-delete btn-text-danger" data-name="${this.escapeHtml(name)}" style="padding: 0.5rem; font-size: 1.1rem; width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; background: rgba(239, 68, 68, 0.1); margin-left: 0.5rem;" title="명부에서 삭제">&times;</button>`
+                        ? `<button class="btn-delete-from-directory btn-delete btn-text-danger" data-name="${this.escapeHtml(name)}" data-id="${this.escapeHtml(id)}" style="padding: 0.5rem; font-size: 1.1rem; width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; background: rgba(239, 68, 68, 0.1); margin-left: 0.5rem;" title="명부에서 삭제">&times;</button>`
                         : '';
 
                     row.innerHTML = `
@@ -1504,7 +1529,7 @@ const AppState = {
                                 ${this.escapeHtml(name)}
                                 <span style="font-size: 0.72rem; color: var(--color-secondary); font-weight: 600; margin-left: 0.3rem;">(올해 누적: ${this.userName === '관리자' ? `<input type="number" class="dir-count-input" data-name="${this.escapeHtml(name)}" value="${countValue}" min="0" style="width:34px; padding:0 2px; font-size:0.72rem; font-weight:700; color:var(--color-secondary); background:transparent; border:none; border-bottom:1px dashed var(--color-secondary); outline:none; text-align:center; -moz-appearance:textfield; appearance:textfield;">` : countValue}회)</span>
                             </span>
-                            <span style="font-size: 0.75rem; color: var(--text-secondary);">EMP ID: ${this.escapeHtml(idValue)}</span>
+                            <span style="font-size: 0.75rem; color: var(--text-secondary);">EMP ID: ${this.escapeHtml(id)}</span>
                         </div>
                         <div class="expense-row-right" style="gap: 0.4rem;">
                             ${addBtnHtml}
@@ -1513,7 +1538,7 @@ const AppState = {
                     `;
                     directoryContainer.appendChild(row);
                 });
-                
+
                 // Bind dir-count-input change handlers
                 directoryContainer.querySelectorAll('.dir-count-input').forEach(input => {
                     input.addEventListener('click', (e) => e.stopPropagation());
@@ -1525,45 +1550,40 @@ const AppState = {
                         if (this.directory[dirName] !== undefined) {
                             const cur = this.directory[dirName];
                             const curId = typeof cur === 'object' ? cur.id : cur;
-                            this.directory[dirName] = { id: curId, count: newCount };
+                            const curIds = typeof cur === 'object' && Array.isArray(cur.ids) ? cur.ids : [curId];
+                            this.directory[dirName] = { id: curId, count: newCount, ids: curIds };
                             this.save();
                         }
                     });
                 });
 
                 // Bind row click handler for edit directory mode
-                directoryContainer.querySelectorAll('.expense-row').forEach((row, idx) => {
+                directoryContainer.querySelectorAll('.expense-row').forEach(row => {
                     row.addEventListener('click', (e) => {
-                        if (e.target.closest('button') || e.target.closest('input')) {
-                            return;
-                        }
-                        const name = dirKeys[idx];
-                        if (name) {
-                            this.startEditDirectory(name);
-                        }
+                        if (e.target.closest('button') || e.target.closest('input')) return;
+                        const dirName = row.dataset.dirName;
+                        const dirId = row.dataset.dirId;
+                        if (dirName) this.startEditDirectory(dirName, dirId);
                     });
                 });
-                
+
                 // Bind click handlers to add to current buttons
                 directoryContainer.querySelectorAll('.btn-add-to-current').forEach(button => {
                     button.addEventListener('click', (e) => {
                         e.stopPropagation();
                         const name = button.getAttribute('data-name');
                         const id = button.getAttribute('data-id');
-                        if (name && id) {
-                            this.addAttendee(name, id);
-                        }
+                        if (name && id) this.addAttendee(name, id);
                     });
                 });
-                
+
                 // Bind click handlers to delete from directory buttons
                 directoryContainer.querySelectorAll('.btn-delete-from-directory').forEach(button => {
                     button.addEventListener('click', (e) => {
                         e.stopPropagation();
                         const name = button.getAttribute('data-name');
-                        if (name) {
-                            this.deleteFromDirectory(name);
-                        }
+                        const id = button.getAttribute('data-id');
+                        if (name) this.deleteFromDirectory(name, id);
                     });
                 });
             }
