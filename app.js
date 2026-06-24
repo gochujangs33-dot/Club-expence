@@ -340,17 +340,31 @@ const AppState = {
     bulkImportDirectory(list) {
         let added = 0;
         let updated = 0;
+        // 이미 등록된 사번 집합 — 이름이 바뀐 사원을 JSON이 복원하는 것을 방지
+        const registeredIds = new Set();
+        Object.values(this.directory).forEach(val => {
+            const ids = (typeof val === 'object' && Array.isArray(val.ids))
+                ? val.ids.map(String)
+                : [String(typeof val === 'object' ? val.id : val)];
+            ids.forEach(id => registeredIds.add(id));
+        });
+
         list.forEach(([name, employeeId]) => {
             if (!name || !employeeId) return;
             const eid = String(employeeId);
             const entry = this.directory[name];
             if (entry === undefined) {
+                // 이 사번이 이미 다른 이름으로 등록돼 있으면 건너뜀
+                // (예: "이진호(PS)"를 "이진호"로 수정 후 로그인해도 복원되지 않음)
+                if (registeredIds.has(eid)) return;
                 this.directory[name] = { id: eid, count: 0, ids: [eid] };
+                registeredIds.add(eid);
                 added++;
             } else if (typeof entry === 'object') {
                 if (!entry.ids) entry.ids = [String(entry.id)];
                 if (!entry.ids.includes(eid)) {
-                    entry.ids.push(eid); // 동명이인 사번 누적
+                    entry.ids.push(eid);
+                    registeredIds.add(eid);
                     updated++;
                 }
                 if (entry.id !== eid && !/^\d{4}$/.test(String(entry.id))) {
