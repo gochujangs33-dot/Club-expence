@@ -516,6 +516,17 @@ input:focus, select:focus {
     background: rgba(15, 23, 42, 0.85);
 }
 
+/* 브라우저 자동완성(autofill) 시 흰 배경 덮어쓰기 */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active {
+    -webkit-box-shadow: 0 0 0 9999px rgba(15, 23, 42, 0.92) inset !important;
+    -webkit-text-fill-color: hsl(210, 40%, 98%) !important;
+    caret-color: hsl(210, 40%, 98%);
+    transition: background-color 9999s ease-in-out 0s;
+}
+
 input::-webkit-outer-spin-button,
 input::-webkit-inner-spin-button {
     -webkit-appearance: none;
