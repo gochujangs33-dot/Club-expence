@@ -3381,58 +3381,41 @@ document.addEventListener('DOMContentLoaded', () => {
     const addExtraRoundBtn = document.getElementById('add-extra-round-btn');
     let extraRoundCount = 0;
 
+    function calcDefaultCorp(amt) {
+        const memberCount = AppState.memberCount || 0;
+        const rules = AppState.rules || DefaultRules;
+        if (amt <= 0 || memberCount <= 0) return 0;
+        const r = SettlementCalculator.calculate(memberCount, [{ amount: amt, category: ExpenseCategory.EVENT }], 0, rules);
+        return r.finalSupportAmount;
+    }
+
     function recalcExtraRounds() {
         if (!extraRoundsList) return;
-        const inputs = extraRoundsList.querySelectorAll('.extra-round-input');
-        if (inputs.length === 0) {
+        const rows = extraRoundsList.querySelectorAll('.extra-round-row');
+        if (rows.length === 0) {
             if (extraRoundsSummary) extraRoundsSummary.classList.add('hidden');
             return;
         }
 
         const corp1 = parseAmount((document.getElementById('result-final-support') || {}).textContent || '0') || 0;
         const self1 = parseAmount((document.getElementById('result-total-self-pay-input') || {}).value || '0') || 0;
-        const memberCount = AppState.memberCount || 0;
-        const rules = AppState.rules || DefaultRules;
 
-        let totalExtra = 0;
-        let corpExtra = 0;
-        let personalExtra = 0;
+        let totalExtra = 0, corpExtra = 0, personalExtra = 0;
 
-        inputs.forEach(input => {
-            const amt = parseAmount(input.value) || 0;
-            let corpForRound = 0;
-            let personalForRound = 0;
+        rows.forEach(row => {
+            const amtInput = row.querySelector('.extra-round-input');
+            const corpInputEl = row.querySelector('.er-row-corp-input');
+            const persEl = row.querySelector('.er-row-pers');
 
-            if (amt > 0 && memberCount > 0) {
-                // 각 차수도 동일한 자부담 계산식 (인원수 기반) 적용
-                const roundResult = SettlementCalculator.calculate(
-                    memberCount,
-                    [{ amount: amt, category: ExpenseCategory.EVENT }],
-                    0,
-                    rules
-                );
-                corpForRound = roundResult.finalSupportAmount;
-                personalForRound = roundResult.totalSelfPay;
-            } else if (amt > 0) {
-                personalForRound = amt;
-            }
+            const amt = parseAmount(amtInput ? amtInput.value : '0') || 0;
+            const corp = Math.min(parseAmount(corpInputEl ? corpInputEl.value : '0') || 0, amt);
+            const personal = amt - corp;
 
             totalExtra += amt;
-            corpExtra += corpForRound;
-            personalExtra += personalForRound;
+            corpExtra += corp;
+            personalExtra += personal;
 
-            const row = input.closest('.extra-round-row');
-            if (row) {
-                const corpEl = row.querySelector('.er-row-corp');
-                const persEl = row.querySelector('.er-row-pers');
-                if (amt > 0) {
-                    if (corpEl) corpEl.textContent = '💳 ' + corpForRound.toLocaleString() + '원';
-                    if (persEl) persEl.textContent = '💰 ' + personalForRound.toLocaleString() + '원';
-                } else {
-                    if (corpEl) corpEl.textContent = '';
-                    if (persEl) persEl.textContent = '';
-                }
-            }
+            if (persEl) persEl.textContent = amt > 0 ? '💰 ' + personal.toLocaleString() + '원' : '';
         });
 
         if (totalExtra <= 0) {
@@ -3448,7 +3431,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function extraRoundBaseNum() {
-        // 비용 목록 항목 수 + 1이 첫 추가 차수 번호
         return (AppState.expenseItems ? AppState.expenseItems.length : 0) + 1;
     }
 
@@ -3467,28 +3449,45 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const row = document.createElement('div');
         row.className = 'extra-round-row';
-        row.style.cssText = 'display:flex; align-items:center; gap:0.4rem; margin-bottom:0.4rem; flex-wrap:wrap;';
+        row.style.cssText = 'margin-bottom:0.45rem;';
+
+        // ── 1줄: 차수 라벨 + 총액 입력 ──
+        const line1 = document.createElement('div');
+        line1.style.cssText = 'display:flex; align-items:center; gap:0.4rem; flex-wrap:wrap;';
 
         const label = document.createElement('span');
         label.className = 'er-row-label';
         label.textContent = `${roundNum}차`;
         label.style.cssText = 'font-size:0.8rem; font-weight:600; color:var(--text-secondary); min-width:2rem;';
 
-        const input = document.createElement('input');
-        input.type = 'text';
-        input.inputMode = 'numeric';
-        input.className = 'extra-round-input';
-        input.placeholder = '0';
-        input.style.cssText = 'width:100px; padding:0.3rem 0.5rem; font-size:0.85rem; text-align:right; background:var(--bg-input); border:1px solid var(--border); border-radius:6px; color:var(--text-primary);';
+        const amtInput = document.createElement('input');
+        amtInput.type = 'text';
+        amtInput.inputMode = 'numeric';
+        amtInput.className = 'extra-round-input';
+        amtInput.placeholder = '0';
+        amtInput.style.cssText = 'width:100px; padding:0.3rem 0.5rem; font-size:0.85rem; text-align:right; background:var(--bg-input); border:1px solid var(--border); border-radius:6px; color:var(--text-primary);';
 
         const won = document.createElement('span');
         won.textContent = '원';
         won.style.cssText = 'font-size:0.8rem; color:var(--text-secondary);';
 
-        const corpSpan = document.createElement('span');
-        corpSpan.className = 'er-row-corp';
-        corpSpan.style.cssText = 'font-size:0.78rem; color:#4ade80; font-weight:600;';
+        // ── 법인카드 입력 ──
+        const corpIcon = document.createElement('span');
+        corpIcon.textContent = '💳';
+        corpIcon.style.cssText = 'font-size:0.78rem;';
 
+        const corpInput = document.createElement('input');
+        corpInput.type = 'text';
+        corpInput.inputMode = 'numeric';
+        corpInput.className = 'er-row-corp-input';
+        corpInput.placeholder = '0';
+        corpInput.style.cssText = 'width:90px; padding:0.25rem 0.45rem; font-size:0.82rem; text-align:right; background:rgba(74,222,128,0.08); border:1px solid rgba(74,222,128,0.35); border-radius:5px; color:#4ade80;';
+
+        const corpWon = document.createElement('span');
+        corpWon.textContent = '원';
+        corpWon.style.cssText = 'font-size:0.78rem; color:#4ade80;';
+
+        // ── 개인카드 자동 표시 ──
         const persSpan = document.createElement('span');
         persSpan.className = 'er-row-pers';
         persSpan.style.cssText = 'font-size:0.78rem; color:#f97316; font-weight:600;';
@@ -3503,13 +3502,37 @@ document.addEventListener('DOMContentLoaded', () => {
             recalcExtraRounds();
         });
 
-        setupCurrencyInput(input);
-        input.addEventListener('input', recalcExtraRounds);
-        input.addEventListener('blur', recalcExtraRounds);
+        // 총액 변경 → 법인카드 기본값 재계산 후 개인카드 갱신
+        function onAmtChange() {
+            const amt = parseAmount(amtInput.value) || 0;
+            const def = calcDefaultCorp(amt);
+            corpInput.value = def > 0 ? def.toLocaleString() : '';
+            recalcExtraRounds();
+        }
 
-        row.append(label, input, won, corpSpan, persSpan, delBtn);
+        // 법인카드 수동 수정 → 개인카드만 갱신 (기본값 재계산 안 함)
+        function onCorpChange() {
+            const amt = parseAmount(amtInput.value) || 0;
+            let corp = parseAmount(corpInput.value) || 0;
+            if (corp > amt) {
+                corp = amt;
+                corpInput.value = amt > 0 ? amt.toLocaleString() : '';
+            }
+            recalcExtraRounds();
+        }
+
+        setupCurrencyInput(amtInput);
+        amtInput.addEventListener('input', onAmtChange);
+        amtInput.addEventListener('blur', onAmtChange);
+
+        setupCurrencyInput(corpInput);
+        corpInput.addEventListener('input', onCorpChange);
+        corpInput.addEventListener('blur', onCorpChange);
+
+        line1.append(label, amtInput, won, corpIcon, corpInput, corpWon, persSpan, delBtn);
+        row.appendChild(line1);
         extraRoundsList.appendChild(row);
-        input.focus();
+        amtInput.focus();
         recalcExtraRounds();
     }
 
