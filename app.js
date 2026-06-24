@@ -340,35 +340,63 @@ const AppState = {
     bulkImportDirectory(list) {
         let added = 0;
         let updated = 0;
-        // 이미 등록된 사번 집합 — 이름이 바뀐 사원을 JSON이 복원하는 것을 방지
-        const registeredIds = new Set();
-        Object.values(this.directory).forEach(val => {
+        // JSON에 있는 이름 집합 (이름 변경 감지용)
+        const jsonNameSet = new Set(list.map(([n]) => n));
+
+        // 역방향 맵: 사번 → 현재 등록된 이름
+        const idToName = {};
+        Object.entries(this.directory).forEach(([n, val]) => {
             const ids = (typeof val === 'object' && Array.isArray(val.ids))
                 ? val.ids.map(String)
                 : [String(typeof val === 'object' ? val.id : val)];
-            ids.forEach(id => registeredIds.add(id));
+            ids.forEach(id => { if (!idToName[id]) idToName[id] = n; });
         });
 
         list.forEach(([name, employeeId]) => {
             if (!name || !employeeId) return;
             const eid = String(employeeId);
-            const entry = this.directory[name];
-            if (entry === undefined) {
-                // 이 사번이 이미 다른 이름으로 등록돼 있으면 건너뜀
-                // (예: "이진호(PS)"를 "이진호"로 수정 후 로그인해도 복원되지 않음)
-                if (registeredIds.has(eid)) return;
-                this.directory[name] = { id: eid, count: 0, ids: [eid] };
-                registeredIds.add(eid);
-                added++;
-            } else if (typeof entry === 'object') {
-                if (!entry.ids) entry.ids = [String(entry.id)];
-                if (!entry.ids.includes(eid)) {
-                    entry.ids.push(eid);
-                    registeredIds.add(eid);
-                    updated++;
+            const existingName = idToName[eid];
+
+            if (existingName && existingName !== name && !jsonNameSet.has(existingName)) {
+                // JSON에서 이름이 바뀐 경우 (예: "이진호(PS)" → "이진호")
+                // 구 항목에서 이 사번 제거
+                const oldEntry = this.directory[existingName];
+                if (oldEntry) {
+                    const oldIds = Array.isArray(oldEntry.ids) ? oldEntry.ids.map(String) : [String(oldEntry.id)];
+                    if (oldIds.length <= 1) {
+                        delete this.directory[existingName];
+                    } else {
+                        oldEntry.ids = oldIds.filter(i => i !== eid);
+                        if (String(oldEntry.id) === eid) oldEntry.id = oldEntry.ids[0];
+                    }
                 }
-                if (entry.id !== eid && !/^\d{4}$/.test(String(entry.id))) {
-                    entry.id = eid;
+                // 새 이름에 추가
+                const newEntry = this.directory[name];
+                if (!newEntry) {
+                    this.directory[name] = { id: eid, count: 0, ids: [eid] };
+                    added++;
+                } else if (typeof newEntry === 'object') {
+                    if (!newEntry.ids) newEntry.ids = [String(newEntry.id)];
+                    if (!newEntry.ids.includes(eid)) { newEntry.ids.push(eid); updated++; }
+                }
+                idToName[eid] = name;
+            } else {
+                const entry = this.directory[name];
+                if (entry === undefined) {
+                    if (idToName[eid]) return; // 이미 다른 이름으로 등록된 사번 — 건너뜀
+                    this.directory[name] = { id: eid, count: 0, ids: [eid] };
+                    idToName[eid] = name;
+                    added++;
+                } else if (typeof entry === 'object') {
+                    if (!entry.ids) entry.ids = [String(entry.id)];
+                    if (!entry.ids.includes(eid)) {
+                        entry.ids.push(eid);
+                        idToName[eid] = name;
+                        updated++;
+                    }
+                    if (entry.id !== eid && !/^\d{4}$/.test(String(entry.id))) {
+                        entry.id = eid;
+                    }
                 }
             }
         });
