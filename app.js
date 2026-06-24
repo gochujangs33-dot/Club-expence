@@ -2871,9 +2871,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if (corporateAmountInput) {
         corporateAmountInput.addEventListener('input', updateCardTypeUI);
     }
-    // 총액·카테고리 변경 → 법인카드 기본값 재계산 후 UI 갱신
-    amountInput.addEventListener('input', () => { resetCorpAmount(); updateCardTypeUI(); });
-    if (catSelect) catSelect.addEventListener('change', () => { resetCorpAmount(); updateCardTypeUI(); });
+    // 총액·카테고리 변경 → 토글 자동 설정 + 구간별 법인카드 계산 후 UI 갱신
+    amountInput.addEventListener('input', () => { autoSetTogglesAndCorp(); updateCardTypeUI(); });
+    if (catSelect) catSelect.addEventListener('change', () => { autoSetTogglesAndCorp(); updateCardTypeUI(); });
     updateCardTypeUI();
 
     // Cancel edit listener
@@ -4899,40 +4899,27 @@ function updateCardTypeUI() {
     const personalReceiptGroup = document.getElementById('personal-receipt-group');
     const splitAutoHint = document.getElementById('split-auto-hint');
     const personalAmountInput = document.getElementById('expense-personal-amount-input');
+    const corpAmountInput = document.getElementById('expense-corporate-amount-input');
     if (!corpCheck || !personalCheck) return;
 
     const corpOn = corpCheck.checked;
     const personalOn = personalCheck.checked;
 
-    // Require at least one card type selected
     if (!corpOn && !personalOn) {
         corpCheck.checked = true;
         return updateCardTypeUI();
     }
 
-    corpAmountGroup.classList.toggle('hidden', !corpOn);
-    personalAmountGroup.classList.toggle('hidden', !personalOn);
-    corpReceiptGroup.classList.toggle('hidden', !corpOn);
-    personalReceiptGroup.classList.toggle('hidden', !personalOn);
-
-    const corpAmountInput = document.getElementById('expense-corporate-amount-input');
-    const totalRaw = document.getElementById('expense-amount-input').value;
-    const total = parseAmount(totalRaw) || 0;
+    const total = parseAmount((document.getElementById('expense-amount-input') || {}).value || '0') || 0;
 
     if (corpOn) {
-        // 법인카드 선택 시: 항상 법인카드+개인카드 둘 다 표시
         corpAmountGroup.classList.remove('hidden');
         personalAmountGroup.classList.remove('hidden');
         corpReceiptGroup.classList.remove('hidden');
-        // 개인카드 영수증은 개인카드 토글이 켜진 경우에만 표시
         personalReceiptGroup.classList.toggle('hidden', !personalOn);
-        splitAutoHint.style.display = total > 0 ? '' : 'none';
+        if (splitAutoHint) splitAutoHint.style.display = (personalOn && total > 0) ? '' : 'none';
 
-        if (corpAmountInput) {
-            corpAmountInput.readOnly = false;
-            corpAmountInput.style.opacity = '';
-        }
-        // 개인카드 = 총액 - 법인카드 (자동, 읽기 전용)
+        if (corpAmountInput) { corpAmountInput.readOnly = false; corpAmountInput.style.opacity = ''; }
         if (personalAmountInput) {
             const corp = parseAmount(corpAmountInput ? corpAmountInput.value : '0') || 0;
             personalAmountInput.value = total > 0 ? formatAmount(Math.max(total - corp, 0)) : '';
@@ -4940,12 +4927,11 @@ function updateCardTypeUI() {
             personalAmountInput.style.opacity = '0.65';
         }
     } else {
-        // 개인카드만: 총액 = 개인카드 (자동, 읽기 전용)
         corpAmountGroup.classList.add('hidden');
         personalAmountGroup.classList.remove('hidden');
         corpReceiptGroup.classList.add('hidden');
         personalReceiptGroup.classList.remove('hidden');
-        splitAutoHint.style.display = 'none';
+        if (splitAutoHint) splitAutoHint.style.display = 'none';
 
         if (corpAmountInput) { corpAmountInput.readOnly = false; corpAmountInput.style.opacity = ''; }
         if (personalAmountInput) {
@@ -4956,7 +4942,52 @@ function updateCardTypeUI() {
     }
 }
 
-// 금액·카테고리 변경 시 법인카드 기본값을 구간별 계산식으로 재계산
+// 금액·카테고리 변경 시 구간별 계산으로 법인/개인 토글 자동 설정 + 법인카드 금액 계산
+function autoSetTogglesAndCorp() {
+    const total = parseAmount((document.getElementById('expense-amount-input') || {}).value || '0') || 0;
+    const category = (document.getElementById('expense-category-select') || {}).value || 'EVENT';
+    const memberCount = AppState.memberCount || 0;
+    const rules = AppState.rules || DefaultRules;
+    const corpCheck = document.getElementById('expense-corp-check');
+    const personalCheck = document.getElementById('expense-personal-check');
+    const corpAmountInput = document.getElementById('expense-corporate-amount-input');
+    if (!corpCheck || !personalCheck || !corpAmountInput) return;
+
+    if (total <= 0) {
+        corpCheck.checked = true;
+        personalCheck.checked = false;
+        corpAmountInput.value = '';
+        return;
+    }
+
+    let corp = total;
+    if (memberCount > 0) {
+        const r = SettlementCalculator.calculate(
+            memberCount,
+            [{ amount: total, category }],
+            0, rules
+        );
+        corp = r.finalSupportAmount;
+    }
+
+    corpAmountInput.value = corp > 0 ? formatAmount(corp) : '';
+
+    if (corp >= total) {
+        // 전액 법인카드 지원 → 법인카드만
+        corpCheck.checked = true;
+        personalCheck.checked = false;
+    } else if (corp > 0) {
+        // 일부 법인 + 일부 개인 → 둘 다 ON
+        corpCheck.checked = true;
+        personalCheck.checked = true;
+    } else {
+        // 법인카드 0 → 개인카드만
+        corpCheck.checked = false;
+        personalCheck.checked = true;
+    }
+}
+
+// 법인카드 토글 수동 ON 시 금액만 재계산 (토글은 건드리지 않음)
 function resetCorpAmount() {
     const corpCheck = document.getElementById('expense-corp-check');
     if (!corpCheck || !corpCheck.checked) return;
