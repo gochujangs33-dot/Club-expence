@@ -886,6 +886,7 @@ const AppState = {
         this.cancelEdit();
         this.save();
         this.render();
+        if (typeof window._relabelExtraRounds === 'function') window._relabelExtraRounds();
     },
 
     deleteExpense(id) {
@@ -895,6 +896,7 @@ const AppState = {
         }
         this.save();
         this.render();
+        if (typeof window._relabelExtraRounds === 'function') window._relabelExtraRounds();
     },
 
     clearAll() {
@@ -3445,16 +3447,30 @@ document.addEventListener('DOMContentLoaded', () => {
         if (extraRoundsSummary) extraRoundsSummary.classList.remove('hidden');
     }
 
+    function extraRoundBaseNum() {
+        // 비용 목록 항목 수 + 1이 첫 추가 차수 번호
+        return (AppState.expenseItems ? AppState.expenseItems.length : 0) + 1;
+    }
+
+    function relabelExtraRounds() {
+        const base = extraRoundBaseNum();
+        extraRoundsList.querySelectorAll('.extra-round-row').forEach((r, i) => {
+            const lbl = r.querySelector('.er-row-label');
+            if (lbl) lbl.textContent = `${base + i}차`;
+        });
+    }
+
     function addExtraRound() {
         if (!extraRoundsList) return;
-        extraRoundCount++;
-        const roundNum = extraRoundCount + 1; // 2차부터 시작
+        const existingCount = extraRoundsList.querySelectorAll('.extra-round-row').length;
+        const roundNum = extraRoundBaseNum() + existingCount;
 
         const row = document.createElement('div');
         row.className = 'extra-round-row';
         row.style.cssText = 'display:flex; align-items:center; gap:0.4rem; margin-bottom:0.4rem; flex-wrap:wrap;';
 
         const label = document.createElement('span');
+        label.className = 'er-row-label';
         label.textContent = `${roundNum}차`;
         label.style.cssText = 'font-size:0.8rem; font-weight:600; color:var(--text-secondary); min-width:2rem;';
 
@@ -3482,11 +3498,7 @@ document.addEventListener('DOMContentLoaded', () => {
         delBtn.style.cssText = 'padding:0.15rem 0.45rem; font-size:0.9rem; background:transparent; border:1px solid var(--border); border-radius:4px; color:var(--text-muted); cursor:pointer; margin-left:auto;';
         delBtn.addEventListener('click', () => {
             row.remove();
-            // 라벨 재번호 매기기
-            extraRoundsList.querySelectorAll('.extra-round-row').forEach((r, i) => {
-                const lbl = r.querySelector('span');
-                if (lbl) lbl.textContent = `${i + 2}차`;
-            });
+            relabelExtraRounds();
             extraRoundCount = extraRoundsList.querySelectorAll('.extra-round-row').length;
             recalcExtraRounds();
         });
@@ -3503,7 +3515,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (addExtraRoundBtn) {
         addExtraRoundBtn.addEventListener('click', addExtraRound);
-        // 기본으로 2차 1개 추가
+        window._relabelExtraRounds = relabelExtraRounds;
+        // 기본으로 첫 추가 차수 자동 생성
         addExtraRound();
     }
 
