@@ -49,12 +49,25 @@ const firebaseConfig = {
 };
 
 let firebaseDb = null;
+// 익명 인증 완료 전까지 Firebase 읽기를 막는 게이트 Promise
+let firebaseAuthReady = Promise.resolve();
 try {
     if (firebaseConfig.apiKey && firebaseConfig.apiKey !== "YOUR_API_KEY") {
         firebase.initializeApp(firebaseConfig);
         firebaseDb = firebase.database();
-        // 익명 로그인 — DB 규칙 "auth != null" 충족용 (사용자에게 보이지 않음)
-        firebase.auth().signInAnonymously().catch(err => console.warn("익명 로그인 실패:", err));
+        // onAuthStateChanged: 기존 익명 세션 복원 또는 신규 익명 로그인 후 resolve
+        firebaseAuthReady = new Promise((resolve) => {
+            const unsub = firebase.auth().onAuthStateChanged((user) => {
+                unsub(); // 최초 1회만
+                if (user) {
+                    resolve();
+                } else {
+                    firebase.auth().signInAnonymously()
+                        .then(resolve)
+                        .catch(err => { console.warn("익명 로그인 실패:", err); resolve(); });
+                }
+            });
+        });
         console.log("Firebase initialized successfully.");
     }
 } catch (error) {
@@ -450,6 +463,9 @@ const AppState = {
 
     // Firebase로부터 데이터 가져오기
     loadFromFirebase(pin) {
+        return firebaseAuthReady.then(() => this._loadFromFirebaseAfterAuth(pin));
+    },
+    _loadFromFirebaseAfterAuth(pin) {
         return new Promise((resolve, reject) => {
             if (!this.firebaseDb) {
                 reject(new Error("Firebase가 초기화되지 않았습니다."));
@@ -554,6 +570,10 @@ const AppState = {
 
     // ── 클럽 레지스트리 (관리자가 등록한 전체 클럽 목록 + 예산 분배) ──────────────
     loadClubRegistry() {
+        if (!this.firebaseDb) return Promise.resolve();
+        return firebaseAuthReady.then(() => this._loadClubRegistryAfterAuth());
+    },
+    _loadClubRegistryAfterAuth() {
         if (!this.firebaseDb) return Promise.resolve();
         // 실시간 리스너: 관리자가 클럽명/예산 수정 시 모든 접속자에게 즉시 반영
         return new Promise((resolve) => {
