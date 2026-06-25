@@ -3965,21 +3965,27 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         });
         
-        // 2. Fetch Global History
-        firebaseDb.ref('globalHistory').once('value').then(snapshot => {
+        // 2. Fetch Global History (삭제 tombstone 필터링 포함)
+        Promise.all([
+            firebaseDb.ref('globalHistory').once('value'),
+            firebaseDb.ref('deletedHistoryIds').once('value')
+        ]).then(([snapshot, deletedSnap]) => {
             const historyData = snapshot.val() || {};
-            const historyList = Object.values(historyData).sort((a, b) => b.id - a.id);
-            
+            const deletedIds = deletedSnap.val() || {};
+            const historyList = Object.values(historyData)
+                .filter(e => e && !deletedIds[String(e.id)])
+                .sort((a, b) => b.id - a.id);
+
             let totalSpend = 0;
             let totalSupport = 0;
             let totalSelfPay = 0;
-            
+
             historyList.forEach(entry => {
                 totalSpend += entry.totalCost || 0;
                 totalSupport += entry.finalSupportAmount || 0;
                 totalSelfPay += entry.totalSelfPay || 0;
             });
-            
+
             document.getElementById('admin-total-spend').textContent = SettlementCalculator.formatCurrency(totalSpend);
             document.getElementById('admin-total-support').textContent = SettlementCalculator.formatCurrency(totalSupport);
             document.getElementById('admin-total-self-pay').textContent = SettlementCalculator.formatCurrency(totalSelfPay);
@@ -4794,7 +4800,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
 
                 if (firebaseDb) {
-                    const tasks = [firebaseDb.ref(`globalHistory/${entry.id}`).remove()];
+                    const tasks = [
+                        // globalHistory에서 제거
+                        firebaseDb.ref(`globalHistory/${entry.id}`).remove(),
+                        // Tombstone 기록 — 구버전 앱의 backfill이나 어떤 경로로도 복원되지 않도록
+                        firebaseDb.ref(`deletedHistoryIds/${entry.id}`).set(true)
+                    ];
 
                     // 정산을 등록한 사용자의 개인 정산 이력에서도 동일 항목 제거 (관리자만 삭제 가능)
                     // Firebase는 배열을 객체({0:...,1:...})로 저장하므로 Array.isArray 대신 Object.values 정규화 필요
