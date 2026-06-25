@@ -1477,6 +1477,7 @@ const AppState = {
                     e.stopPropagation();
                     const id = parseInt(button.getAttribute('data-id'), 10);
                     this.deleteExpense(id);
+                    if (typeof window._syncPrizeTotalFromItems === 'function') window._syncPrizeTotalFromItems();
                 });
             });
         }
@@ -2491,7 +2492,7 @@ document.addEventListener('DOMContentLoaded', () => {
     prizeInput.value = formatAmount(AppState.previousPrizeTotal);
 
     // 금액 입력란 1000단위 콤마(,) 자동 적용
-    ['prev-prize-input', 'expense-amount-input', 'expense-corporate-amount-input',
+    ['expense-amount-input', 'expense-corporate-amount-input',
      'expense-personal-amount-input', 'setting-used-budget', 'result-total-self-pay-input',
      'admin-setting-limit1', 'admin-setting-limit2', 'admin-setting-limit3', 'admin-setting-deduction4',
      'club-total-budget-input', 'club-budget-form-input'].forEach(id => {
@@ -2835,11 +2836,16 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Attendance input change listeners
-    prizeInput.addEventListener('input', () => {
-        const prevPrize = parseAmount(prizeInput.value);
-        AppState.updateAttendance(AppState.memberCount, prevPrize);
-    });
+    // 상품비 누적액 자동 계산 (비용 항목 PRIZE 합계)
+    function syncPrizeTotalFromItems() {
+        const total = (AppState.expenseItems || [])
+            .filter(item => item.category === ExpenseCategory.PRIZE)
+            .reduce((sum, item) => sum + (item.amount || 0), 0);
+        if (prizeInput) prizeInput.value = total > 0 ? formatAmount(total) : '0';
+        AppState.updateAttendance(AppState.memberCount, total);
+    }
+    window._syncPrizeTotalFromItems = syncPrizeTotalFromItems;
+    syncPrizeTotalFromItems();
 
     // Form submission listener
     const form = document.getElementById('expense-form');
@@ -2859,6 +2865,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (description && !isNaN(amount) && amount > 0) {
             AppState.addExpense(description, amount, category, corpChecked, personalChecked, corporateAmount);
+            syncPrizeTotalFromItems();
             descInput.focus();
         }
     });
@@ -2875,7 +2882,31 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     // 총액·카테고리 변경 → 토글 자동 설정 + 구간별 법인카드 계산 후 UI 갱신
     amountInput.addEventListener('input', () => { autoSetTogglesAndCorp(); updateCardTypeUI(); });
-    if (catSelect) catSelect.addEventListener('change', () => { autoSetTogglesAndCorp(); updateCardTypeUI(); });
+    if (catSelect) catSelect.addEventListener('change', () => {
+        if (catSelect.value === ExpenseCategory.PRIZE) {
+            const memberCount = AppState.memberCount || 0;
+            const currentPrizeTotal = (AppState.expenseItems || [])
+                .filter(i => i.category === ExpenseCategory.PRIZE && i.id !== AppState.editingItemId)
+                .reduce((s, i) => s + (i.amount || 0), 0);
+            const newAmount = parseAmount(amountInput.value) || 0;
+
+            if (memberCount < 10) {
+                alert('상품비는 참석 인원 10명 이상일 경우에만 추가 가능합니다.\n현재 참석 인원: ' + memberCount + '명');
+                catSelect.value = ExpenseCategory.EVENT;
+                return;
+            }
+            if (currentPrizeTotal + newAmount > 500000) {
+                const over = (currentPrizeTotal + newAmount) - 500000;
+                alert(`상품비는 연간 총 500,000원 한도로 사용 가능합니다.\n현재 누적: ${currentPrizeTotal.toLocaleString()}원 / 한도 초과: ${over.toLocaleString()}원`);
+                catSelect.value = ExpenseCategory.EVENT;
+                return;
+            }
+            if (currentPrizeTotal > 0) {
+                alert(`상품비는 연간 총 500,000원 한도로 가능합니다.\n현재 누적: ${currentPrizeTotal.toLocaleString()}원 / 잔여 한도: ${(500000 - currentPrizeTotal).toLocaleString()}원`);
+            }
+        }
+        autoSetTogglesAndCorp(); updateCardTypeUI();
+    });
     updateCardTypeUI();
 
     // Cancel edit listener
