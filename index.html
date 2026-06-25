@@ -985,17 +985,26 @@
     if ('serviceWorker' in navigator) {
         let pendingWorker = null;
 
+        function showUpdateBanner(worker) {
+            pendingWorker = worker;
+            document.getElementById('update-banner').classList.remove('hidden');
+        }
+
         navigator.serviceWorker.register('./sw.js').then(reg => {
-            // 접속 즉시 새 버전이 있는지 확인 (브라우저의 자동 검사를 기다리지 않음)
+            // 접속 즉시 새 버전이 있는지 확인
             reg.update();
+
+            // 이미 대기 중인 새 워커가 있으면 즉시 배너 표시
+            if (reg.waiting) {
+                showUpdateBanner(reg.waiting);
+            }
 
             // 새 서비스 워커가 발견되면
             reg.addEventListener('updatefound', () => {
                 const newWorker = reg.installing;
                 newWorker.addEventListener('statechange', () => {
                     if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                        pendingWorker = newWorker;
-                        document.getElementById('update-banner').classList.remove('hidden');
+                        showUpdateBanner(newWorker);
                     }
                 });
             });
@@ -1006,9 +1015,6 @@
         navigator.serviceWorker.addEventListener('message', event => {
             if (event.data?.type === 'SW_UPDATED') {
                 const version = event.data.version;
-                if (version && localStorage.getItem('app_update_seen_version') === version) {
-                    return;
-                }
                 document.getElementById('update-banner').dataset.version = version || '';
                 document.getElementById('update-banner').classList.remove('hidden');
             }
