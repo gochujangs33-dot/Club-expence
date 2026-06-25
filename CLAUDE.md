@@ -5,6 +5,19 @@
 
 ---
 
+## 0. 데이터 원칙 (최우선 — 어떤 작업에도 예외 없음)
+
+**모든 메인 데이터의 기준은 관리자(PIN: 000000) 설정값이다.**
+
+- 총 금액, 누적금액, 상품비 금액, 잔여 예산, 정산 구간·비율, 클럽명, 회원 관리, 전사원 명부 —
+  이 모든 항목은 관리자가 설정한 Firebase 공유 경로 기준으로 유저 화면에 표시된다.
+- 유저 개인 Firebase(`settlements/{PIN}`) 또는 localStorage에 위 항목을 저장하거나 읽는 코드는
+  **절대 추가하지 않는다.** 기존에 그런 코드가 있다면 발견 즉시 제거한다.
+- 관리자 기준 Firebase 경로: `globalSettings/rules`, `clubRegistry/`, `globalHistory/`, `deletedHistoryIds/`
+- 참고 문서: [`APP_SPEC.md`](APP_SPEC.md) — 항목별 계산방법·경우의수·팝업 문구 전체 명세
+
+---
+
 ## 1. 절대 규칙 (Hard Constraints)
 
 0. **모든 계산/숫자 표시 관련 버그는 무관용(zero-tolerance) 원칙**
@@ -107,4 +120,4 @@
 - [`PERMISSIONS.md`](PERMISSIONS.md) — 권한별 가능/불가 기능 정리
 - [`CHANGES.md`](CHANGES.md) — 버전별 변경 이력
 
-현재 버전: **v1.6.99** (`sw.js` `APP_VERSION`)
+현재 버전: **v1.6.120** (`sw.js` `APP_VERSION`)
