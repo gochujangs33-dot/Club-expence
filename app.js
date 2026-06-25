@@ -508,20 +508,8 @@ const AppState = {
             };
             this.firebaseDb.ref(`settlements/${this.currentPin}`).set(dataToSync)
                 .catch(err => console.error("Firebase sync failed:", err));
-
-            // 오프라인 상태에서 정산 확정되어 globalHistory에 누락된 이력을 보충 동기화
-            if (this.settlementHistory && this.settlementHistory.length > 0) {
-                const updates = {};
-                this.settlementHistory.forEach(entry => {
-                    if (entry && entry.id) {
-                        updates[`globalHistory/${entry.id}`] = entry;
-                    }
-                });
-                if (Object.keys(updates).length > 0) {
-                    this.firebaseDb.ref().update(updates)
-                        .catch(err => console.error("Global history backfill failed:", err));
-                }
-            }
+            // save() 시 globalHistory backfill 제거 — 관리자가 삭제한 항목을 되살리는 원인이 됨
+            // 신규 정산 확정 시 finalizeSettlement()에서 직접 globalHistory에 쓰므로 여기선 불필요
         }
     },
 
@@ -578,20 +566,7 @@ const AppState = {
                                 if (data.eventPhoto) this.eventPhoto = data.eventPhoto;
                                 console.log(`Firebase data loaded successfully for PIN: ${pin} (${this.userName})`);
 
-                                // 과거(v1.6.55 이전)에 생성되어 globalHistory에 누락된 이력을
-                                // 로그인 시점에 1회성으로 보충 동기화 (관리자 탭과 항상 일치하도록)
-                                if (this.settlementHistory && this.settlementHistory.length > 0) {
-                                    const backfillUpdates = {};
-                                    this.settlementHistory.forEach(entry => {
-                                        if (entry && entry.id) {
-                                            backfillUpdates[`globalHistory/${entry.id}`] = entry;
-                                        }
-                                    });
-                                    if (Object.keys(backfillUpdates).length > 0) {
-                                        this.firebaseDb.ref().update(backfillUpdates)
-                                            .catch(err => console.error("Global history login backfill failed:", err));
-                                    }
-                                }
+                                // globalHistory backfill 제거 — 관리자가 삭제한 항목을 로그인할 때마다 되살리는 원인
                             } else {
                                 // Firebase에 데이터가 없을 경우(신규 계정) - 이 기기에 남아있던
                                 // 이전 계정의 로컬 데이터를 그대로 올리지 않도록 정산 관련 상태를 초기화
@@ -4724,14 +4699,15 @@ document.addEventListener('DOMContentLoaded', () => {
                     const tasks = [firebaseDb.ref(`globalHistory/${entry.id}`).remove()];
 
                     // 정산을 등록한 사용자의 개인 정산 이력에서도 동일 항목 제거 (관리자만 삭제 가능)
+                    // Firebase는 배열을 객체({0:...,1:...})로 저장하므로 Array.isArray 대신 Object.values 정규화 필요
                     if (entry.creatorPin) {
                         tasks.push(
                             firebaseDb.ref(`settlements/${entry.creatorPin}/settlementHistory`).once('value').then(snap => {
-                                const userHistory = snap.val();
-                                if (Array.isArray(userHistory)) {
-                                    const filtered = userHistory.filter(h => String(h.id) !== String(id));
-                                    return firebaseDb.ref(`settlements/${entry.creatorPin}/settlementHistory`).set(filtered);
-                                }
+                                const raw = snap.val();
+                                if (!raw) return;
+                                const historyArr = Array.isArray(raw) ? raw : Object.values(raw);
+                                const filtered = historyArr.filter(h => h && String(h.id) !== String(id));
+                                return firebaseDb.ref(`settlements/${entry.creatorPin}/settlementHistory`).set(filtered);
                             })
                         );
                     }
