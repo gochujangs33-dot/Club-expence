@@ -2864,6 +2864,25 @@ document.addEventListener('DOMContentLoaded', () => {
         const corporateAmount = parseAmount(document.getElementById('expense-corporate-amount-input').value);
 
         if (description && !isNaN(amount) && amount > 0) {
+            // 상품비 한도 검증
+            if (category === ExpenseCategory.PRIZE) {
+                const editingId = AppState.editingItemId || null;
+                const existingPrize = (AppState.expenseItems || [])
+                    .filter(i => i.category === ExpenseCategory.PRIZE && i.id !== editingId)
+                    .reduce((s, i) => s + (i.amount || 0), 0);
+                const remaining = 500000 - existingPrize;
+                if (remaining <= 0) {
+                    alert('상품비 연간 한도(500,000원)를 모두 사용했습니다.\n더 이상 상품비를 추가할 수 없습니다.');
+                    return;
+                }
+                if (amount > remaining) {
+                    alert(`상품비는 연간 총 500,000원을 초과할 수 없습니다.\n현재 누적: ${existingPrize.toLocaleString()}원\n추가 가능 금액: ${remaining.toLocaleString()}원\n\n금액을 ${remaining.toLocaleString()}원 이하로 입력해주세요.`);
+                    amountInput.value = formatAmount(remaining);
+                    autoSetTogglesAndCorp();
+                    updateCardTypeUI();
+                    return;
+                }
+            }
             AppState.addExpense(description, amount, category, corpChecked, personalChecked, corporateAmount);
             syncPrizeTotalFromItems();
             descInput.focus();
@@ -2885,25 +2904,24 @@ document.addEventListener('DOMContentLoaded', () => {
     if (catSelect) catSelect.addEventListener('change', () => {
         if (catSelect.value === ExpenseCategory.PRIZE) {
             const memberCount = AppState.memberCount || 0;
-            const currentPrizeTotal = (AppState.expenseItems || [])
-                .filter(i => i.category === ExpenseCategory.PRIZE && i.id !== AppState.editingItemId)
+            const editingId = AppState.editingItemId || null;
+            const existingPrize = (AppState.expenseItems || [])
+                .filter(i => i.category === ExpenseCategory.PRIZE && i.id !== editingId)
                 .reduce((s, i) => s + (i.amount || 0), 0);
-            const newAmount = parseAmount(amountInput.value) || 0;
+            const remaining = 500000 - existingPrize;
 
             if (memberCount < 10) {
-                alert('상품비는 참석 인원 10명 이상일 경우에만 추가 가능합니다.\n현재 참석 인원: ' + memberCount + '명');
+                alert(`상품비는 참석 인원 10명 이상일 경우에만 추가 가능합니다.\n현재 참석 인원: ${memberCount}명`);
                 catSelect.value = ExpenseCategory.EVENT;
                 return;
             }
-            if (currentPrizeTotal + newAmount > 500000) {
-                const over = (currentPrizeTotal + newAmount) - 500000;
-                alert(`상품비는 연간 총 500,000원 한도로 사용 가능합니다.\n현재 누적: ${currentPrizeTotal.toLocaleString()}원 / 한도 초과: ${over.toLocaleString()}원`);
+            if (remaining <= 0) {
+                alert('상품비 연간 한도(500,000원)를 모두 사용했습니다.\n더 이상 상품비를 추가할 수 없습니다.');
                 catSelect.value = ExpenseCategory.EVENT;
                 return;
             }
-            if (currentPrizeTotal > 0) {
-                alert(`상품비는 연간 총 500,000원 한도로 가능합니다.\n현재 누적: ${currentPrizeTotal.toLocaleString()}원 / 잔여 한도: ${(500000 - currentPrizeTotal).toLocaleString()}원`);
-            }
+            // 잔여 한도 안내 (법인카드/개인카드 모두 포함)
+            alert(`상품비는 연간 총 500,000원까지 사용 가능합니다.\n현재 누적: ${existingPrize.toLocaleString()}원 / 잔여 한도: ${remaining.toLocaleString()}원\n\n법인카드·개인카드 구분 없이 합산 기준으로 적용됩니다.`);
         }
         autoSetTogglesAndCorp(); updateCardTypeUI();
     });
