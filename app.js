@@ -4961,12 +4961,17 @@ function updateCardTypeUI() {
     }
 }
 
-// 기존 항목 누적 고려하여 신규/수정 항목의 법인카드 한도 계산
+// 기존 항목 누적 + 클럽 잔여 예산 한도를 고려하여 신규/수정 항목의 법인카드 한도 계산
 function _calcCorpForItem(amount, category) {
     const memberCount = AppState.memberCount || 0;
     const rules = AppState.rules || DefaultRules;
     if (amount <= 0) return 0;
     if (memberCount <= 0) return amount; // 인원 미설정 시 전액 법인
+
+    // 클럽 잔여 예산 (이번 세션 이전까지 남은 예산)
+    const clubBudget = AppState.getClubBudget ? AppState.getClubBudget() : 0;
+    const clubUsed = AppState.getClubUsedBudget ? AppState.getClubUsedBudget() : 0;
+    const availableBudget = clubBudget > 0 ? Math.max(0, clubBudget - clubUsed) : Infinity;
 
     // 현재 편집 중인 항목은 기존 항목에서 제외
     const editingId = AppState.editingItemId || null;
@@ -4980,7 +4985,11 @@ function _calcCorpForItem(amount, category) {
         ? SettlementCalculator.calculate(memberCount, existingItems, 0, rules)
         : { finalSupportAmount: 0 };
 
-    const corp = resultAll.finalSupportAmount - resultExisting.finalSupportAmount;
+    // 클럽 예산 한도 적용
+    const corpAllCapped = Math.min(resultAll.finalSupportAmount, availableBudget);
+    const corpExistingCapped = Math.min(resultExisting.finalSupportAmount, availableBudget);
+
+    const corp = corpAllCapped - corpExistingCapped;
     return Math.max(0, Math.min(corp, amount));
 }
 
