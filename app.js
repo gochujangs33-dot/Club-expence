@@ -80,7 +80,8 @@ const DefaultRules = {
     rate2: 0.2,          // 나. 자부담 비율 (20%)
     limit3: 120000,      // 다. 구간 한도 (12만 원 이하)
     rate3: 0.4,          // 다. 자부담 비율 (40%)
-    deduction4: 85000    // 라. 초과 시 자부담 공제액 (8만 5천 원)
+    deduction4: 85000,   // 라. 초과 시 자부담 공제액 (8만 5천 원)
+    prizeLimit: 500000   // 상품비 연간 최대 사용 금액
 };
 
 // ⛔ CALCULATION_LOCKED ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -172,7 +173,7 @@ const SettlementCalculator = Object.freeze({
         if (prizeCost > 0 && memberCount < 10) {
             warnings.push("정회원 10명 이상 참석 시에만 상품비 사용이 가능합니다.");
         }
-        if (prizeCost + previousPrizeTotal > 500000) {
+        if (prizeCost + previousPrizeTotal > (rules.prizeLimit || 500000)) {
             warnings.push("상품비 연 한도 50만원을 초과할 수 없습니다.");
         }
         if (facilityCost > 1000000) {
@@ -698,8 +699,14 @@ const AppState = {
         return Promise.resolve();
     },
 
-    addOrUpdateClub(clubId, name, budget, priorUsed) {
-        this.clubRegistry[clubId] = { name: name.trim(), budget: Math.max(0, budget || 0), priorUsed: Math.max(0, priorUsed || 0) };
+    addOrUpdateClub(clubId, name, budget, priorUsed, prizeUsed) {
+        const existing = this.clubRegistry[clubId] || {};
+        this.clubRegistry[clubId] = {
+            name: name.trim(),
+            budget: Math.max(0, budget || 0),
+            priorUsed: Math.max(0, priorUsed || 0),
+            prizeUsed: prizeUsed !== undefined ? Math.max(0, prizeUsed) : (existing.prizeUsed || 0)
+        };
         this.saveClubRegistry();
     },
 
@@ -2210,12 +2217,21 @@ const AppState = {
         // Update used budget (사용자가 수정한 자부담 기준 실제 지원금과 동일한 값 사용)
         this.usedBudget = Math.max(0, this.usedBudget + newHistoryItem.finalSupportAmount);
 
-        // Reset current session (상품비 누적액은 연간 한도 추적을 위해 이월)
+        // 클럽 상품비 누적 업데이트 (클럽 레지스트리 기준으로 관리)
         const prizeThisSession = result.prizeCost || 0;
+        if (prizeThisSession > 0 && this.clubId && this.clubRegistry[this.clubId]) {
+            const club = this.clubRegistry[this.clubId];
+            club.prizeUsed = (club.prizeUsed || 0) + prizeThisSession;
+            this.saveClubRegistry();
+        }
+
+        // Reset current session
         this.expenseItems = [];
         this.attendees = [];
         this.memberCount = 0;
-        this.previousPrizeTotal = this.previousPrizeTotal + prizeThisSession;
+        this.previousPrizeTotal = this.clubId && this.clubRegistry[this.clubId]
+            ? (this.clubRegistry[this.clubId].prizeUsed || 0)
+            : 0;
         this.lastCalculatedSelfPay = 0;
         this.eventPhoto = null;
         this.editingItemId = null;
@@ -2392,7 +2408,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 AppState.clubName = clubNameInput.value;
                 const selectedEntry = Object.entries(AppState.clubRegistry || {}).find(([, c]) => c.name === clubNameInput.value);
                 AppState.clubId = selectedEntry ? selectedEntry[0] : '';
-                // 클럽 전환 시 사용 금액 초기화 (새 클럽의 priorUsed로 재설정됨)
+                // 클럽 전환 시 상품비 누적을 해당 클럽의 확정 누적으로 동기화
+                const selectedClub = selectedEntry ? selectedEntry[1] : null;
+                AppState.previousPrizeTotal = selectedClub ? (selectedClub.prizeUsed || 0) : 0;
+                if (prizeInput) prizeInput.value = formatAmount(AppState.previousPrizeTotal);
                 AppState.usedBudget = 0;
                 AppState.clearClubData();
             }
@@ -2469,7 +2488,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // 금액 입력란 1000단위 콤마(,) 자동 적용
     ['expense-amount-input', 'expense-corporate-amount-input',
      'expense-personal-amount-input', 'setting-used-budget', 'result-total-self-pay-input',
-     'admin-setting-limit1', 'admin-setting-limit2', 'admin-setting-limit3', 'admin-setting-deduction4',
+     'admin-setting-limit1', 'admin-setting-limit2', 'admin-setting-limit3', 'admin-setting-deduction4', 'admin-setting-prize-limit',
      'club-total-budget-input', 'club-budget-form-input'].forEach(id => {
         setupCurrencyInput(document.getElementById(id));
     });
@@ -2782,6 +2801,8 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('admin-setting-limit3').value = formatAmount(rules.limit3);
         document.getElementById('admin-setting-rate3').value = Math.round(rules.rate3 * 100);
         document.getElementById('admin-setting-deduction4').value = formatAmount(rules.deduction4);
+        const prizeLimitEl = document.getElementById('admin-setting-prize-limit');
+        if (prizeLimitEl) prizeLimitEl.value = formatAmount(rules.prizeLimit || 500000);
     };
     setAdminRulesFormValues(AppState.rules);
 
@@ -2795,7 +2816,9 @@ document.addEventListener('DOMContentLoaded', () => {
             const limit3 = parseAmount(document.getElementById('admin-setting-limit3').value);
             const rate3 = (parseInt(document.getElementById('admin-setting-rate3').value, 10) || 0) / 100;
             const deduction4 = parseAmount(document.getElementById('admin-setting-deduction4').value);
-            AppState.updateRules({ limit1, limit2, rate2, limit3, rate3, deduction4 });
+            const prizeLimitEl = document.getElementById('admin-setting-prize-limit');
+            const prizeLimit = prizeLimitEl ? (parseAmount(prizeLimitEl.value) || 500000) : 500000;
+            AppState.updateRules({ limit1, limit2, rate2, limit3, rate3, deduction4, prizeLimit });
             alert(t('alert.rules_saved'));
         });
     }
@@ -2811,13 +2834,16 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // 상품비 누적액 자동 계산 (비용 항목 PRIZE 합계)
+    // 상품비 누적액 표시 갱신 (현재 세션 PRIZE 항목 합계 → prizeInput 반영)
+    // previousPrizeTotal은 클럽 레지스트리(prizeUsed)에서 관리하므로 여기서 건드리지 않음
     function syncPrizeTotalFromItems() {
-        const total = (AppState.expenseItems || [])
+        const sessionPrize = (AppState.expenseItems || [])
             .filter(item => item.category === ExpenseCategory.PRIZE)
             .reduce((sum, item) => sum + (item.amount || 0), 0);
-        if (prizeInput) prizeInput.value = total > 0 ? formatAmount(total) : '0';
-        AppState.updateAttendance(AppState.memberCount, total);
+        // prizeInput: 현재 세션 상품비 + 확정 누적 합계 표시
+        const totalDisplay = (AppState.previousPrizeTotal || 0) + sessionPrize;
+        if (prizeInput) prizeInput.value = totalDisplay > 0 ? formatAmount(totalDisplay) : '0';
+        AppState.render();
     }
     window._syncPrizeTotalFromItems = syncPrizeTotalFromItems;
     syncPrizeTotalFromItems();
@@ -2845,7 +2871,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 const existingPrize = (AppState.expenseItems || [])
                     .filter(i => i.category === ExpenseCategory.PRIZE && i.id !== editingId)
                     .reduce((s, i) => s + (i.amount || 0), 0);
-                const prizeRemaining = 500000 - existingPrize;
+                const prizeLimit = AppState.rules.prizeLimit || 500000;
+                const prizeRemaining = prizeLimit - existingPrize - (AppState.previousPrizeTotal || 0);
 
                 if (prizeRemaining <= 0) {
                     showPrizeModal('상품비 연 한도 50만원을 모두 사용했습니다.\n더 이상 추가할 수 없습니다.', null, 'block');
@@ -2893,7 +2920,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const existingPrize = (AppState.expenseItems || [])
                 .filter(i => i.category === ExpenseCategory.PRIZE && i.id !== editingId)
                 .reduce((s, i) => s + (i.amount || 0), 0);
-            const remaining = 500000 - existingPrize;
+            const prizeLimit = AppState.rules.prizeLimit || 500000;
+            const remaining = prizeLimit - existingPrize - (AppState.previousPrizeTotal || 0);
 
             if (memberCount < 10) {
                 showPrizeModal('10명 이상일 경우에만 사용 가능합니다.', () => {
@@ -2909,8 +2937,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 }, 'block');
                 return;
             }
-            const infoMsg = existingPrize === 0
-                ? '한 해에 총 50만원의 상품비 사용이 가능합니다.'
+            const priorSettled = AppState.previousPrizeTotal || 0;
+            const infoMsg = (existingPrize === 0 && priorSettled === 0)
+                ? `한 해에 총 ${prizeLimit.toLocaleString()}원의 상품비 사용이 가능합니다.`
                 : `올해 최대 ${remaining.toLocaleString()}원까지 상품비 사용 가능합니다.`;
             showPrizeModal(infoMsg, () => { autoSetTogglesAndCorp(); updateCardTypeUI(); }, 'info');
             return;
@@ -4020,6 +4049,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 .reduce((sum, entry) => sum + (entry.finalSupportAmount || 0), 0);
             const budget = club.budget || 0;
             const priorUsed = club.priorUsed || 0;
+            const prizeUsed = club.prizeUsed || 0;
+            const prizeLimit = AppState.rules.prizeLimit || 500000;
             const remaining = budget - priorUsed - spent;
             const row = document.createElement('div');
             row.className = 'expense-row';
@@ -4032,6 +4063,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     <div style="font-size:0.7rem; color:var(--text-secondary);">${t('club.assigned_budget')}</div>
                     <div style="font-size:0.85rem; font-weight:600;">${SettlementCalculator.formatCurrency(budget)}</div>
                     ${priorUsed > 0 ? `<div style="font-size:0.7rem; color:var(--text-muted);">(${t('club.prior_used')} ${SettlementCalculator.formatCurrency(priorUsed)})</div>` : ''}
+                </div>
+                <div style="flex:1.1; min-width:90px; text-align:center;">
+                    <div style="font-size:0.7rem; color:var(--text-secondary);">🎁 상품비 사용</div>
+                    <div style="font-size:0.85rem; font-weight:600; color:${prizeUsed > 0 ? 'hsl(38,92%,60%)' : 'var(--text-muted)'};">${SettlementCalculator.formatCurrency(prizeUsed)}</div>
+                    <div style="font-size:0.68rem; color:var(--text-muted);">한도 ${SettlementCalculator.formatCurrency(prizeLimit)}</div>
                 </div>
                 <div style="flex:1.2; min-width:100px; text-align:center;">
                     <div style="font-size:0.7rem; color:var(--text-secondary);">${t('club.remaining_budget')}</div>
