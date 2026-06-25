@@ -80,8 +80,9 @@ const DefaultRules = {
     rate2: 0.2,          // 나. 자부담 비율 (20%)
     limit3: 120000,      // 다. 구간 한도 (12만 원 이하)
     rate3: 0.4,          // 다. 자부담 비율 (40%)
-    deduction4: 85000,   // 라. 초과 시 자부담 공제액 (8만 5천 원)
-    prizeLimit: 500000   // 상품비 연간 최대 사용 금액
+    deduction4: 85000,      // 라. 초과 시 자부담 공제액 (8만 5천 원)
+    prizeLimit: 500000,     // 상품비 연간 최대 사용 금액
+    facilityLimit: 85000    // 시설·장비 이사진 승인 시 법인카드 최대 한도
 };
 
 // ⛔ CALCULATION_LOCKED ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -2800,6 +2801,8 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('admin-setting-deduction4').value = formatAmount(rules.deduction4);
         const prizeLimitEl = document.getElementById('admin-setting-prize-limit');
         if (prizeLimitEl) prizeLimitEl.value = formatAmount(rules.prizeLimit || 500000);
+        const facilityLimitEl = document.getElementById('admin-setting-facility-limit');
+        if (facilityLimitEl) facilityLimitEl.value = formatAmount(rules.facilityLimit || 85000);
     };
     setAdminRulesFormValues(AppState.rules);
 
@@ -2815,7 +2818,9 @@ document.addEventListener('DOMContentLoaded', () => {
             const deduction4 = parseAmount(document.getElementById('admin-setting-deduction4').value);
             const prizeLimitEl = document.getElementById('admin-setting-prize-limit');
             const prizeLimit = prizeLimitEl ? (parseAmount(prizeLimitEl.value) || 500000) : 500000;
-            AppState.updateRules({ limit1, limit2, rate2, limit3, rate3, deduction4, prizeLimit });
+            const facilityLimitEl = document.getElementById('admin-setting-facility-limit');
+            const facilityLimit = facilityLimitEl ? (parseAmount(facilityLimitEl.value) || 85000) : 85000;
+            AppState.updateRules({ limit1, limit2, rate2, limit3, rate3, deduction4, prizeLimit, facilityLimit });
             alert(t('alert.rules_saved'));
         });
     }
@@ -5190,6 +5195,10 @@ let _facilityApproved = false;
 function showFacilityApprovalModal(onApproved, onNoApproval) {
     const modal = document.getElementById('facility-approval-modal');
     if (!modal) { onApproved(); return; }
+    // 관리자 설정 facilityLimit 값을 동적으로 반영
+    const limit = (AppState.rules || DefaultRules).facilityLimit || 85000;
+    const limitEl = modal.querySelector('#facility-modal-limit');
+    if (limitEl) limitEl.textContent = limit.toLocaleString() + '원';
     modal.style.display = 'flex';
     const approvedBtn = document.getElementById('facility-approved-btn');
     const noBtn = document.getElementById('facility-no-approval-btn');
@@ -5206,9 +5215,9 @@ function _calcCorpForItem(amount, category) {
     const rules = AppState.rules || DefaultRules;
     if (amount <= 0) return 0;
 
-    // 시설·장비: 사전 승인 완료 시 deduction4(85,000원)까지만 법인카드
+    // 시설·장비: 사전 승인 완료 시 facilityLimit(기본 85,000원)까지만 법인카드
     if (category === ExpenseCategory.FACILITY && _facilityApproved) {
-        return Math.min(amount, rules.deduction4 || 85000);
+        return Math.min(amount, rules.facilityLimit || 85000);
     }
 
     if (memberCount <= 0) return amount; // 인원 미설정 시 전액 법인

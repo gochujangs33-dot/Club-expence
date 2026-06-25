@@ -655,6 +655,10 @@
                             <label for="admin-setting-prize-limit">🎁 상품비 연간 최대 사용 금액 (원)</label>
                             <input type="text" inputmode="numeric" id="admin-setting-prize-limit" value="500000">
                         </div>
+                        <div class="input-group" style="margin-top:0.8rem; padding-top:0.8rem; border-top:1px solid rgba(255,255,255,0.08);">
+                            <label for="admin-setting-facility-limit">🏢 시설·장비 이용료 이사진 승인 시 법인카드 최대 한도 (원)</label>
+                            <input type="text" inputmode="numeric" id="admin-setting-facility-limit" value="85000">
+                        </div>
                     </div>
                     <div class="settings-actions">
                         <button id="admin-save-rules-btn" class="btn-primary-sm" data-i18n="admin.save_rules">정산 비율 저장 (일괄 적용)</button>
@@ -1004,7 +1008,7 @@
         <div style="background:linear-gradient(160deg,#1a0a00,#1f1206); border:2px solid rgba(251,113,10,0.7); border-radius:20px; padding:1.6rem 1.4rem 1.3rem; max-width:340px; width:calc(100% - 2.4rem); box-shadow:0 0 40px rgba(251,113,10,0.35), 0 12px 48px rgba(0,0,0,0.7); text-align:center;">
             <div style="font-size:2.6rem; margin-bottom:0.6rem;">⚠️</div>
             <div style="font-size:0.72rem; color:rgba(251,113,10,0.7); font-weight:700; letter-spacing:0.1em; text-transform:uppercase; margin-bottom:0.5rem;">시설·장비 이용료 주의</div>
-            <p style="font-size:1.0rem; font-weight:800; color:#fff; line-height:1.6; margin:0 0 0.5rem;">사전 승인이 있어야<br><span style="color:#fb710a; font-size:1.15rem;">85,000원까지</span><br>법인카드 사용 가능합니다.</p>
+            <p style="font-size:1.0rem; font-weight:800; color:#fff; line-height:1.6; margin:0 0 0.5rem;">사전 승인이 있어야<br><span id="facility-modal-limit" style="color:#fb710a; font-size:1.15rem;">85,000원</span>까지<br>법인카드 사용 가능합니다.</p>
             <p style="font-size:0.78rem; color:rgba(255,200,150,0.8); margin:0 0 1.3rem; line-height:1.5;">승인 없이 사용 시<br>행사비 계산 방식(자부담)이 적용됩니다.</p>
             <div style="display:flex; gap:0.7rem;">
                 <button id="facility-no-approval-btn" style="flex:1; padding:0.65rem; background:rgba(255,255,255,0.07); border:1px solid rgba(255,255,255,0.2); color:rgba(255,255,255,0.65); border-radius:10px; font-size:0.82rem; font-weight:600; cursor:pointer;">❌ 승인 없음<br><span style="font-size:0.7rem; font-weight:400; opacity:0.75;">(행사비로 처리)</span></button>
