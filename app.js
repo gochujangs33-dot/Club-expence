@@ -265,11 +265,7 @@ const AppState = {
                 this.memberCount = parseInt(savedMemberCount, 10) || 0;
             }
             // previousPrizeTotal은 clubRegistry.prizeUsed 기준 — localStorage 구버전 값 무시
-            const savedRules = localStorage.getItem('club_expense_rules');
-            if (savedRules) {
-                const parsedRules = JSON.parse(savedRules);
-                if (parsedRules && typeof parsedRules === 'object') this.rules = parsedRules;
-            }
+            // rules는 globalSettings/rules (관리자 설정) 기준 — localStorage 구버전 무시
             const savedAttendees = localStorage.getItem('club_expense_attendees');
             if (savedAttendees) {
                 const parsed = JSON.parse(savedAttendees);
@@ -283,10 +279,7 @@ const AppState = {
                 const parsed = JSON.parse(savedDirectory);
                 if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) this.directory = parsed;
             }
-            const savedAnnualBudget = localStorage.getItem('club_annual_budget');
-            if (savedAnnualBudget) this.annualBudget = parseInt(savedAnnualBudget, 10) || 0;
-            const savedUsedBudget = localStorage.getItem('club_used_budget');
-            if (savedUsedBudget) this.usedBudget = parseInt(savedUsedBudget, 10) || 0;
+            // annualBudget → clubRegistry.budget, usedBudget → 동적 계산 — localStorage 구버전 무시
             const savedReportEmail = localStorage.getItem('club_report_email');
             if (savedReportEmail) this.reportEmail = savedReportEmail;
             const savedEventPhoto = localStorage.getItem('club_event_photo');
@@ -467,13 +460,13 @@ const AppState = {
         try {
             localStorage.setItem('club_expense_items', JSON.stringify(this.expenseItems));
             localStorage.setItem('club_expense_members', this.memberCount.toString());
-            // club_expense_prev_prize: clubRegistry.prizeUsed 기준으로 전환 — localStorage 저장 중단
-            localStorage.setItem('club_expense_rules', JSON.stringify(this.rules));
             localStorage.setItem('club_expense_attendees', JSON.stringify(this.attendees));
             localStorage.setItem('club_expense_directory', JSON.stringify(this.directory));
-            localStorage.setItem('club_annual_budget', this.annualBudget.toString());
-            localStorage.setItem('club_used_budget', this.usedBudget.toString());
             localStorage.setItem('club_report_email', this.reportEmail || '');
+            // club_expense_rules → globalSettings/rules (관리자 전용, localStorage 저장 중단)
+            // club_annual_budget → clubRegistry.budget (관리자 전용, localStorage 저장 중단)
+            // club_used_budget → 동적 계산 (localStorage 저장 중단)
+            // club_expense_prev_prize → clubRegistry.prizeUsed (관리자 전용, localStorage 저장 중단)
             localStorage.setItem('club_name', this.clubName);
             localStorage.setItem('club_id', this.clubId || '');
             try { localStorage.setItem('club_settlement_history', JSON.stringify(this.settlementHistory)); } catch(_) {}
@@ -489,20 +482,21 @@ const AppState = {
         // 2. Firebase 온라인 실시간 클라우드 동기화
         if (this.isLoggedIn && this.firebaseDb && this.currentPin) {
             const dataToSync = {
+                // 세션 데이터만 유저별 저장
                 memberCount: this.memberCount,
-                // previousPrizeTotal은 clubRegistry.prizeUsed 기준으로 관리 — Firebase 사용자 데이터에 저장 안 함
                 expenseItems: this.expenseItems,
                 attendees: this.attendees,
                 directory: this.directory,
-                rules: this.rules,
-                annualBudget: this.annualBudget,
-                usedBudget: this.usedBudget,
-                clubName: this.clubName,
-                clubId: this.clubId || '',
+                clubName: this.clubName,   // 마지막 선택 클럽명 (편의용)
+                clubId: this.clubId || '', // 마지막 선택 클럽 ID (편의용)
                 reportEmail: this.reportEmail || '',
                 settlementHistory: this.settlementHistory,
                 eventPhoto: this.eventPhoto || null,
                 lastUpdated: Date.now()
+                // rules → globalSettings/rules (관리자 전용)
+                // annualBudget → clubRegistry.budget (관리자 전용)
+                // usedBudget → 동적 계산, 저장 불필요
+                // previousPrizeTotal → clubRegistry.prizeUsed (관리자 전용)
             };
             this.firebaseDb.ref(`settlements/${this.currentPin}`).set(dataToSync)
                 .catch(err => console.error("Firebase sync failed:", err));
@@ -551,12 +545,12 @@ const AppState = {
                                 // Firebase 데이터가 있을 경우 덮어쓰기
                                 if (data.expenseItems) this.expenseItems = data.expenseItems;
                                 if (data.memberCount !== undefined) this.memberCount = data.memberCount;
-                                // previousPrizeTotal은 clubRegistry.prizeUsed 에서 파생 — Firebase 사용자 데이터 무시
-                                if (data.rules) this.rules = data.rules;
                                 if (data.attendees) this.attendees = data.attendees;
                                 if (data.directory) this.directory = data.directory;
-                                if (data.annualBudget !== undefined) this.annualBudget = data.annualBudget;
-                                if (data.usedBudget !== undefined) this.usedBudget = data.usedBudget;
+                                // rules → globalSettings/rules 실시간 리스너 기준 (관리자 설정값 우선)
+                                // annualBudget → clubRegistry.budget 기준 (관리자 설정값 우선)
+                                // usedBudget → getClubUsedBudget() 으로 동적 계산
+                                // previousPrizeTotal → clubRegistry.prizeUsed 기준
                                 if (data.clubName !== undefined) this.clubName = data.clubName;
                                 if (data.clubId !== undefined) this.clubId = data.clubId;
                                 if (data.reportEmail !== undefined) this.reportEmail = data.reportEmail;
