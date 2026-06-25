@@ -934,6 +934,8 @@ const AppState = {
             this.tempCorpReceiptImage = (cardType === 'split') ? (item.corporateReceiptImage || null) : (cardType === 'corporate' ? (item.receiptImage || null) : null);
             this.tempPersonalReceiptImage = (cardType === 'split') ? (item.personalReceiptImage || null) : (cardType === 'personal' ? (item.receiptImage || null) : null);
 
+            // 누적 계산식으로 법인/개인 금액 및 토글 재계산
+            autoSetTogglesAndCorp();
             updateCardTypeUI();
 
             const corpStatusEl = document.getElementById('receipt-corp-status');
