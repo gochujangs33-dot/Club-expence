@@ -2961,8 +2961,8 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             const priorSettled = AppState.previousPrizeTotal || 0;
             const infoMsg = (existingPrize === 0 && priorSettled === 0)
-                ? `참석자 10명 이상 시에만 사용 가능합니다.\n한 해에 총 ${prizeLimit.toLocaleString()}원의 상품비 사용이 가능합니다.`
-                : `참석자 10명 이상 시에만 사용 가능합니다.\n올해 최대 ${remaining.toLocaleString()}원까지 상품비 사용 가능합니다.`;
+                ? `참석자가 10명 이상일 때만 상품비를 사용할 수 있습니다.\n상품비는 한 해에 최대 ${prizeLimit.toLocaleString()}원까지 사용 가능합니다.`
+                : `참석자가 10명 이상일 때만 상품비를 사용할 수 있습니다.\n올해 남은 상품비 한도는 ${remaining.toLocaleString()}원입니다.`;
             showPrizeModal(infoMsg, () => { autoSetTogglesAndCorp(); updateCardTypeUI(); }, 'info');
             return;
         }
