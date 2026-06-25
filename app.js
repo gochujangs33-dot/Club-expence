@@ -2235,11 +2235,12 @@ const AppState = {
         // Update used budget (사용자가 수정한 자부담 기준 실제 지원금과 동일한 값 사용)
         this.usedBudget = Math.max(0, this.usedBudget + newHistoryItem.finalSupportAmount);
 
-        // Reset current session
+        // Reset current session (상품비 누적액은 연간 한도 추적을 위해 이월)
+        const prizeThisSession = result.prizeCost || 0;
         this.expenseItems = [];
         this.attendees = [];
         this.memberCount = 0;
-        this.previousPrizeTotal = 0;
+        this.previousPrizeTotal = this.previousPrizeTotal + prizeThisSession;
         this.lastCalculatedSelfPay = 0;
         this.eventPhoto = null;
         this.editingItemId = null;
