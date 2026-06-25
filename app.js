@@ -2872,14 +2872,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 const prizeRemaining = 500000 - existingPrize;
 
                 if (prizeRemaining <= 0) {
-                    alert('상품비 연 한도 50만원을 모두 사용했습니다.\n더 이상 상품비를 추가할 수 없습니다.');
+                    showPrizeModal('상품비 연 한도 50만원을 모두 사용했습니다.\n더 이상 추가할 수 없습니다.', null, 'block');
                     return;
                 }
                 if (amount > prizeRemaining) {
-                    alert(`상품비 연 한도 50만원을 초과할 수 없습니다.\n현재 누적: ${existingPrize.toLocaleString()}원 / 추가 가능: ${prizeRemaining.toLocaleString()}원\n\n금액을 ${prizeRemaining.toLocaleString()}원 이하로 입력해주세요.`);
-                    amountInput.value = formatAmount(prizeRemaining);
-                    autoSetTogglesAndCorp();
-                    updateCardTypeUI();
+                    showPrizeModal(`상품비 연 한도 50만원을 초과할 수 없습니다.\n최대 ${prizeRemaining.toLocaleString()}원까지 입력 가능합니다.`, () => {
+                        amountInput.value = formatAmount(prizeRemaining);
+                        autoSetTogglesAndCorp(); updateCardTypeUI();
+                    }, 'warn');
                     return;
                 }
                 // 클럽 예산 잔여 확인 (상품비도 클럽 예산에서 지출)
@@ -2888,7 +2888,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     const clubBudget = AppState.getClubBudget ? AppState.getClubBudget() : 0;
                     const clubUsed = AppState.getClubUsedBudget ? AppState.getClubUsedBudget() : 0;
                     const budgetLeft = Math.max(0, clubBudget - clubUsed);
-                    alert(`클럽 잔여 예산이 부족합니다.\n잔여 예산: ${budgetLeft.toLocaleString()}원\n상품비는 개인카드로 사용할 수 없으며, 클럽 예산 내에서만 지출 가능합니다.`);
+                    showPrizeModal(`클럽 잔여 예산이 부족합니다.\n잔여 예산: ${budgetLeft.toLocaleString()}원\n상품비는 클럽 예산 내에서만 지출 가능합니다.`, null, 'block');
                     return;
                 }
             }
@@ -2920,17 +2920,24 @@ document.addEventListener('DOMContentLoaded', () => {
             const remaining = 500000 - existingPrize;
 
             if (memberCount < 10) {
-                alert(`상품비는 정회원 10명 이상 참석 시에만 사용 가능합니다.\n현재 참석 인원: ${memberCount}명`);
-                catSelect.value = ExpenseCategory.EVENT;
+                showPrizeModal('10명 이상일 경우에만 사용 가능합니다.', () => {
+                    catSelect.value = ExpenseCategory.EVENT;
+                    autoSetTogglesAndCorp(); updateCardTypeUI();
+                }, 'block');
                 return;
             }
             if (remaining <= 0) {
-                alert('상품비 연 한도 50만원을 모두 사용했습니다.\n더 이상 상품비를 추가할 수 없습니다.');
-                catSelect.value = ExpenseCategory.EVENT;
+                showPrizeModal('상품비 연 한도 50만원을 모두 사용했습니다.\n더 이상 상품비를 추가할 수 없습니다.', () => {
+                    catSelect.value = ExpenseCategory.EVENT;
+                    autoSetTogglesAndCorp(); updateCardTypeUI();
+                }, 'block');
                 return;
             }
-            // 잔여 한도 안내
-            alert(`상품비 연 한도: 500,000원\n현재 누적: ${existingPrize.toLocaleString()}원 / 잔여 한도: ${remaining.toLocaleString()}원`);
+            const infoMsg = existingPrize === 0
+                ? '한 해에 총 50만원의 상품비 사용이 가능합니다.'
+                : `올해 최대 ${remaining.toLocaleString()}원까지 상품비 사용 가능합니다.`;
+            showPrizeModal(infoMsg, () => { autoSetTogglesAndCorp(); updateCardTypeUI(); }, 'info');
+            return;
         }
         autoSetTogglesAndCorp(); updateCardTypeUI();
     });
@@ -5127,6 +5134,27 @@ function resetCorpAmount() {
 
     const corp = _calcCorpForItem(total, category);
     corpAmountInput.value = corp > 0 ? formatAmount(corp) : '';
+}
+
+// 상품비 커스텀 모달 (테마 적용)
+// type: 'info' | 'warn' | 'block'
+function showPrizeModal(message, onOk, type) {
+    const overlay = document.getElementById('prize-modal-overlay');
+    const msgEl = document.getElementById('prize-modal-msg');
+    const iconEl = document.getElementById('prize-modal-icon');
+    if (!overlay || !msgEl) { alert(message); if (onOk) onOk(); return; }
+
+    msgEl.textContent = message;
+    if (iconEl) iconEl.textContent = type === 'block' ? '🚫' : type === 'warn' ? '⚠️' : '🎁';
+    overlay.style.display = 'flex';
+
+    const okBtn = document.getElementById('prize-modal-ok');
+    const handler = () => {
+        overlay.style.display = 'none';
+        okBtn.removeEventListener('click', handler);
+        if (onOk) onOk();
+    };
+    okBtn.addEventListener('click', handler);
 }
 
 function compressReceiptImage(file, callback) {
