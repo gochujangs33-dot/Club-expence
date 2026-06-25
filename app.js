@@ -4452,15 +4452,19 @@ document.addEventListener('DOMContentLoaded', () => {
     let categoryPieChartInstance = null;
 
     // ── 카테고리별(행사비/시설비/상품) 누적 비용 비중 (도넛) ───────────────
+    // entry에 eventCost/facilityCost/prizeCost가 없으므로 expenseItems에서 직접 계산
     function renderCategoryPieChart(historyList) {
         const canvas = document.getElementById('category-pie-chart');
         if (!canvas || typeof Chart === 'undefined') return;
 
         let eventCost = 0, facilityCost = 0, prizeCost = 0;
         (historyList || []).forEach(entry => {
-            eventCost += entry.eventCost || 0;
-            facilityCost += entry.facilityCost || 0;
-            prizeCost += entry.prizeCost || 0;
+            (entry.expenseItems || []).forEach(item => {
+                const amt = item.amount || 0;
+                if (item.category === 'FACILITY') facilityCost += amt;
+                else if (item.category === 'PRIZE') prizeCost += amt;
+                else eventCost += amt; // EVENT or legacy
+            });
         });
 
         if (categoryPieChartInstance) {
@@ -4557,11 +4561,69 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    let clubSpendChartInstance = null;
+
+    // ── 클럽별 비용 지출 비교 (행사비/시설비/상품비 누적 스택 가로 막대) ────
+    function renderClubSpendChart(historyList) {
+        const canvas = document.getElementById('club-spend-chart');
+        if (!canvas || typeof Chart === 'undefined') return;
+
+        const clubs = Object.values(AppState.clubRegistry || {}).sort((a, b) => a.name.localeCompare(b.name));
+        const labels = clubs.map(c => c.name);
+        const eventData = [], facilityData = [], prizeData = [];
+
+        clubs.forEach(club => {
+            let ev = 0, fa = 0, pr = 0;
+            (historyList || [])
+                .filter(e => e.clubName === club.name)
+                .forEach(entry => {
+                    (entry.expenseItems || []).forEach(item => {
+                        const amt = item.amount || 0;
+                        if (item.category === 'FACILITY') fa += amt;
+                        else if (item.category === 'PRIZE') pr += amt;
+                        else ev += amt;
+                    });
+                });
+            eventData.push(ev);
+            facilityData.push(fa);
+            prizeData.push(pr);
+        });
+
+        if (clubSpendChartInstance) clubSpendChartInstance.destroy();
+        if (labels.length === 0) return;
+
+        clubSpendChartInstance = new Chart(canvas.getContext('2d'), {
+            type: 'bar',
+            data: {
+                labels,
+                datasets: [
+                    { label: '행사비', data: eventData, backgroundColor: 'rgba(139,92,246,0.75)', borderRadius: 4 },
+                    { label: '시설·장비', data: facilityData, backgroundColor: 'rgba(56,189,248,0.75)', borderRadius: 4 },
+                    { label: '상품비', data: prizeData, backgroundColor: 'rgba(251,191,36,0.75)', borderRadius: 4 }
+                ]
+            },
+            options: {
+                indexAxis: 'y',
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { labels: { color: '#cbd5e1' } },
+                    tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${SettlementCalculator.formatCurrency(ctx.parsed.x)}` } }
+                },
+                scales: {
+                    x: { stacked: true, ticks: { color: '#cbd5e1', callback: (v) => (v >= 1000000 ? (v/1000000).toFixed(1)+'M' : v >= 1000 ? (v/1000).toFixed(0)+'K' : v) }, grid: { color: 'rgba(255,255,255,0.05)' }, beginAtZero: true },
+                    y: { stacked: true, ticks: { color: '#cbd5e1' }, grid: { display: false } }
+                }
+            }
+        });
+    }
+
     // 차트 탭의 모든 그래프를 한 번에 갱신
     function renderAllCharts(historyList) {
         renderOverallMonthlyChart(historyList);
         renderClubUsageChart(historyList);
         renderCategoryPieChart(historyList);
+        renderClubSpendChart(historyList);
         renderSelfPayTrendChart(historyList);
     }
 
