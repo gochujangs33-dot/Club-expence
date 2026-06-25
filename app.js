@@ -169,12 +169,11 @@ const SettlementCalculator = Object.freeze({
 
         const warnings = [];
 
-        if (prizeCost > 0 && memberCount < 20) {
-            warnings.push("정회원 20명 이상 참석 시에만 상품비 사용이 가능합니다.");
+        if (prizeCost > 0 && memberCount < 10) {
+            warnings.push("정회원 10명 이상 참석 시에만 상품비 사용이 가능합니다.");
         }
         if (prizeCost + previousPrizeTotal > 500000) {
-            const exceeded = (prizeCost + previousPrizeTotal) - 500000;
-            warnings.push(`상품비 연간 한도 500,000원을 초과했습니다. 초과 금액: ${this.formatCurrency(exceeded)}`);
+            warnings.push("상품비 연 한도 50만원을 초과할 수 없습니다.");
         }
         if (facilityCost > 1000000) {
             warnings.push("시설 및 장비 이용료가 1,000,000원을 초과하여 별도 협의가 필요합니다.");
@@ -2873,11 +2872,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 const prizeRemaining = 500000 - existingPrize;
 
                 if (prizeRemaining <= 0) {
-                    alert('상품비 연간 한도(500,000원)를 모두 사용했습니다.\n더 이상 상품비를 추가할 수 없습니다.');
+                    alert('상품비 연 한도 50만원을 모두 사용했습니다.\n더 이상 상품비를 추가할 수 없습니다.');
                     return;
                 }
                 if (amount > prizeRemaining) {
-                    alert(`상품비는 연간 총 500,000원을 초과할 수 없습니다.\n현재 누적: ${existingPrize.toLocaleString()}원 / 추가 가능: ${prizeRemaining.toLocaleString()}원\n\n금액을 ${prizeRemaining.toLocaleString()}원 이하로 입력해주세요.`);
+                    alert(`상품비 연 한도 50만원을 초과할 수 없습니다.\n현재 누적: ${existingPrize.toLocaleString()}원 / 추가 가능: ${prizeRemaining.toLocaleString()}원\n\n금액을 ${prizeRemaining.toLocaleString()}원 이하로 입력해주세요.`);
                     amountInput.value = formatAmount(prizeRemaining);
                     autoSetTogglesAndCorp();
                     updateCardTypeUI();
@@ -2921,17 +2920,17 @@ document.addEventListener('DOMContentLoaded', () => {
             const remaining = 500000 - existingPrize;
 
             if (memberCount < 10) {
-                alert(`상품비는 참석 인원 10명 이상일 경우에만 추가 가능합니다.\n현재 참석 인원: ${memberCount}명`);
+                alert(`상품비는 정회원 10명 이상 참석 시에만 사용 가능합니다.\n현재 참석 인원: ${memberCount}명`);
                 catSelect.value = ExpenseCategory.EVENT;
                 return;
             }
             if (remaining <= 0) {
-                alert('상품비 연간 한도(500,000원)를 모두 사용했습니다.\n더 이상 상품비를 추가할 수 없습니다.');
+                alert('상품비 연 한도 50만원을 모두 사용했습니다.\n더 이상 상품비를 추가할 수 없습니다.');
                 catSelect.value = ExpenseCategory.EVENT;
                 return;
             }
-            // 잔여 한도 안내 (법인카드/개인카드 모두 포함)
-            alert(`상품비는 연간 총 500,000원까지 사용 가능합니다.\n현재 누적: ${existingPrize.toLocaleString()}원 / 잔여 한도: ${remaining.toLocaleString()}원\n\n법인카드·개인카드 구분 없이 합산 기준으로 적용됩니다.`);
+            // 잔여 한도 안내
+            alert(`상품비 연 한도: 500,000원\n현재 누적: ${existingPrize.toLocaleString()}원 / 잔여 한도: ${remaining.toLocaleString()}원`);
         }
         autoSetTogglesAndCorp(); updateCardTypeUI();
     });
