@@ -264,10 +264,7 @@ const AppState = {
             if (savedMemberCount) {
                 this.memberCount = parseInt(savedMemberCount, 10) || 0;
             }
-            const savedPrevPrize = localStorage.getItem('club_expense_prev_prize');
-            if (savedPrevPrize) {
-                this.previousPrizeTotal = parseInt(savedPrevPrize, 10) || 0;
-            }
+            // previousPrizeTotal은 clubRegistry.prizeUsed 기준 — localStorage 구버전 값 무시
             const savedRules = localStorage.getItem('club_expense_rules');
             if (savedRules) {
                 const parsedRules = JSON.parse(savedRules);
@@ -470,7 +467,7 @@ const AppState = {
         try {
             localStorage.setItem('club_expense_items', JSON.stringify(this.expenseItems));
             localStorage.setItem('club_expense_members', this.memberCount.toString());
-            localStorage.setItem('club_expense_prev_prize', this.previousPrizeTotal.toString());
+            // club_expense_prev_prize: clubRegistry.prizeUsed 기준으로 전환 — localStorage 저장 중단
             localStorage.setItem('club_expense_rules', JSON.stringify(this.rules));
             localStorage.setItem('club_expense_attendees', JSON.stringify(this.attendees));
             localStorage.setItem('club_expense_directory', JSON.stringify(this.directory));
@@ -493,7 +490,7 @@ const AppState = {
         if (this.isLoggedIn && this.firebaseDb && this.currentPin) {
             const dataToSync = {
                 memberCount: this.memberCount,
-                previousPrizeTotal: this.previousPrizeTotal,
+                // previousPrizeTotal은 clubRegistry.prizeUsed 기준으로 관리 — Firebase 사용자 데이터에 저장 안 함
                 expenseItems: this.expenseItems,
                 attendees: this.attendees,
                 directory: this.directory,
@@ -554,7 +551,7 @@ const AppState = {
                                 // Firebase 데이터가 있을 경우 덮어쓰기
                                 if (data.expenseItems) this.expenseItems = data.expenseItems;
                                 if (data.memberCount !== undefined) this.memberCount = data.memberCount;
-                                if (data.previousPrizeTotal !== undefined) this.previousPrizeTotal = data.previousPrizeTotal;
+                                // previousPrizeTotal은 clubRegistry.prizeUsed 에서 파생 — Firebase 사용자 데이터 무시
                                 if (data.rules) this.rules = data.rules;
                                 if (data.attendees) this.attendees = data.attendees;
                                 if (data.directory) this.directory = data.directory;
@@ -613,6 +610,10 @@ const AppState = {
             let initialLoad = true; // 첫 번째 수신은 초기 로드 — 삭제 팝업 억제
             this.firebaseDb.ref('clubRegistry').on('value', snapshot => {
                 this.clubRegistry = snapshot.val() || {};
+                // 클럽 레지스트리 로드/갱신 시 previousPrizeTotal을 항상 club.prizeUsed 기준으로 동기화
+                if (this.clubId && this.clubRegistry[this.clubId]) {
+                    this.previousPrizeTotal = this.clubRegistry[this.clubId].prizeUsed || 0;
+                }
                 // clubId로 현재 사용자가 선택한 클럽명을 추적
                 if (this.clubId) {
                     if (this.clubRegistry[this.clubId]) {
