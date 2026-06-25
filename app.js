@@ -4911,6 +4911,7 @@ function updateCardTypeUI() {
     }
 
     const total = parseAmount((document.getElementById('expense-amount-input') || {}).value || '0') || 0;
+    const corpExtraHint = document.getElementById('corp-extra-hint');
 
     if (corpOn) {
         corpAmountGroup.classList.remove('hidden');
@@ -4920,11 +4921,33 @@ function updateCardTypeUI() {
         if (splitAutoHint) splitAutoHint.style.display = (personalOn && total > 0) ? '' : 'none';
 
         if (corpAmountInput) { corpAmountInput.readOnly = false; corpAmountInput.style.opacity = ''; }
+
+        const corp = parseAmount(corpAmountInput ? corpAmountInput.value : '0') || 0;
         if (personalAmountInput) {
-            const corp = parseAmount(corpAmountInput ? corpAmountInput.value : '0') || 0;
             personalAmountInput.value = total > 0 ? formatAmount(Math.max(total - corp, 0)) : '';
             personalAmountInput.readOnly = true;
             personalAmountInput.style.opacity = '0.65';
+        }
+
+        // 법인카드 구간 한도보다 적게 입력했을 때 추가 사용 가능 금액 안내
+        if (corpExtraHint && total > 0) {
+            const memberCount = AppState.memberCount || 0;
+            const rules = AppState.rules || DefaultRules;
+            const category = (document.getElementById('expense-category-select') || {}).value || 'EVENT';
+            let corpLimit = total;
+            if (memberCount > 0) {
+                const r = SettlementCalculator.calculate(memberCount, [{ amount: total, category }], 0, rules);
+                corpLimit = r.finalSupportAmount;
+            }
+            const remaining = corpLimit - corp;
+            if (remaining > 0 && corp < total) {
+                corpExtraHint.textContent = `💳 ${formatAmount(remaining)}원 더 법인카드로 결제할 수 있습니다`;
+                corpExtraHint.style.display = '';
+            } else {
+                corpExtraHint.style.display = 'none';
+            }
+        } else if (corpExtraHint) {
+            corpExtraHint.style.display = 'none';
         }
     } else {
         corpAmountGroup.classList.add('hidden');
