@@ -898,6 +898,8 @@ const AppState = {
             document.getElementById('expense-desc-input').value = item.description;
             document.getElementById('expense-amount-input').value = formatAmount(item.amount);
             document.getElementById('expense-category-select').value = item.category;
+            // 시설·장비 항목 수정 시 승인 완료 상태 복원 (기존 항목은 이미 승인된 것으로 간주)
+            _facilityApproved = (item.category === ExpenseCategory.FACILITY);
 
             // Card type / split payment
             const cardType = item.cardType || 'corporate';
@@ -2909,6 +2911,26 @@ document.addEventListener('DOMContentLoaded', () => {
     // 총액·카테고리 변경 → 토글 자동 설정 + 구간별 법인카드 계산 후 UI 갱신
     amountInput.addEventListener('input', () => { autoSetTogglesAndCorp(); updateCardTypeUI(); });
     if (catSelect) catSelect.addEventListener('change', () => {
+        // 시설·장비 선택 시 사전 승인 여부 확인
+        if (catSelect.value === ExpenseCategory.FACILITY) {
+            _facilityApproved = false;
+            showFacilityApprovalModal(
+                () => {
+                    // 승인 완료 → FACILITY 유지, 법인카드 최대 85,000원
+                    _facilityApproved = true;
+                    autoSetTogglesAndCorp(); updateCardTypeUI();
+                },
+                () => {
+                    // 승인 없음 → 행사비(EVENT)로 변경
+                    _facilityApproved = false;
+                    catSelect.value = ExpenseCategory.EVENT;
+                    autoSetTogglesAndCorp(); updateCardTypeUI();
+                }
+            );
+            return;
+        }
+        // 다른 카테고리로 변경 시 승인 플래그 초기화
+        _facilityApproved = false;
         if (catSelect.value === ExpenseCategory.PRIZE) {
             const memberCount = AppState.memberCount || 0;
             const editingId = AppState.editingItemId || null;
@@ -5161,11 +5183,34 @@ function updateCardTypeUI() {
     }
 }
 
+// 시설·장비 사전 승인 여부 (카테고리 변경 시 초기화)
+let _facilityApproved = false;
+
+// 시설·장비 승인 모달 표시 후 콜백 실행
+function showFacilityApprovalModal(onApproved, onNoApproval) {
+    const modal = document.getElementById('facility-approval-modal');
+    if (!modal) { onApproved(); return; }
+    modal.style.display = 'flex';
+    const approvedBtn = document.getElementById('facility-approved-btn');
+    const noBtn = document.getElementById('facility-no-approval-btn');
+    const close = () => { modal.style.display = 'none'; };
+    const onApprovedClick = () => { close(); approvedBtn.removeEventListener('click', onApprovedClick); noBtn.removeEventListener('click', onNoClick); onApproved(); };
+    const onNoClick    = () => { close(); approvedBtn.removeEventListener('click', onApprovedClick); noBtn.removeEventListener('click', onNoClick); onNoApproval(); };
+    approvedBtn.addEventListener('click', onApprovedClick);
+    noBtn.addEventListener('click', onNoClick);
+}
+
 // 기존 항목 누적 + 클럽 잔여 예산 한도를 고려하여 신규/수정 항목의 법인카드 한도 계산
 function _calcCorpForItem(amount, category) {
     const memberCount = AppState.memberCount || 0;
     const rules = AppState.rules || DefaultRules;
     if (amount <= 0) return 0;
+
+    // 시설·장비: 사전 승인 완료 시 deduction4(85,000원)까지만 법인카드
+    if (category === ExpenseCategory.FACILITY && _facilityApproved) {
+        return Math.min(amount, rules.deduction4 || 85000);
+    }
+
     if (memberCount <= 0) return amount; // 인원 미설정 시 전액 법인
 
     // 클럽 잔여 예산 (이번 세션 이전까지 남은 예산)
