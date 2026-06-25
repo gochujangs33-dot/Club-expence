@@ -4969,14 +4969,31 @@ function updateCardTypeUI() {
     // 상품비: 반드시 법인카드만, 개인카드 사용 불가
     const category = (document.getElementById('expense-category-select') || {}).value || '';
     const isPrize = category === ExpenseCategory.PRIZE;
+    const personalToggleLabel = personalCheck.closest ? personalCheck.closest('label') : null;
     if (isPrize) {
         corpCheck.checked = true;
         personalCheck.checked = false;
         personalCheck.disabled = true;
-        personalCheck.closest && personalCheck.closest('label') && (personalCheck.closest('label').style.opacity = '0.4');
+        if (personalToggleLabel) { personalToggleLabel.style.opacity = '0.35'; personalToggleLabel.style.pointerEvents = 'none'; }
+        // 상품비: 법인카드 그룹만 표시, 개인카드 완전 숨김
+        corpAmountGroup.classList.remove('hidden');
+        personalAmountGroup.classList.add('hidden');
+        corpReceiptGroup.classList.remove('hidden');
+        personalReceiptGroup.classList.add('hidden');
+        if (splitAutoHint) splitAutoHint.style.display = 'none';
+        const total = parseAmount((document.getElementById('expense-amount-input') || {}).value || '0') || 0;
+        const corpAmountInput = document.getElementById('expense-corporate-amount-input');
+        if (corpAmountInput) {
+            corpAmountInput.readOnly = false;
+            corpAmountInput.style.opacity = '';
+        }
+        if (personalAmountInput) { personalAmountInput.value = '0'; }
+        const corpExtraHint = document.getElementById('corp-extra-hint');
+        if (corpExtraHint) corpExtraHint.style.display = 'none';
+        return;
     } else {
         personalCheck.disabled = false;
-        personalCheck.closest && personalCheck.closest('label') && (personalCheck.closest('label').style.opacity = '');
+        if (personalToggleLabel) { personalToggleLabel.style.opacity = ''; personalToggleLabel.style.pointerEvents = ''; }
     }
 
     if (!corpOn && !personalOn) {
