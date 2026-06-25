@@ -4931,14 +4931,8 @@ function updateCardTypeUI() {
 
         // 법인카드 구간 한도보다 적게 입력했을 때 추가 사용 가능 금액 안내
         if (corpExtraHint && total > 0) {
-            const memberCount = AppState.memberCount || 0;
-            const rules = AppState.rules || DefaultRules;
             const category = (document.getElementById('expense-category-select') || {}).value || 'EVENT';
-            let corpLimit = total;
-            if (memberCount > 0) {
-                const r = SettlementCalculator.calculate(memberCount, [{ amount: total, category }], 0, rules);
-                corpLimit = r.finalSupportAmount;
-            }
+            const corpLimit = _calcCorpForItem(total, category);
             const remaining = corpLimit - corp;
             if (remaining > 0 && corp < total) {
                 corpExtraHint.textContent = `💳 ${formatAmount(remaining)}원 더 법인카드로 결제할 수 있습니다`;
@@ -4965,12 +4959,33 @@ function updateCardTypeUI() {
     }
 }
 
+// 기존 항목 누적 고려하여 신규/수정 항목의 법인카드 한도 계산
+function _calcCorpForItem(amount, category) {
+    const memberCount = AppState.memberCount || 0;
+    const rules = AppState.rules || DefaultRules;
+    if (amount <= 0) return 0;
+    if (memberCount <= 0) return amount; // 인원 미설정 시 전액 법인
+
+    // 현재 편집 중인 항목은 기존 항목에서 제외
+    const editingId = AppState.editingItemId || null;
+    const existingItems = (AppState.expenseItems || []).filter(item => item.id !== editingId);
+
+    const newItem = { amount, category };
+    const allItems = [...existingItems, newItem];
+
+    const resultAll = SettlementCalculator.calculate(memberCount, allItems, 0, rules);
+    const resultExisting = existingItems.length > 0
+        ? SettlementCalculator.calculate(memberCount, existingItems, 0, rules)
+        : { finalSupportAmount: 0 };
+
+    const corp = resultAll.finalSupportAmount - resultExisting.finalSupportAmount;
+    return Math.max(0, Math.min(corp, amount));
+}
+
 // 금액·카테고리 변경 시 구간별 계산으로 법인/개인 토글 자동 설정 + 법인카드 금액 계산
 function autoSetTogglesAndCorp() {
     const total = parseAmount((document.getElementById('expense-amount-input') || {}).value || '0') || 0;
     const category = (document.getElementById('expense-category-select') || {}).value || 'EVENT';
-    const memberCount = AppState.memberCount || 0;
-    const rules = AppState.rules || DefaultRules;
     const corpCheck = document.getElementById('expense-corp-check');
     const personalCheck = document.getElementById('expense-personal-check');
     const corpAmountInput = document.getElementById('expense-corporate-amount-input');
@@ -4983,28 +4998,16 @@ function autoSetTogglesAndCorp() {
         return;
     }
 
-    let corp = total;
-    if (memberCount > 0) {
-        const r = SettlementCalculator.calculate(
-            memberCount,
-            [{ amount: total, category }],
-            0, rules
-        );
-        corp = r.finalSupportAmount;
-    }
-
+    const corp = _calcCorpForItem(total, category);
     corpAmountInput.value = corp > 0 ? formatAmount(corp) : '';
 
     if (corp >= total) {
-        // 전액 법인카드 지원 → 법인카드만
         corpCheck.checked = true;
         personalCheck.checked = false;
     } else if (corp > 0) {
-        // 일부 법인 + 일부 개인 → 둘 다 ON
         corpCheck.checked = true;
         personalCheck.checked = true;
     } else {
-        // 법인카드 0 → 개인카드만
         corpCheck.checked = false;
         personalCheck.checked = true;
     }
@@ -5018,18 +5021,8 @@ function resetCorpAmount() {
     if (!corpAmountInput) return;
     const total = parseAmount((document.getElementById('expense-amount-input') || {}).value || '0') || 0;
     const category = (document.getElementById('expense-category-select') || {}).value || 'EVENT';
-    const memberCount = AppState.memberCount || 0;
-    const rules = AppState.rules || DefaultRules;
 
-    let corp = total;
-    if (total > 0 && memberCount > 0) {
-        const r = SettlementCalculator.calculate(
-            memberCount,
-            [{ amount: total, category }],
-            0, rules
-        );
-        corp = r.finalSupportAmount;
-    }
+    const corp = _calcCorpForItem(total, category);
     corpAmountInput.value = corp > 0 ? formatAmount(corp) : '';
 }
 
