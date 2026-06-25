@@ -3698,6 +3698,26 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('register-error-text').classList.add('hidden');
     });
 
+    // 앱 캐시 초기화 — 구버전 캐시 강제 삭제 후 최신 버전 재로드
+    const clearCacheBtn = document.getElementById('clear-cache-btn');
+    if (clearCacheBtn) {
+        clearCacheBtn.addEventListener('click', async () => {
+            clearCacheBtn.textContent = '초기화 중...';
+            clearCacheBtn.disabled = true;
+            try {
+                if ('serviceWorker' in navigator) {
+                    const regs = await navigator.serviceWorker.getRegistrations();
+                    await Promise.all(regs.map(r => r.unregister()));
+                }
+                if ('caches' in window) {
+                    const keys = await caches.keys();
+                    await Promise.all(keys.map(k => caches.delete(k)));
+                }
+            } catch (e) { /* ignore */ }
+            location.reload(true);
+        });
+    }
+
     // Toggle to Login mode
     document.getElementById('go-to-login').addEventListener('click', () => {
         document.getElementById('login-mode-section').classList.remove('hidden');
@@ -3971,9 +3991,9 @@ document.addEventListener('DOMContentLoaded', () => {
             firebaseDb.ref('deletedHistoryIds').once('value')
         ]).then(([snapshot, deletedSnap]) => {
             const historyData = snapshot.val() || {};
-            const deletedIds = deletedSnap.val() || {};
+            cachedDeletedIds = deletedSnap.val() || {};
             const historyList = Object.values(historyData)
-                .filter(e => e && !deletedIds[String(e.id)])
+                .filter(e => e && !cachedDeletedIds[String(e.id)])
                 .sort((a, b) => b.id - a.id);
 
             let totalSpend = 0;
@@ -4020,6 +4040,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // ── 클럽 관리 (관리자 대시보드) ───────────────────────────────────────
     let editingClubId = null;
     let lastHistoryList = [];
+    let cachedDeletedIds = {}; // tombstone 캐시 — 어떤 경로로도 삭제된 항목이 보이지 않도록
     let selectedOverallClubs = null; // null = 전체 표시, Set이면 해당 클럽만 표시
 
     const clubTotalBudgetInput = document.getElementById('club-total-budget-input');
@@ -4655,7 +4676,9 @@ document.addEventListener('DOMContentLoaded', () => {
         select.value = names.includes(current) ? current : '';
     }
 
-    function renderAdminHistory(historyList) {
+    function renderAdminHistory(rawHistoryList) {
+        // tombstone 캐시로 항상 한 번 더 필터링 — 어떤 경로로 복원돼도 화면에 표시 안 됨
+        const historyList = (rawHistoryList || []).filter(e => e && !cachedDeletedIds[String(e.id)]);
         const container = document.getElementById('admin-history-container');
         const clubSelect = document.getElementById('club-history-select');
         const selectedClub = clubSelect ? clubSelect.value : '';
@@ -4822,6 +4845,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
 
                     Promise.all(tasks).then(() => {
+                        cachedDeletedIds[String(id)] = true; // 즉시 메모리 캐시에 반영
                         lastHistoryList = lastHistoryList.filter(e => String(e.id) !== String(id));
                         renderAdminHistory(lastHistoryList);
                         renderAllCharts(lastHistoryList);
