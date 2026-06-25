@@ -2864,22 +2864,32 @@ document.addEventListener('DOMContentLoaded', () => {
         const corporateAmount = parseAmount(document.getElementById('expense-corporate-amount-input').value);
 
         if (description && !isNaN(amount) && amount > 0) {
-            // 상품비 한도 검증
+            // 상품비 검증 (개인카드 사용 불가, 50만원 한도, 클럽 예산 내)
             if (category === ExpenseCategory.PRIZE) {
                 const editingId = AppState.editingItemId || null;
                 const existingPrize = (AppState.expenseItems || [])
                     .filter(i => i.category === ExpenseCategory.PRIZE && i.id !== editingId)
                     .reduce((s, i) => s + (i.amount || 0), 0);
-                const remaining = 500000 - existingPrize;
-                if (remaining <= 0) {
+                const prizeRemaining = 500000 - existingPrize;
+
+                if (prizeRemaining <= 0) {
                     alert('상품비 연간 한도(500,000원)를 모두 사용했습니다.\n더 이상 상품비를 추가할 수 없습니다.');
                     return;
                 }
-                if (amount > remaining) {
-                    alert(`상품비는 연간 총 500,000원을 초과할 수 없습니다.\n현재 누적: ${existingPrize.toLocaleString()}원\n추가 가능 금액: ${remaining.toLocaleString()}원\n\n금액을 ${remaining.toLocaleString()}원 이하로 입력해주세요.`);
-                    amountInput.value = formatAmount(remaining);
+                if (amount > prizeRemaining) {
+                    alert(`상품비는 연간 총 500,000원을 초과할 수 없습니다.\n현재 누적: ${existingPrize.toLocaleString()}원 / 추가 가능: ${prizeRemaining.toLocaleString()}원\n\n금액을 ${prizeRemaining.toLocaleString()}원 이하로 입력해주세요.`);
+                    amountInput.value = formatAmount(prizeRemaining);
                     autoSetTogglesAndCorp();
                     updateCardTypeUI();
+                    return;
+                }
+                // 클럽 예산 잔여 확인 (상품비도 클럽 예산에서 지출)
+                const corpAvail = _calcCorpForItem(amount, category);
+                if (corpAvail < amount) {
+                    const clubBudget = AppState.getClubBudget ? AppState.getClubBudget() : 0;
+                    const clubUsed = AppState.getClubUsedBudget ? AppState.getClubUsedBudget() : 0;
+                    const budgetLeft = Math.max(0, clubBudget - clubUsed);
+                    alert(`클럽 잔여 예산이 부족합니다.\n잔여 예산: ${budgetLeft.toLocaleString()}원\n상품비는 개인카드로 사용할 수 없으며, 클럽 예산 내에서만 지출 가능합니다.`);
                     return;
                 }
             }
@@ -4956,6 +4966,19 @@ function updateCardTypeUI() {
     const corpOn = corpCheck.checked;
     const personalOn = personalCheck.checked;
 
+    // 상품비: 반드시 법인카드만, 개인카드 사용 불가
+    const category = (document.getElementById('expense-category-select') || {}).value || '';
+    const isPrize = category === ExpenseCategory.PRIZE;
+    if (isPrize) {
+        corpCheck.checked = true;
+        personalCheck.checked = false;
+        personalCheck.disabled = true;
+        personalCheck.closest && personalCheck.closest('label') && (personalCheck.closest('label').style.opacity = '0.4');
+    } else {
+        personalCheck.disabled = false;
+        personalCheck.closest && personalCheck.closest('label') && (personalCheck.closest('label').style.opacity = '');
+    }
+
     if (!corpOn && !personalOn) {
         corpCheck.checked = true;
         return updateCardTypeUI();
@@ -5061,7 +5084,11 @@ function autoSetTogglesAndCorp() {
     const corp = _calcCorpForItem(total, category);
     corpAmountInput.value = corp > 0 ? formatAmount(corp) : '';
 
-    if (corp >= total) {
+    // 상품비: 반드시 법인카드만
+    if (category === ExpenseCategory.PRIZE) {
+        corpCheck.checked = true;
+        personalCheck.checked = false;
+    } else if (corp >= total) {
         corpCheck.checked = true;
         personalCheck.checked = false;
     } else if (corp > 0) {
