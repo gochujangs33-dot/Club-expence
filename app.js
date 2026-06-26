@@ -4203,7 +4203,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const spent = lastHistoryList
                 .filter(entry => entry.clubName === club.name)
                 .reduce((sum, entry) => sum + (entry.finalSupportAmount || 0), 0);
-            // 상품비: globalHistory 기준으로 올해 실제 사용액 계산 (clubRegistry.prizeUsed 무시)
+            // 상품비: globalHistory 기준으로 올해 실제 사용액 계산 후 Firebase에도 동기화
             const prizeUsed = lastHistoryList
                 .filter(entry => {
                     if (!entry || entry.clubName !== club.name) return false;
@@ -4213,6 +4213,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     return d.getFullYear() === _thisYear;
                 })
                 .reduce((sum, entry) => sum + (entry.prizeCost || 0), 0);
+            // Firebase 값과 다를 때만 업데이트 (유저 previousPrizeTotal 동기화)
+            if ((club.prizeUsed || 0) !== prizeUsed && firebaseDb) {
+                club.prizeUsed = prizeUsed;
+                firebaseDb.ref(`clubRegistry/${clubId}/prizeUsed`).set(prizeUsed).catch(() => {});
+            }
             const budget = club.budget || 0;
             const priorUsed = club.priorUsed || 0;
             const prizeLimit = AppState.rules.prizeLimit || 500000;
