@@ -2867,6 +2867,46 @@ document.addEventListener('DOMContentLoaded', () => {
         const corporateAmount = parseAmount(document.getElementById('expense-corporate-amount-input').value);
 
         if (description && !isNaN(amount) && amount > 0) {
+            // ── 클럽 연간 예산 잔여 확인 (EVENT / FACILITY / PRIZE 공통) ──────
+            const _clubBudget = AppState.getClubBudget ? AppState.getClubBudget() : 0;
+            if (_clubBudget > 0) {
+                const _clubUsed   = AppState.getClubUsedBudget ? AppState.getClubUsedBudget() : 0;
+                const _budgetLeft = Math.max(0, _clubBudget - _clubUsed);
+
+                if (_budgetLeft <= 0) {
+                    showPrizeModal(
+                        `클럽 연간 예산이 모두 소진되었습니다.\n` +
+                        `배정 예산: ${_clubBudget.toLocaleString()}원\n` +
+                        `사용 금액: ${_clubUsed.toLocaleString()}원\n` +
+                        `더 이상 비용을 추가할 수 없습니다.`,
+                        null, 'block'
+                    );
+                    return;
+                }
+
+                // 새 항목 추가 시 최종 지원금이 잔여 예산 초과 여부 확인
+                const _editingId   = AppState.editingItemId || null;
+                const _existItems  = (AppState.expenseItems || []).filter(i => i.id !== _editingId);
+                const _simItems    = [..._existItems, { category, amount }];
+                const _simResult   = SettlementCalculator.calculate(
+                    AppState.memberCount || 0,
+                    _simItems,
+                    AppState.previousPrizeTotal || 0,
+                    AppState.rules
+                );
+                if (_simResult.finalSupportAmount > _budgetLeft) {
+                    showPrizeModal(
+                        `입력 금액이 클럽 잔여 예산을 초과합니다.\n` +
+                        `잔여 예산: ${_budgetLeft.toLocaleString()}원\n` +
+                        `추가 시 지원 예정액: ${_simResult.finalSupportAmount.toLocaleString()}원\n` +
+                        `금액을 줄이거나 항목을 조정해 주세요.`,
+                        null, 'block'
+                    );
+                    return;
+                }
+            }
+            // ────────────────────────────────────────────────────────────────
+
             // 상품비 검증 (개인카드 사용 불가, 50만원 한도, 클럽 예산 내)
             if (category === ExpenseCategory.PRIZE) {
                 const editingId = AppState.editingItemId || null;
