@@ -3905,49 +3905,57 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // ── 가입 회원 - 이름/PIN 수정 및 삭제 ────────────────────────────────
     function editAdminUser(oldPin, currentName) {
-        const newName = prompt('이름 수정', currentName);
-        if (newName === null || !newName.trim()) return;
+        const overlay   = document.getElementById('edit-user-modal-overlay');
+        const nameInput = document.getElementById('edit-user-name-input');
+        const pinInput  = document.getElementById('edit-user-pin-input');
+        const errEl     = document.getElementById('edit-user-error');
+        const okBtn     = document.getElementById('edit-user-modal-ok');
+        const cancelBtn = document.getElementById('edit-user-modal-cancel');
+        if (!overlay) return;
 
-        const newPin = prompt('6자리 PIN 번호 수정', oldPin);
-        if (newPin === null) return;
-        if (!/^\d{6}$/.test(newPin)) {
-            alert(t('alert.pin_digit_required'));
-            return;
-        }
+        nameInput.value = currentName;
+        pinInput.value  = oldPin;
+        errEl.style.display = 'none';
+        overlay.style.display = 'flex';
+        nameInput.focus();
 
-        firebaseDb.ref(`users/${oldPin}`).once('value').then(snap => {
-            const userData = snap.val() || {};
-            userData.name = newName.trim();
-
-            if (newPin === oldPin) {
-                return firebaseDb.ref(`users/${oldPin}`).update({ name: userData.name });
-            }
-
-            return firebaseDb.ref(`users/${newPin}`).once('value').then(existing => {
-                if (existing.exists()) {
-                    alert(t('alert.pin_already_used'));
-                    return Promise.reject(new Error('duplicate-pin'));
+        const close = () => { overlay.style.display = 'none'; cleanup(); };
+        const handleOk = () => {
+            const newName = nameInput.value.trim();
+            const newPin  = pinInput.value.trim();
+            if (!newName) { errEl.textContent = '이름을 입력해주세요.'; errEl.style.display = 'block'; return; }
+            if (!/^\d{6}$/.test(newPin)) { errEl.textContent = t('alert.pin_digit_required'); errEl.style.display = 'block'; return; }
+            close();
+            firebaseDb.ref(`users/${oldPin}`).once('value').then(snap => {
+                const userData = snap.val() || {};
+                userData.name = newName;
+                if (newPin === oldPin) {
+                    return firebaseDb.ref(`users/${oldPin}`).update({ name: userData.name });
                 }
-                return firebaseDb.ref(`settlements/${oldPin}`).once('value').then(settlementSnap => {
-                    const tasks = [
-                        firebaseDb.ref(`users/${newPin}`).set(userData),
-                        firebaseDb.ref(`users/${oldPin}`).remove()
-                    ];
-                    if (settlementSnap.exists()) {
-                        tasks.push(firebaseDb.ref(`settlements/${newPin}`).set(settlementSnap.val()));
-                        tasks.push(firebaseDb.ref(`settlements/${oldPin}`).remove());
-                    }
-                    return Promise.all(tasks);
+                return firebaseDb.ref(`users/${newPin}`).once('value').then(existing => {
+                    if (existing.exists()) { alert(t('alert.pin_already_used')); return Promise.reject(new Error('duplicate-pin')); }
+                    return firebaseDb.ref(`settlements/${oldPin}`).once('value').then(settlementSnap => {
+                        const tasks = [firebaseDb.ref(`users/${newPin}`).set(userData), firebaseDb.ref(`users/${oldPin}`).remove()];
+                        if (settlementSnap.exists()) {
+                            tasks.push(firebaseDb.ref(`settlements/${newPin}`).set(settlementSnap.val()));
+                            tasks.push(firebaseDb.ref(`settlements/${oldPin}`).remove());
+                        }
+                        return Promise.all(tasks);
+                    });
                 });
-            });
-        }).then(() => {
-            renderAdminDashboard();
-        }).catch(err => {
-            if (err && err.message !== 'duplicate-pin') {
-                console.error('회원 정보 수정 실패:', err);
-                alert(t('alert.edit_user_failed'));
-            }
-        });
+            }).then(() => renderAdminDashboard())
+              .catch(err => { if (err && err.message !== 'duplicate-pin') { console.error('회원 정보 수정 실패:', err); alert(t('alert.edit_user_failed')); } });
+        };
+        const handleCancel = () => close();
+        const handleKey = (e) => { if (e.key === 'Enter') handleOk(); if (e.key === 'Escape') handleCancel(); };
+        const cleanup = () => {
+            okBtn.removeEventListener('click', handleOk);
+            cancelBtn.removeEventListener('click', handleCancel);
+            overlay.removeEventListener('keydown', handleKey);
+        };
+        okBtn.addEventListener('click', handleOk);
+        cancelBtn.addEventListener('click', handleCancel);
+        overlay.addEventListener('keydown', handleKey);
     }
 
     function deleteAdminUser(pin, name) {
@@ -4179,12 +4187,22 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         clubs.sort((a, b) => a[1].name.localeCompare(b[1].name)).forEach(([clubId, club]) => {
+            const _thisYear = new Date().getFullYear();
             const spent = lastHistoryList
                 .filter(entry => entry.clubName === club.name)
                 .reduce((sum, entry) => sum + (entry.finalSupportAmount || 0), 0);
+            // 상품비: globalHistory 기준으로 올해 실제 사용액 계산 (clubRegistry.prizeUsed 무시)
+            const prizeUsed = lastHistoryList
+                .filter(entry => {
+                    if (!entry || entry.clubName !== club.name) return false;
+                    const d = entry.settlementDate
+                        ? new Date(entry.settlementDate + 'T00:00:00')
+                        : (entry.date ? new Date(entry.date) : new Date(entry.id));
+                    return d.getFullYear() === _thisYear;
+                })
+                .reduce((sum, entry) => sum + (entry.prizeCost || 0), 0);
             const budget = club.budget || 0;
             const priorUsed = club.priorUsed || 0;
-            const prizeUsed = club.prizeUsed || 0;
             const prizeLimit = AppState.rules.prizeLimit || 500000;
             const remaining = budget - priorUsed - spent;
             const row = document.createElement('div');
@@ -4965,6 +4983,28 @@ document.addEventListener('DOMContentLoaded', () => {
                     Promise.all(tasks).then(() => {
                         cachedDeletedIds[String(id)] = true; // 즉시 메모리 캐시에 반영
                         lastHistoryList = lastHistoryList.filter(e => String(e.id) !== String(id));
+
+                        // 삭제된 항목의 클럽 상품비 누적액을 globalHistory 기준으로 재계산 후 Firebase 갱신
+                        const _year = new Date().getFullYear();
+                        const _clubName = entry.clubName;
+                        const _clubId   = entry.clubId;
+                        const _newPrize = lastHistoryList
+                            .filter(e => {
+                                if (!e || e.clubName !== _clubName) return false;
+                                const d = e.settlementDate
+                                    ? new Date(e.settlementDate + 'T00:00:00')
+                                    : (e.date ? new Date(e.date) : new Date(e.id));
+                                return d.getFullYear() === _year;
+                            })
+                            .reduce((s, e) => s + (e.prizeCost || 0), 0);
+                        const _regEntry = _clubId
+                            ? AppState.clubRegistry[_clubId]
+                            : Object.values(AppState.clubRegistry).find(c => c.name === _clubName);
+                        if (_regEntry && firebaseDb) {
+                            _regEntry.prizeUsed = _newPrize;
+                            AppState.saveClubRegistry();
+                        }
+
                         renderAdminHistory(lastHistoryList);
                         renderAllCharts(lastHistoryList);
                         updateChartsBudgetStats(lastHistoryList);
