@@ -3951,16 +3951,22 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function deleteAdminUser(pin, name) {
-        if (!confirm(getLang() === 'en' ? `Delete user '${name}' (${pin})? This cannot be undone.` : `'${name}' (${pin}) 회원을 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`)) return;
-        Promise.all([
-            firebaseDb.ref(`users/${pin}`).remove(),
-            firebaseDb.ref(`settlements/${pin}`).remove()
-        ]).then(() => {
-            renderAdminDashboard();
-        }).catch(err => {
-            console.error('회원 삭제 실패:', err);
-            alert(t('alert.delete_user_failed'));
-        });
+        showConfirmModal(
+            getLang() === 'en'
+                ? `Delete user '${name}' (${pin})?\nThis cannot be undone.`
+                : `'${name}' (${pin}) 회원을 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`,
+            () => {
+                Promise.all([
+                    firebaseDb.ref(`users/${pin}`).remove(),
+                    firebaseDb.ref(`settlements/${pin}`).remove()
+                ]).then(() => {
+                    renderAdminDashboard();
+                }).catch(err => {
+                    console.error('회원 삭제 실패:', err);
+                    alert(t('alert.delete_user_failed'));
+                });
+            }
+        );
     }
 
     // 요청사항 목록을 모달에 렌더링하고, 리스트 버튼 배지를 갱신
@@ -4057,11 +4063,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 userCount++;
                 const user = users[pin];
                 const dateStr = user.registeredAt ? new Date(user.registeredAt).toLocaleDateString() : '-';
+                const lastLoginStr = user.lastLoginAt
+                    ? new Date(user.lastLoginAt).toLocaleString('ko-KR', {year:'2-digit',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'})
+                    : '-';
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
                     <td><strong>${AppState.escapeHtml(user.name)}</strong></td>
                     <td><code>${AppState.escapeHtml(pin)}</code></td>
                     <td><span style="font-size:0.8rem; color:var(--text-muted);">${dateStr}</span></td>
+                    <td><span style="font-size:0.78rem; color:var(--text-muted);">${lastLoginStr}</span></td>
                     <td style="white-space:nowrap;">
                         <button class="btn-edit-user btn-secondary" data-pin="${AppState.escapeHtml(pin)}" data-name="${AppState.escapeHtml(user.name)}" style="padding:0.3rem 0.6rem; font-size:0.78rem;">수정</button>
                         <button class="btn-delete-user btn-text-danger" data-pin="${AppState.escapeHtml(pin)}" data-name="${AppState.escapeHtml(user.name)}" style="padding:0.3rem 0.6rem; font-size:0.78rem;">삭제</button>
