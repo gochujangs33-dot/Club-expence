@@ -518,6 +518,17 @@ const AppState = {
                 this.isLoggedIn = true;
                 this.currentPin = pin;
                 this.userName = "관리자";
+                // 관리자 최근 접속 시각 읽기 후 갱신
+                this.firebaseDb.ref('users/000000/lastLoginAt').once('value').then(snap => {
+                    this.prevLastLoginAt = snap.val() || null;
+                    this.firebaseDb.ref('users/000000/lastLoginAt').set(Date.now()).catch(() => {});
+                    const el = document.getElementById('last-login-info');
+                    if (el && el.style.display === 'block') {
+                        el.textContent = this.prevLastLoginAt
+                            ? `최근 접속: ${new Date(this.prevLastLoginAt).toLocaleString('ko-KR')}`
+                            : '최근 접속: 첫 번째 로그인';
+                    }
+                }).catch(() => {});
                 fetch('./lib/employee_directory.json')
                     .then(res => res.json())
                     .then(list => this.bulkImportDirectory(list))
@@ -538,6 +549,10 @@ const AppState = {
                         return;
                     }
                     this.userName = userData.name;
+                    this.prevLastLoginAt = userData.lastLoginAt || null;
+                    // 현재 접속 시각 기록
+                    this.firebaseDb.ref(`users/${pin}/lastLoginAt`).set(Date.now())
+                        .catch(() => {});
 
                     this.firebaseDb.ref(`settlements/${pin}`).once('value')
                         .then(snapshot => {
@@ -2183,9 +2198,15 @@ const AppState = {
         const finalPerPersonSelfPay = this.memberCount > 0 ? finalTotalSelfPay / this.memberCount : result.perPersonSelfPay;
         const finalSelfPayRatio = result.totalCost > 0 ? finalTotalSelfPay / result.totalCost : 0;
 
+        // 사용자가 지정한 정산 날짜 (미입력 시 오늘)
+        const settleDateInput = document.getElementById('settlement-date-input');
+        const settleDateVal   = settleDateInput ? settleDateInput.value : '';
+        const settlementDate  = settleDateVal || new Date().toISOString().slice(0, 10);
+
         const newHistoryItem = {
             id: Date.now(),
             date: new Date().toISOString(),
+            settlementDate,
             creatorPin: this.currentPin || "offline",
             creatorName: this.userName || "오프라인 사용자",
             clubName: this.clubName || "기본 클럽",
@@ -2234,6 +2255,8 @@ const AppState = {
         this.eventPhoto = null;
         this.editingItemId = null;
         this.editingAttendeeId = null;
+        const _sdi = document.getElementById('settlement-date-input');
+        if (_sdi) _sdi.value = new Date().toISOString().slice(0, 10);
 
         this.save();
         this.render();
@@ -2305,10 +2328,16 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('expense-personal-amount-input').value = '';
             document.getElementById('prev-prize-input').value = 0;
             if (typeof updateCardTypeUI === 'function') updateCardTypeUI();
+            const settleDateEl = document.getElementById('settlement-date-input');
+            if (settleDateEl) settleDateEl.value = new Date().toISOString().slice(0, 10);
             AppState.save();
             AppState.render();
         });
     }
+
+    // 정산 날짜 입력 필드 오늘 날짜로 초기화
+    const settleDateEl = document.getElementById('settlement-date-input');
+    if (settleDateEl) settleDateEl.value = new Date().toISOString().slice(0, 10);
 
     // PIN 키패드 클릭이 항상 동작하도록 가장 먼저 위임 방식으로 등록
     // (이후 초기화 코드에서 오류가 발생해도 키패드 입력은 막히지 않음)
@@ -3581,6 +3610,13 @@ document.addEventListener('DOMContentLoaded', () => {
                         logoutBtn.style.display = 'inline-block';
                         loginBtn.style.display = 'none';
                         resetPinInput();
+                        const lastLoginEl = document.getElementById('last-login-info');
+                        if (lastLoginEl) {
+                            lastLoginEl.textContent = AppState.prevLastLoginAt
+                                ? `최근 접속: ${new Date(AppState.prevLastLoginAt).toLocaleString('ko-KR')}`
+                                : '최근 접속: 첫 번째 로그인';
+                            lastLoginEl.style.display = 'block';
+                        }
 
                         // Admin tab check
                         setAdminMode(pin === "000000");
@@ -4771,7 +4807,9 @@ document.addEventListener('DOMContentLoaded', () => {
         let lastMonthKey = null;
         filtered.forEach(entry => {
             if (!selectedClub) {
-                const d = entry.date ? new Date(entry.date) : new Date(entry.id);
+                const d = entry.settlementDate
+                    ? new Date(entry.settlementDate + 'T00:00:00')
+                    : (entry.date ? new Date(entry.date) : new Date(entry.id));
                 const monthKey = `${d.getFullYear()}년 ${d.getMonth() + 1}월`;
                 if (monthKey !== lastMonthKey) {
                     lastMonthKey = monthKey;
@@ -4824,7 +4862,13 @@ document.addEventListener('DOMContentLoaded', () => {
                         ${editedBadgeAdmin}
                     </div>
                     <div style="display:flex;align-items:center;gap:0.4rem;">
-                        <span class="history-date">${new Date(entry.id).toLocaleString()}</span>
+                        <span class="history-date">${entry.settlementDate
+                            ? (() => {
+                                const [y,m,d] = entry.settlementDate.split('-');
+                                const savedTime = new Date(entry.id).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});
+                                return `${y}년 ${Number(m)}월 ${Number(d)}일 (저장 ${savedTime})`;
+                              })()
+                            : new Date(entry.id).toLocaleString()}</span>
                         <button class="btn-edit-history-admin" data-id="${entry.id}" style="font-size:0.75rem;padding:0.2rem 0.6rem;background:rgba(99,102,241,0.15);border:1px solid rgba(99,102,241,0.4);color:#a5b4fc;border-radius:0.3rem;cursor:pointer;white-space:nowrap;">✏️ ${t('btn.edit')}</button>
                         <button class="btn-delete-history btn-text-danger" data-id="${entry.id}" style="padding:0.25rem 0.5rem; font-size:0.75rem;">${t('btn.delete')}</button>
                     </div>
@@ -4870,9 +4914,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 const id = btn.getAttribute('data-id');
                 const entry = historyList.find(e => String(e.id) === String(id));
                 if (!entry) return;
-                if (!confirm(getLang() === 'en'
-                    ? `Delete this record? Attendee counts (${entry.memberCount} persons) will be decreased.`
-                    : `이 정산 기록을 삭제하시겠습니까?\n참석자 ${entry.memberCount}명의 누적 참석 횟수도 함께 차감됩니다.`)) return;
+                showConfirmModal(
+                    getLang() === 'en'
+                        ? `Delete this record?\nAttendee counts (${entry.memberCount} persons) will be decreased.`
+                        : `이 정산 기록을 삭제하시겠습니까?\n참석자 ${entry.memberCount}명의 누적 참석 횟수도 함께 차감됩니다.`,
+                    () => {
 
                 if (entry.attendees) {
                     entry.attendees.forEach(att => {
@@ -4915,6 +4961,8 @@ document.addEventListener('DOMContentLoaded', () => {
                         renderClubManagement();
                     }).catch(() => alert(t('alert.delete_failed_network')));
                 }
+                    } // end showConfirmModal callback
+                ); // end showConfirmModal
             });
         });
 
@@ -5337,6 +5385,27 @@ function resetCorpAmount() {
 
 // 상품비 커스텀 모달 (테마 적용)
 // type: 'info' | 'warn' | 'block'
+function showConfirmModal(message, onConfirm) {
+    const overlay = document.getElementById('confirm-modal-overlay');
+    const msgEl   = document.getElementById('confirm-modal-msg');
+    const okBtn   = document.getElementById('confirm-modal-ok');
+    const cancelBtn = document.getElementById('confirm-modal-cancel');
+    if (!overlay || !msgEl) { if (confirm(message)) onConfirm && onConfirm(); return; }
+
+    msgEl.textContent = message;
+    overlay.style.display = 'flex';
+
+    const close = () => { overlay.style.display = 'none'; cleanup(); };
+    const handleOk = () => { close(); onConfirm && onConfirm(); };
+    const handleCancel = () => { close(); };
+    const cleanup = () => {
+        okBtn.removeEventListener('click', handleOk);
+        cancelBtn.removeEventListener('click', handleCancel);
+    };
+    okBtn.addEventListener('click', handleOk);
+    cancelBtn.addEventListener('click', handleCancel);
+}
+
 function showPrizeModal(message, onOk, type) {
     const overlay = document.getElementById('prize-modal-overlay');
     const msgEl = document.getElementById('prize-modal-msg');
