@@ -3732,7 +3732,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // 활성 탭이 더 이상 보이지 않으면 기본 탭으로 전환
         const activeBtn = document.querySelector('.tab-nav .tab-btn.active');
         if (!activeBtn || activeBtn.classList.contains('hidden')) {
-            const fallbackId = isAdmin ? 'tab-club-history' : 'tab-settlement';
+            const fallbackId = isAdmin ? 'tab-admin' : 'tab-settlement';
             document.querySelectorAll('.tab-nav .tab-btn').forEach(b => b.classList.remove('active'));
             document.querySelectorAll('.tab-pane').forEach(p => p.classList.add('hidden'));
             const fallbackBtn = document.querySelector(`[data-tab="${fallbackId}"]`);
