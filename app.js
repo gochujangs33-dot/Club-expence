@@ -2549,6 +2549,18 @@ document.addEventListener('DOMContentLoaded', () => {
             btn.classList.add('active');
             const tabId = btn.getAttribute('data-tab');
             document.getElementById(tabId).classList.remove('hidden');
+
+            // 차트 탭 전환 시: 숨겨진 상태에서 렌더링 불가 → 탭이 보인 후 재렌더
+            if (tabId === 'tab-charts' && typeof renderAllCharts === 'function') {
+                requestAnimationFrame(() => {
+                    renderAllCharts(lastHistoryList || []);
+                    if (typeof updateChartsBudgetStats === 'function') updateChartsBudgetStats(lastHistoryList || []);
+                });
+            }
+            // 대시보드 탭 전환 시: 관리자 대시보드 갱신
+            if (tabId === 'tab-admin' && typeof renderAdminDashboard === 'function') {
+                renderAdminDashboard();
+            }
         });
     });
 
@@ -4439,8 +4451,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const spendByMonthClub = {};
 
         historyList.forEach(entry => {
-            const d = entry.date ? new Date(entry.date) : null;
-            const monthKey = d ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` : '알 수 없음';
+            const d = entry.settlementDate
+                ? new Date(entry.settlementDate + 'T00:00:00')
+                : (entry.date ? new Date(entry.date) : new Date(entry.id));
+            const monthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
             const club = entry.clubName || '기본 클럽';
             monthSet.add(monthKey);
             clubNames.add(club);
@@ -4660,8 +4674,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const byMonth = {};
         (historyList || []).forEach(entry => {
-            const d = entry.date ? new Date(entry.date) : null;
-            const key = d ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` : '알 수 없음';
+            const d = entry.settlementDate
+                ? new Date(entry.settlementDate + 'T00:00:00')
+                : (entry.date ? new Date(entry.date) : new Date(entry.id));
+            const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
             if (!byMonth[key]) byMonth[key] = { selfPay: 0, support: 0 };
             const finalSelfPay = (entry.finalSelfPay !== undefined && entry.finalSelfPay !== null) ? entry.finalSelfPay : (entry.totalSelfPay || 0);
             byMonth[key].selfPay += finalSelfPay;
