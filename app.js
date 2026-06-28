@@ -1478,8 +1478,12 @@ const AppState = {
                 button.addEventListener('click', (e) => {
                     e.stopPropagation();
                     const id = parseInt(button.getAttribute('data-id'), 10);
-                    this.deleteExpense(id);
-                    if (typeof window._syncPrizeTotalFromItems === 'function') window._syncPrizeTotalFromItems();
+                    const item = this.expenseItems.find(i => i.id === id);
+                    const label = item ? item.description : '이 항목';
+                    showConfirmModal(`'${label}'을(를) 삭제하시겠습니까?`, () => {
+                        this.deleteExpense(id);
+                        if (typeof window._syncPrizeTotalFromItems === 'function') window._syncPrizeTotalFromItems();
+                    });
                 });
             });
         }
@@ -1533,7 +1537,11 @@ const AppState = {
                     button.addEventListener('click', (e) => {
                         e.stopPropagation();
                         const id = parseInt(button.getAttribute('data-id'), 10);
-                        this.deleteAttendee(id);
+                        const att = this.attendees.find(a => a.id === id);
+                        const label = att ? att.name : '이 참석자';
+                        showConfirmModal(`'${label}'을(를) 참석자 목록에서 삭제하시겠습니까?`, () => {
+                            this.deleteAttendee(id);
+                        });
                     });
                 });
             }
@@ -1654,7 +1662,9 @@ const AppState = {
                         e.stopPropagation();
                         const name = button.getAttribute('data-name');
                         const id = button.getAttribute('data-id');
-                        if (name) this.deleteFromDirectory(name, id);
+                        if (name) showConfirmModal(`'${name}'을(를) 전사원 명부에서 삭제하시겠습니까?`, () => {
+                            this.deleteFromDirectory(name, id);
+                        });
                     });
                 });
             }
@@ -4402,10 +4412,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 const clubId = btn.getAttribute('data-id');
                 const club = AppState.clubRegistry[clubId];
                 if (!club) return;
-                if (confirm(getLang() === 'en' ? `Delete club '${club.name}'?` : `'${club.name}' 클럽을 삭제하시겠습니까?`)) {
+                const msg = getLang() === 'en' ? `Delete club '${club.name}'?` : `'${club.name}' 클럽을 삭제하시겠습니까?`;
+                showConfirmModal(msg, () => {
                     AppState.deleteClub(clubId);
                     renderClubManagement();
-                }
+                });
             });
         });
     }
