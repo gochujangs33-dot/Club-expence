@@ -50,7 +50,7 @@ const DefaultRules = {
 9. **최종 지원금** `finalSupportAmount` = `totalCost - totalSelfPay`
 
 ### 경고 메시지 (warnings)
-- 상품비(`prizeCost`) > 0 인데 `memberCount < 20` → "정회원 20명 이상 참석 시에만 상품비 사용이 가능합니다."
+- 상품비(`prizeCost`) > 0 인데 `memberCount < 10` → "정회원 10명 이상 참석 시에만 상품비 사용이 가능합니다."
 - `prizeCost + previousPrizeTotal > 500,000` → 초과 금액 경고
 - `facilityCost > 1,000,000` → 별도 협의 필요 경고
 
