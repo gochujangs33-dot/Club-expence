@@ -3848,15 +3848,19 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('register-error-text').classList.add('hidden');
     });
 
-    // 앱 캐시 초기화 — 구버전 캐시 강제 삭제 후 최신 버전 재로드
+    // 앱 캐시 초기화 — 구버전 캐시 강제 삭제 후 최신 버전 재로드 (1회 클릭으로 완료)
     const clearCacheBtn = document.getElementById('clear-cache-btn');
     if (clearCacheBtn) {
         clearCacheBtn.addEventListener('click', async () => {
             clearCacheBtn.textContent = '초기화 중...';
             clearCacheBtn.disabled = true;
+            // 리로드 후 SW_UPDATED 배너를 자동 억제하기 위한 플래그
+            sessionStorage.setItem('cache_just_cleared', '1');
             try {
                 if ('serviceWorker' in navigator) {
                     const regs = await navigator.serviceWorker.getRegistrations();
+                    // 대기 중인 워커가 있으면 skipWaiting 먼저 호출
+                    regs.forEach(r => { if (r.waiting) r.waiting.postMessage({ action: 'skipWaiting' }); });
                     await Promise.all(regs.map(r => r.unregister()));
                 }
                 if ('caches' in window) {
