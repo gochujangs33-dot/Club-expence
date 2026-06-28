@@ -3848,6 +3848,59 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('register-error-text').classList.add('hidden');
     });
 
+    // 변경이력 모달
+    const CHANGELOG = [
+        { ver: '1.6.155', date: '2026.06.28', items: ['로그인 화면 버전·업데이트 날짜 표시 (PIN 안내 문구 제거)'] },
+        { ver: '1.6.154', date: '2026.06.28', items: ['캐시 초기화 버튼 1회 클릭으로 업데이트 자동 완료'] },
+        { ver: '1.6.153', date: '2026.06.28', items: ['클럽 배정 예산 + 전체 총 예산 이중 차단 강화', 'usedBudget Firebase 동기화로 다중 사용자 예산 정확화'] },
+        { ver: '1.6.152', date: '2026.06.28', items: ['상품비 누적액 Firebase 자동 교정 (관리자 화면 열 때 불일치 수정)'] },
+        { ver: '1.6.151', date: '2026.06.28', items: ['차트 탭 전환 시 재렌더 (빈 차트 버그 수정)', '차트 집계를 settlementDate 기준으로 통일'] },
+        { ver: '1.6.150', date: '2026.06.28', items: ['관리자 로그인 시 첫 화면이 대시보드 탭으로 자동 전환'] },
+        { ver: '1.6.149', date: '2026.06.27', items: ['상품비 누적액을 정산이력 기준으로 동적 재계산', '회원 수정 팝업을 커스텀 모달로 교체 (이름/PIN 수정 가능)'] },
+        { ver: '1.6.148', date: '2026.06.27', items: ['가입 회원 관리 삭제 확인 팝업 추가', '회원 목록에 최근 접속일시 컬럼 추가'] },
+        { ver: '1.6.147', date: '2026.06.26', items: ['클럽별 정산이력 삭제 확인 팝업 추가', '헤더에 최근 접속일시 표시', '정산 날짜 직접 입력 가능 (소급 등록 지원)'] },
+        { ver: '1.6.146', date: '2026.06.26', items: ['클럽 예산 소진 시 비용 추가 완전 차단', '잔여 예산 초과 입력 시 팝업 경고'] },
+        { ver: '1.6.143', date: '2026.06.20', items: ['시설·장비 이사진 승인 법인카드 한도 관리자 설정 추가'] },
+        { ver: '1.6.142', date: '2026.06.20', items: ['시설·장비 사전 승인 팝업 추가', '승인 완료 시 법인카드 85,000원 한도 적용'] },
+        { ver: '1.6.137', date: '2026.06.15', items: ['삭제한 이력 재출현 완전 차단 (Tombstone)', '캐시 초기화 버튼 추가'] },
+        { ver: '1.6.135', date: '2026.06.14', items: ['클럽별 비용 지출 비교 차트 추가'] },
+        { ver: '1.6.134', date: '2026.06.14', items: ['상품비 클럽별 누적 관리 + 연간 한도 관리자 설정'] },
+        { ver: '1.6.125', date: '2026.06.10', items: ['상품비 누적액 자동 계산 + 인원/한도 검증 팝업'] },
+        { ver: '1.6.120', date: '2026.06.08', items: ['비용 입력 시 법인/개인카드 금액 자동 계산'] },
+        { ver: '1.6.110', date: '2026.06.05', items: ['동명이인 사번 선택 팝업 추가', '전사원 명부 동명이인 별도 행 표시'] },
+        { ver: '1.6.90', date: '2026.05.28', items: ['관리자 설정 실시간 동기화', '정산 이력 수정 기능 추가'] },
+        { ver: '1.6.85', date: '2026.05.25', items: ['전체 UI 한국어/영어 번역 지원', '로그인 화면 언어 선택 버튼 추가'] },
+        { ver: '1.6.75', date: '2026.05.22', items: ['클럽별 정산이력 정산인 선택 드롭다운 (2명 이상일 때만 표시)'] },
+        { ver: '1.6.54', date: '2026.05.15', items: ['차트 탭 추가: 월별 추이, 예산 소진율, 카테고리 비중, 자부담 추이'] },
+    ];
+
+    (function initChangelog() {
+        const overlay = document.getElementById('changelog-modal-overlay');
+        const content = document.getElementById('changelog-content');
+        const closeBtn = document.getElementById('changelog-close-btn');
+        const verEl    = document.getElementById('app-version-info');
+        if (!overlay || !content || !verEl) return;
+
+        function openChangelog() {
+            content.innerHTML = CHANGELOG.map(entry => `
+                <div style="margin-bottom:1rem; padding-bottom:1rem; border-bottom:1px solid rgba(139,92,246,0.15);">
+                    <div style="display:flex; align-items:baseline; gap:0.5rem; margin-bottom:0.35rem;">
+                        <span style="font-size:0.85rem; font-weight:700; color:#a78bfa;">v${entry.ver}</span>
+                        <span style="font-size:0.7rem; color:var(--text-muted);">${entry.date}</span>
+                    </div>
+                    <ul style="margin:0; padding-left:1.1rem; display:flex; flex-direction:column; gap:0.2rem;">
+                        ${entry.items.map(i => `<li style="font-size:0.78rem; color:#cbd5e1; line-height:1.45;">${i}</li>`).join('')}
+                    </ul>
+                </div>
+            `).join('');
+            overlay.style.display = 'flex';
+        }
+
+        verEl.addEventListener('click', openChangelog);
+        closeBtn.addEventListener('click', () => { overlay.style.display = 'none'; });
+        overlay.addEventListener('click', e => { if (e.target === overlay) overlay.style.display = 'none'; });
+    })();
+
     // 앱 캐시 초기화 — 구버전 캐시 강제 삭제 후 최신 버전 재로드 (1회 클릭으로 완료)
     const clearCacheBtn = document.getElementById('clear-cache-btn');
     if (clearCacheBtn) {

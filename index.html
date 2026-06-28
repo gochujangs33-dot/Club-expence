@@ -936,7 +936,7 @@
                 <div class="card-header" style="justify-content: center; text-align: center; flex-direction: column; gap: 0.5rem; border-bottom: none; padding-bottom: 0; padding-top: 0;">
                     <span class="card-icon" style="font-size: 2.2rem; margin: 0;">🔒</span>
                     <h2 data-i18n="login.title" style="font-size: 1.35rem; font-family: 'Outfit', sans-serif;">클럽 정산 로그인</h2>
-                    <p id="app-version-info" style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem; text-align: center; letter-spacing: 0.02em;">버전 확인 중...</p>
+                    <p id="app-version-info" style="font-size: 0.75rem; color: rgba(139,92,246,0.7); margin-top: 0.25rem; text-align: center; letter-spacing: 0.02em; cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px;" title="클릭하면 업데이트 내역을 볼 수 있습니다">버전 확인 중...</p>
                 </div>
                 <div class="card-body" style="padding-top: 0.5rem; gap: 1rem;">
                     <div class="pin-display-container">
@@ -1006,6 +1006,20 @@
             <div id="prize-modal-title" style="font-size:0.72rem; color:rgba(255,255,255,0.4); text-align:center; margin-bottom:0.45rem; letter-spacing:0.04em;">상품비 안내</div>
             <p id="prize-modal-msg" style="font-size:0.9rem; font-weight:700; text-align:center; margin:0 0 0.85rem; line-height:1.55; white-space:pre-line;"></p>
             <button id="prize-modal-ok" style="display:block; margin:0 auto; padding:0.42rem 2rem; background:rgba(255,255,255,0.07); border:1px solid rgba(255,255,255,0.15); color:rgba(255,255,255,0.75); border-radius:8px; font-size:0.82rem; font-weight:600; cursor:pointer; letter-spacing:0.03em;">확인</button>
+        </div>
+    </div>
+
+    <!-- 변경이력 모달 -->
+    <div id="changelog-modal-overlay" style="display:none; position:fixed; inset:0; z-index:10300; background:rgba(0,0,0,0.8); backdrop-filter:blur(8px); align-items:center; justify-content:center;">
+        <div style="background:linear-gradient(160deg,#0d0a18,#120e22); border:1.5px solid rgba(139,92,246,0.45); border-radius:20px; padding:1.4rem 1.2rem 1.2rem; max-width:380px; width:calc(100% - 2rem); max-height:80vh; display:flex; flex-direction:column; box-shadow:0 0 40px rgba(139,92,246,0.18), 0 12px 48px rgba(0,0,0,0.7);">
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:0.9rem; flex-shrink:0;">
+                <div style="display:flex; align-items:center; gap:0.5rem;">
+                    <span style="font-size:1.3rem;">📋</span>
+                    <span style="font-size:1rem; font-weight:700; color:#e2e8f0;">업데이트 내역</span>
+                </div>
+                <button id="changelog-close-btn" style="background:rgba(139,92,246,0.15); border:1px solid rgba(139,92,246,0.3); color:#a78bfa; font-size:1rem; border-radius:50%; width:2rem; height:2rem; cursor:pointer; display:flex; align-items:center; justify-content:center; line-height:1;">✕</button>
+            </div>
+            <div id="changelog-content" style="overflow-y:auto; flex:1; padding-right:0.3rem;"></div>
         </div>
     </div>
 
