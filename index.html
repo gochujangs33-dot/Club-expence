@@ -936,7 +936,7 @@
                 <div class="card-header" style="justify-content: center; text-align: center; flex-direction: column; gap: 0.5rem; border-bottom: none; padding-bottom: 0; padding-top: 0;">
                     <span class="card-icon" style="font-size: 2.2rem; margin: 0;">🔒</span>
                     <h2 data-i18n="login.title" style="font-size: 1.35rem; font-family: 'Outfit', sans-serif;">클럽 정산 로그인</h2>
-                    <p data-i18n="login.subtitle" style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.1rem; text-align: center;">데이터 저장 및 실시간 동기화를 위해<br>6자리 PIN 번호를 입력하세요.</p>
+                    <p id="app-version-info" style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem; text-align: center; letter-spacing: 0.02em;">버전 확인 중...</p>
                 </div>
                 <div class="card-body" style="padding-top: 0.5rem; gap: 1rem;">
                     <div class="pin-display-container">
@@ -1081,6 +1081,20 @@
             return false;
         }
 
+        // 로그인 화면 버전 표시
+        function updateVersionDisplay(ver, date) {
+            const el = document.getElementById('app-version-info');
+            if (!el) return;
+            el.textContent = date ? `v${ver}  ·  ${date} 업데이트` : `v${ver}`;
+        }
+
+        // 페이지 로드 시 localStorage에서 버전 정보 즉시 표시
+        (function() {
+            const ver  = localStorage.getItem('app_current_version');
+            const date = localStorage.getItem('app_current_version_date');
+            if (ver) updateVersionDisplay(ver, date);
+        })();
+
         function showUpdateBanner(worker) {
             if (wasCacheJustCleared()) return; // 캐시 초기화 후 배너 억제
             pendingWorker = worker;
@@ -1110,8 +1124,17 @@
         // 서비스 워커에서 SW_UPDATED 메시지 수신 (activate 직후)
         navigator.serviceWorker.addEventListener('message', event => {
             if (event.data?.type === 'SW_UPDATED') {
-                if (wasCacheJustCleared()) return; // 캐시 초기화 후 배너 억제
                 const version = event.data.version;
+                // 버전 정보 항상 저장·표시 (배너 억제와 무관)
+                if (version) {
+                    const today = new Date().toLocaleDateString('ko-KR', {year:'numeric', month:'2-digit', day:'2-digit'})
+                        .replace(/\. /g, '.').replace(/\.$/, '');
+                    const isNew = localStorage.getItem('app_current_version') !== version;
+                    localStorage.setItem('app_current_version', version);
+                    if (isNew) localStorage.setItem('app_current_version_date', today);
+                    updateVersionDisplay(version, localStorage.getItem('app_current_version_date'));
+                }
+                if (wasCacheJustCleared()) return; // 캐시 초기화 후 배너 억제
                 document.getElementById('update-banner').dataset.version = version || '';
                 document.getElementById('update-banner').classList.remove('hidden');
             }
