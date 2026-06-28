@@ -1086,14 +1086,11 @@
     if ('serviceWorker' in navigator) {
         let pendingWorker = null;
 
-        // 캐시 초기화 직후 리로드인지 확인 — 해당 경우 배너 불필요(페이지가 이미 최신)
-        function wasCacheJustCleared() {
-            if (sessionStorage.getItem('cache_just_cleared') === '1') {
-                sessionStorage.removeItem('cache_just_cleared');
-                return true;
-            }
-            return false;
-        }
+        // 캐시 초기화 직후 리로드인지 확인 — 페이지 로드 시 한 번만 읽어 변수로 보관
+        // (showUpdateBanner와 SW_UPDATED 양쪽에서 removeItem하면 한쪽이 놓침)
+        const _cacheJustCleared = sessionStorage.getItem('cache_just_cleared') === '1';
+        if (_cacheJustCleared) sessionStorage.removeItem('cache_just_cleared');
+        function wasCacheJustCleared() { return _cacheJustCleared; }
 
         // 로그인 화면 버전 표시
         function updateVersionDisplay(ver, date) {

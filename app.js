@@ -719,12 +719,16 @@ const AppState = {
             prizeUsed: prizeUsed !== undefined ? Math.max(0, prizeUsed) : (existing.prizeUsed || 0),
             usedBudget: existing.usedBudget || 0
         };
-        this.saveClubRegistry();
+        if (this.firebaseDb) {
+            this.firebaseDb.ref(`clubRegistry/${clubId}`).set(this.clubRegistry[clubId]).catch(err => console.error("클럽 저장 실패:", err));
+        }
     },
 
     deleteClub(clubId) {
         delete this.clubRegistry[clubId];
-        this.saveClubRegistry();
+        if (this.firebaseDb) {
+            this.firebaseDb.ref(`clubRegistry/${clubId}`).remove().catch(err => console.error("클럽 삭제 실패:", err));
+        }
     },
 
     // 클럽명 변경 시 globalHistory + 모든 유저 settlementHistory의 clubName 일괄 갱신
@@ -2191,6 +2195,10 @@ const AppState = {
     },
 
     finalizeSettlement(skipConfirm = false) {
+        if (this.editingHistoryId) {
+            alert('수정 모드에서는 엑셀 다운로드 시 이력이 업데이트됩니다. 수정을 취소하려면 "수정 취소" 버튼을 누르세요.');
+            return;
+        }
         if (!skipConfirm && !confirm(t('confirm.finalize_settlement'))) return;
 
         const result = SettlementCalculator.calculate(
@@ -2240,7 +2248,7 @@ const AppState = {
         // Update used budget (사용자가 수정한 자부담 기준 실제 지원금과 동일한 값 사용)
         this.usedBudget = Math.max(0, this.usedBudget + newHistoryItem.finalSupportAmount);
 
-        // 클럽 레지스트리 업데이트: usedBudget + prizeUsed 동시 갱신
+        // 클럽 레지스트리 업데이트: usedBudget + prizeUsed 동시 갱신 (경쟁 조건 방지를 위해 해당 클럽만 update)
         if (this.clubId && this.clubRegistry[this.clubId]) {
             const club = this.clubRegistry[this.clubId];
             club.usedBudget = (club.usedBudget || 0) + newHistoryItem.finalSupportAmount;
@@ -2248,7 +2256,12 @@ const AppState = {
             if (prizeThisSession > 0) {
                 club.prizeUsed = (club.prizeUsed || 0) + prizeThisSession;
             }
-            this.saveClubRegistry();
+            if (this.firebaseDb) {
+                this.firebaseDb.ref(`clubRegistry/${this.clubId}`).update({
+                    usedBudget: club.usedBudget,
+                    prizeUsed: club.prizeUsed || 0
+                }).catch(() => {});
+            }
         }
 
         // Reset current session
@@ -2557,16 +2570,16 @@ document.addEventListener('DOMContentLoaded', () => {
             const tabId = btn.getAttribute('data-tab');
             document.getElementById(tabId).classList.remove('hidden');
 
+            // 관리자 탭 전환 시: globalHistory 최신화 (대시보드·클럽이력·차트 공통)
+            if ((tabId === 'tab-admin' || tabId === 'tab-club-history' || tabId === 'tab-charts') && typeof renderAdminDashboard === 'function') {
+                renderAdminDashboard();
+            }
             // 차트 탭 전환 시: 숨겨진 상태에서 렌더링 불가 → 탭이 보인 후 재렌더
             if (tabId === 'tab-charts' && typeof renderAllCharts === 'function') {
                 requestAnimationFrame(() => {
                     renderAllCharts(lastHistoryList || []);
                     if (typeof updateChartsBudgetStats === 'function') updateChartsBudgetStats(lastHistoryList || []);
                 });
-            }
-            // 대시보드 탭 전환 시: 관리자 대시보드 갱신
-            if (tabId === 'tab-admin' && typeof renderAdminDashboard === 'function') {
-                renderAdminDashboard();
             }
         });
     });
@@ -4297,9 +4310,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         clubs.sort((a, b) => a[1].name.localeCompare(b[1].name)).forEach(([clubId, club]) => {
             const _thisYear = new Date().getFullYear();
-            const spent = lastHistoryList
-                .filter(entry => entry.clubName === club.name)
-                .reduce((sum, entry) => sum + (entry.finalSupportAmount || 0), 0);
             // 상품비: globalHistory 기준으로 올해 실제 사용액 계산 후 Firebase에도 동기화
             const prizeUsed = lastHistoryList
                 .filter(entry => {
@@ -4330,7 +4340,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const budget = club.budget || 0;
             const priorUsed = club.priorUsed || 0;
             const prizeLimit = AppState.rules.prizeLimit || 500000;
-            const remaining = budget - priorUsed - spent;
+            const remaining = budget - priorUsed - usedBudget;
             const row = document.createElement('div');
             row.className = 'expense-row';
             row.style.cssText = 'padding:0.6rem 0.75rem; height:auto; align-items:center; flex-wrap:wrap;';
@@ -5130,10 +5140,14 @@ document.addEventListener('DOMContentLoaded', () => {
                         const _regEntry = _clubId
                             ? AppState.clubRegistry[_clubId]
                             : Object.values(AppState.clubRegistry).find(c => c.name === _clubName);
-                        if (_regEntry && firebaseDb) {
+                        const _regClubId = _clubId || Object.keys(AppState.clubRegistry).find(k => AppState.clubRegistry[k] === _regEntry);
+                        if (_regEntry && _regClubId && firebaseDb) {
                             _regEntry.prizeUsed  = _newPrize;
                             _regEntry.usedBudget = _newUsed;
-                            AppState.saveClubRegistry();
+                            firebaseDb.ref(`clubRegistry/${_regClubId}`).update({
+                                prizeUsed:  _newPrize,
+                                usedBudget: _newUsed
+                            }).catch(() => {});
                         }
 
                         renderAdminHistory(lastHistoryList);
@@ -5173,22 +5187,6 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         });
     }
-
-    // Tab navigation switching logic
-    document.querySelectorAll('.tab-nav .tab-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            document.querySelectorAll('.tab-nav .tab-btn').forEach(b => b.classList.remove('active'));
-            document.querySelectorAll('.tab-pane').forEach(p => p.classList.add('hidden'));
-
-            btn.classList.add('active');
-            const tabId = btn.getAttribute('data-tab');
-            document.getElementById(tabId).classList.remove('hidden');
-
-            if (tabId === 'tab-admin' || tabId === 'tab-club-history' || tabId === 'tab-charts') {
-                renderAdminDashboard();
-            }
-        });
-    });
 
     // 만약 Firebase DB가 초기화되어 있지 않으면 로그인 버튼 숨기고 기본 오프라인 모드로 설정
     if (!firebaseDb) {
@@ -5564,27 +5562,33 @@ function resetCorpAmount() {
     corpAmountInput.value = corp > 0 ? formatAmount(corp) : '';
 }
 
-// 상품비 커스텀 모달 (테마 적용)
-// type: 'info' | 'warn' | 'block'
+// 확인 커스텀 모달 (테마 적용)
 function showConfirmModal(message, onConfirm) {
-    const overlay = document.getElementById('confirm-modal-overlay');
-    const msgEl   = document.getElementById('confirm-modal-msg');
-    const okBtn   = document.getElementById('confirm-modal-ok');
+    const overlay   = document.getElementById('confirm-modal-overlay');
+    const msgEl     = document.getElementById('confirm-modal-msg');
+    const okBtn     = document.getElementById('confirm-modal-ok');
     const cancelBtn = document.getElementById('confirm-modal-cancel');
     if (!overlay || !msgEl) { if (confirm(message)) onConfirm && onConfirm(); return; }
 
     msgEl.textContent = message;
     overlay.style.display = 'flex';
 
-    const close = () => { overlay.style.display = 'none'; cleanup(); };
-    const handleOk = () => { close(); onConfirm && onConfirm(); };
-    const handleCancel = () => { close(); };
-    const cleanup = () => {
+    const close = () => {
+        overlay.style.display = 'none';
         okBtn.removeEventListener('click', handleOk);
         cancelBtn.removeEventListener('click', handleCancel);
+        overlay.removeEventListener('click', handleOverlay);
+        document.removeEventListener('keydown', handleKey);
     };
+    const handleOk      = () => { close(); onConfirm && onConfirm(); };
+    const handleCancel  = () => close();
+    const handleOverlay = (e) => { if (e.target === overlay) close(); };
+    const handleKey     = (e) => { if (e.key === 'Escape') close(); };
+
     okBtn.addEventListener('click', handleOk);
     cancelBtn.addEventListener('click', handleCancel);
+    overlay.addEventListener('click', handleOverlay);
+    document.addEventListener('keydown', handleKey);
 }
 
 function showPrizeModal(message, onOk, type) {
