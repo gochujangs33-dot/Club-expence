@@ -1399,7 +1399,7 @@ const AppState = {
                         </div>
                     `;
                 } else {
-                    receiptControlHtml = '';
+                    receiptControlHtml = `<span style="font-size:0.7rem; color:var(--text-muted); opacity:0.6; margin-right:0.4rem;">영수증을 첨부하세요</span>`;
                 }
 
                 row.innerHTML = `
