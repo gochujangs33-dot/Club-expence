@@ -716,7 +716,8 @@ const AppState = {
             name: name.trim(),
             budget: Math.max(0, budget || 0),
             priorUsed: Math.max(0, priorUsed || 0),
-            prizeUsed: prizeUsed !== undefined ? Math.max(0, prizeUsed) : (existing.prizeUsed || 0)
+            prizeUsed: prizeUsed !== undefined ? Math.max(0, prizeUsed) : (existing.prizeUsed || 0),
+            usedBudget: existing.usedBudget || 0
         };
         this.saveClubRegistry();
     },
@@ -789,15 +790,18 @@ const AppState = {
     // 현재 연도 내 이 클럽의 정산 이력 합산으로 실제 사용금액 계산
     getClubUsedBudget() {
         const currentYear = new Date().getFullYear();
-        // priorUsed: 관리자가 설정한 이전 사용 금액 기준
-        let priorUsed = 0;
+        let regEntry = null;
         if (this.clubId && this.clubRegistry[this.clubId]) {
-            priorUsed = this.clubRegistry[this.clubId].priorUsed || 0;
+            regEntry = this.clubRegistry[this.clubId];
         } else if (this.clubName) {
-            const club = Object.values(this.clubRegistry).find(c => c.name === this.clubName);
-            priorUsed = club ? (club.priorUsed || 0) : 0;
+            regEntry = Object.values(this.clubRegistry).find(c => c.name === this.clubName) || null;
         }
-        // 이번 연도 이 클럽의 정산 확정 지원금 합산
+        const priorUsed = regEntry ? (regEntry.priorUsed || 0) : 0;
+        // 관리자가 globalHistory 기준으로 동기화한 usedBudget 우선 사용
+        if (regEntry && regEntry.usedBudget !== undefined) {
+            return priorUsed + regEntry.usedBudget;
+        }
+        // fallback: 개인 정산 이력 합산 (관리자 미동기화 상태)
         const fromHistory = (this.settlementHistory || [])
             .filter(e => {
                 if (!e || !e.date) return false;
@@ -2236,11 +2240,14 @@ const AppState = {
         // Update used budget (사용자가 수정한 자부담 기준 실제 지원금과 동일한 값 사용)
         this.usedBudget = Math.max(0, this.usedBudget + newHistoryItem.finalSupportAmount);
 
-        // 클럽 상품비 누적 업데이트 (클럽 레지스트리 기준으로 관리)
-        const prizeThisSession = result.prizeCost || 0;
-        if (prizeThisSession > 0 && this.clubId && this.clubRegistry[this.clubId]) {
+        // 클럽 레지스트리 업데이트: usedBudget + prizeUsed 동시 갱신
+        if (this.clubId && this.clubRegistry[this.clubId]) {
             const club = this.clubRegistry[this.clubId];
-            club.prizeUsed = (club.prizeUsed || 0) + prizeThisSession;
+            club.usedBudget = (club.usedBudget || 0) + newHistoryItem.finalSupportAmount;
+            const prizeThisSession = result.prizeCost || 0;
+            if (prizeThisSession > 0) {
+                club.prizeUsed = (club.prizeUsed || 0) + prizeThisSession;
+            }
             this.saveClubRegistry();
         }
 
@@ -2908,7 +2915,19 @@ document.addEventListener('DOMContentLoaded', () => {
         const corporateAmount = parseAmount(document.getElementById('expense-corporate-amount-input').value);
 
         if (description && !isNaN(amount) && amount > 0) {
-            // ── 클럽 연간 예산 잔여 확인 (EVENT / FACILITY / PRIZE 공통) ──────
+            // ── 예산 한도 확인: 클럽별 + 전체 총 예산 (EVENT / FACILITY / PRIZE 공통) ──
+            const _editingId  = AppState.editingItemId || null;
+            const _existItems = (AppState.expenseItems || []).filter(i => i.id !== _editingId);
+            const _simItems   = [..._existItems, { category, amount }];
+            const _simResult  = SettlementCalculator.calculate(
+                AppState.memberCount || 0,
+                _simItems,
+                AppState.previousPrizeTotal || 0,
+                AppState.rules
+            );
+            const _newSupport = _simResult.finalSupportAmount;
+
+            // ① 클럽 배정 예산 초과 확인
             const _clubBudget = AppState.getClubBudget ? AppState.getClubBudget() : 0;
             if (_clubBudget > 0) {
                 const _clubUsed   = AppState.getClubUsedBudget ? AppState.getClubUsedBudget() : 0;
@@ -2924,22 +2943,43 @@ document.addEventListener('DOMContentLoaded', () => {
                     );
                     return;
                 }
-
-                // 새 항목 추가 시 최종 지원금이 잔여 예산 초과 여부 확인
-                const _editingId   = AppState.editingItemId || null;
-                const _existItems  = (AppState.expenseItems || []).filter(i => i.id !== _editingId);
-                const _simItems    = [..._existItems, { category, amount }];
-                const _simResult   = SettlementCalculator.calculate(
-                    AppState.memberCount || 0,
-                    _simItems,
-                    AppState.previousPrizeTotal || 0,
-                    AppState.rules
-                );
-                if (_simResult.finalSupportAmount > _budgetLeft) {
+                if (_newSupport > _budgetLeft) {
                     showPrizeModal(
                         `입력 금액이 클럽 잔여 예산을 초과합니다.\n` +
                         `잔여 예산: ${_budgetLeft.toLocaleString()}원\n` +
-                        `추가 시 지원 예정액: ${_simResult.finalSupportAmount.toLocaleString()}원\n` +
+                        `추가 시 지원 예정액: ${_newSupport.toLocaleString()}원\n` +
+                        `금액을 줄이거나 항목을 조정해 주세요.`,
+                        null, 'block'
+                    );
+                    return;
+                }
+            }
+
+            // ② 전체 총 예산 초과 확인
+            const _totalBudget = AppState.clubTotalBudget || 0;
+            if (_totalBudget > 0) {
+                const _allUsed = Object.values(AppState.clubRegistry || {})
+                    .reduce((sum, c) => sum + (c.usedBudget || 0), 0);
+                const _allPriorUsed = Object.values(AppState.clubRegistry || {})
+                    .reduce((sum, c) => sum + (c.priorUsed || 0), 0);
+                const _totalUsed = _allPriorUsed + _allUsed;
+                const _totalLeft = Math.max(0, _totalBudget - _totalUsed);
+
+                if (_totalLeft <= 0) {
+                    showPrizeModal(
+                        `전체 클럽 총 예산이 모두 소진되었습니다.\n` +
+                        `총 예산: ${_totalBudget.toLocaleString()}원\n` +
+                        `총 사용액: ${_totalUsed.toLocaleString()}원\n` +
+                        `더 이상 비용을 추가할 수 없습니다.`,
+                        null, 'block'
+                    );
+                    return;
+                }
+                if (_newSupport > _totalLeft) {
+                    showPrizeModal(
+                        `입력 금액이 전체 클럽 총 잔여 예산을 초과합니다.\n` +
+                        `총 잔여 예산: ${_totalLeft.toLocaleString()}원\n` +
+                        `추가 시 지원 예정액: ${_newSupport.toLocaleString()}원\n` +
                         `금액을 줄이거나 항목을 조정해 주세요.`,
                         null, 'block'
                     );
@@ -4213,10 +4253,22 @@ document.addEventListener('DOMContentLoaded', () => {
                     return d.getFullYear() === _thisYear;
                 })
                 .reduce((sum, entry) => sum + (entry.prizeCost || 0), 0);
-            // Firebase 값과 다를 때만 업데이트 (유저 previousPrizeTotal 동기화)
-            if ((club.prizeUsed || 0) !== prizeUsed && firebaseDb) {
-                club.prizeUsed = prizeUsed;
-                firebaseDb.ref(`clubRegistry/${clubId}/prizeUsed`).set(prizeUsed).catch(() => {});
+            // usedBudget: 올해 globalHistory 기준 확정 지원금 합산 (유저 예산 리미트 동기화)
+            const usedBudget = lastHistoryList
+                .filter(entry => {
+                    if (!entry || entry.clubName !== club.name) return false;
+                    const d = entry.settlementDate
+                        ? new Date(entry.settlementDate + 'T00:00:00')
+                        : (entry.date ? new Date(entry.date) : new Date(entry.id));
+                    return d.getFullYear() === _thisYear;
+                })
+                .reduce((sum, entry) => sum + (entry.finalSupportAmount || 0), 0);
+            // Firebase 값과 다를 때만 업데이트 (prizeUsed + usedBudget 동시 처리)
+            const needsUpdate = (club.prizeUsed || 0) !== prizeUsed || (club.usedBudget || 0) !== usedBudget;
+            if (needsUpdate && firebaseDb) {
+                club.prizeUsed  = prizeUsed;
+                club.usedBudget = usedBudget;
+                firebaseDb.ref(`clubRegistry/${clubId}`).update({ prizeUsed, usedBudget }).catch(() => {});
             }
             const budget = club.budget || 0;
             const priorUsed = club.priorUsed || 0;
@@ -5009,20 +5061,21 @@ document.addEventListener('DOMContentLoaded', () => {
                         const _year = new Date().getFullYear();
                         const _clubName = entry.clubName;
                         const _clubId   = entry.clubId;
-                        const _newPrize = lastHistoryList
-                            .filter(e => {
-                                if (!e || e.clubName !== _clubName) return false;
-                                const d = e.settlementDate
-                                    ? new Date(e.settlementDate + 'T00:00:00')
-                                    : (e.date ? new Date(e.date) : new Date(e.id));
-                                return d.getFullYear() === _year;
-                            })
-                            .reduce((s, e) => s + (e.prizeCost || 0), 0);
+                        const _yearFiltered = lastHistoryList.filter(e => {
+                            if (!e || e.clubName !== _clubName) return false;
+                            const d = e.settlementDate
+                                ? new Date(e.settlementDate + 'T00:00:00')
+                                : (e.date ? new Date(e.date) : new Date(e.id));
+                            return d.getFullYear() === _year;
+                        });
+                        const _newPrize = _yearFiltered.reduce((s, e) => s + (e.prizeCost || 0), 0);
+                        const _newUsed  = _yearFiltered.reduce((s, e) => s + (e.finalSupportAmount || 0), 0);
                         const _regEntry = _clubId
                             ? AppState.clubRegistry[_clubId]
                             : Object.values(AppState.clubRegistry).find(c => c.name === _clubName);
                         if (_regEntry && firebaseDb) {
-                            _regEntry.prizeUsed = _newPrize;
+                            _regEntry.prizeUsed  = _newPrize;
+                            _regEntry.usedBudget = _newUsed;
                             AppState.saveClubRegistry();
                         }
 
