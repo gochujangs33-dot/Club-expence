@@ -4647,6 +4647,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
             renderAdminHistory(historyList);
             lastHistoryList = historyList;
+            // globalHistory 로드 후 클럽 관리 재렌더 — clubRegistry보다 늦게 로드되면 잔여예산이 0으로 표시되는 경쟁조건 해결
+            if (typeof renderClubManagement === 'function') renderClubManagement();
             // 차트 탭이 활성 상태인 경우 필터 포함 즉시 갱신
             const chartTabActive = document.getElementById('tab-charts') &&
                 !document.getElementById('tab-charts').classList.contains('hidden');
