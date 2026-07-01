@@ -1,7 +1,7 @@
 /**
  * Club Expense Settlement App - Main JavaScript Logic
  */
-const APP_VERSION      = '1.6.169';
+const APP_VERSION      = '1.6.170';
 const APP_VERSION_DATE = '2026.07.01';
 
 // 인당 자부담 비용에 따라 강조 박스의 아이콘/색상을 전환 (100원 이상이면 🔥, 0이면 😊)
@@ -3207,32 +3207,35 @@ document.addEventListener('DOMContentLoaded', () => {
     const triggerMailtoBtn = document.getElementById('trigger-mailto-btn');
 
     if (sendEmailBtn) {
-        sendEmailBtn.addEventListener('click', async () => {
-            const originalText = sendEmailBtn.innerHTML;
-            sendEmailBtn.innerHTML = `<span class='btn-icon'>⏳</span> ${t('state.generating')}`;
-            sendEmailBtn.disabled = true;
-            try {
-                await AppState.downloadExcelOnly();
-                sendEmailBtn.innerHTML = `<span class='btn-icon'>✓</span> ${t('state.saved')}`;
-
-                const todayStr = new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' });
-                // skipConfirm=true: 버튼 클릭 자체가 확인 의사 표명 — 추가 confirm 팝업 불필요
-                runFinalizeSettlement(true);
-                alert(
-                    `📂 ${todayStr} 정산 엑셀 파일이 생성되어 다운로드 폴더에 저장되었습니다.\n\n` +
-                    `✅ 전체 항목이 초기화되었습니다.\n` +
-                    `📧 저장된 파일을 이메일로 보내주세요.\n` +
-                    `📋 이번 정산 내역은 [정산 이력] 탭에서 확인하실 수 있습니다.`
-                );
-            } catch (err) {
-                console.error(err);
-                sendEmailBtn.innerHTML = `<span class='btn-icon'>❌</span> ${t('state.save_failed')}`;
-            } finally {
-                setTimeout(() => {
-                    sendEmailBtn.innerHTML = originalText;
-                    sendEmailBtn.disabled = false;
-                }, 2000);
-            }
+        sendEmailBtn.addEventListener('click', () => {
+            showConfirmModal(
+                '엑셀 파일로 저장하고 정산을 완료하시겠습니까?\n확인 시 현재 데이터가 초기화됩니다.',
+                async () => {
+                    const originalText = sendEmailBtn.innerHTML;
+                    sendEmailBtn.innerHTML = `<span class='btn-icon'>⏳</span> ${t('state.generating')}`;
+                    sendEmailBtn.disabled = true;
+                    try {
+                        await AppState.downloadExcelOnly();
+                        sendEmailBtn.innerHTML = `<span class='btn-icon'>✓</span> ${t('state.saved')}`;
+                        const todayStr = new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' });
+                        runFinalizeSettlement(true);
+                        alert(
+                            `📂 ${todayStr} 정산 엑셀 파일이 생성되어 다운로드 폴더에 저장되었습니다.\n\n` +
+                            `✅ 전체 항목이 초기화되었습니다.\n` +
+                            `📧 저장된 파일을 이메일로 보내주세요.\n` +
+                            `📋 이번 정산 내역은 [정산 이력] 탭에서 확인하실 수 있습니다.`
+                        );
+                    } catch (err) {
+                        console.error(err);
+                        sendEmailBtn.innerHTML = `<span class='btn-icon'>❌</span> ${t('state.save_failed')}`;
+                    } finally {
+                        setTimeout(() => {
+                            sendEmailBtn.innerHTML = originalText;
+                            sendEmailBtn.disabled = false;
+                        }, 2000);
+                    }
+                }
+            );
         });
     }
 
