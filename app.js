@@ -1,6 +1,8 @@
 /**
  * Club Expense Settlement App - Main JavaScript Logic
  */
+const APP_VERSION      = '1.6.164';
+const APP_VERSION_DATE = '2026.07.01';
 
 // 인당 자부담 비용에 따라 강조 박스의 아이콘/색상을 전환 (100원 이상이면 🔥, 0이면 😊)
 function updatePerPersonSelfPayIcon(perPersonSelfPay) {
@@ -3878,6 +3880,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 변경이력 모달
     const CHANGELOG = [
+        { ver: '1.6.164', date: '2026.07.01', items: ['업데이트 내역 날짜별 그룹핑 표시, 버전 표시 app.js 내장값 기준으로 신뢰성 개선'] },
+        { ver: '1.6.163', date: '2026.07.01', items: ['행사 사진 여러 장 첨부 지원 (엑셀 sheet3에 우측으로 순서대로 배치, 개별 삭제 가능)'] },
+        { ver: '1.6.162', date: '2026.07.01', items: ['정산 날짜 달력 피커 추가 — 탭하면 달력 팝업으로 월/일 선택'] },
+        { ver: '1.6.161', date: '2026.07.01', items: ['정산 날짜 입력란을 정산 결과 카드 상단으로 이동 (저번달 등 소급 등록 편의 개선)'] },
+        { ver: '1.6.160', date: '2026.06.29', items: ['한영 전환 토글 삭제 — 한국어 전용으로 단순화'] },
+        { ver: '1.6.159', date: '2026.06.29', items: ['영수증 미첨부 항목에 "영수증을 첨부하세요" 안내 문구 표시'] },
+        { ver: '1.6.158', date: '2026.06.29', items: ['모든 삭제 버튼에 확인 팝업 추가 (비용·참석자·명부·클럽)'] },
+        { ver: '1.6.157', date: '2026.06.29', items: ['코드 리뷰 버그 6건 수정 (잔여예산 연도 필터, 수정모드 가드, Firebase 경쟁 조건, 중복 탭 핸들러, 캐시 플래그 이중소비, 모달 리스너 누적)'] },
         { ver: '1.6.155', date: '2026.06.28', items: ['로그인 화면 버전·업데이트 날짜 표시 (PIN 안내 문구 제거)'] },
         { ver: '1.6.154', date: '2026.06.28', items: ['캐시 초기화 버튼 1회 클릭으로 업데이트 자동 완료'] },
         { ver: '1.6.153', date: '2026.06.28', items: ['클럽 배정 예산 + 전체 총 예산 이중 차단 강화', 'usedBudget Firebase 동기화로 다중 사용자 예산 정확화'] },
@@ -3897,7 +3907,6 @@ document.addEventListener('DOMContentLoaded', () => {
         { ver: '1.6.120', date: '2026.06.08', items: ['비용 입력 시 법인/개인카드 금액 자동 계산'] },
         { ver: '1.6.110', date: '2026.06.05', items: ['동명이인 사번 선택 팝업 추가', '전사원 명부 동명이인 별도 행 표시'] },
         { ver: '1.6.90', date: '2026.05.28', items: ['관리자 설정 실시간 동기화', '정산 이력 수정 기능 추가'] },
-        { ver: '1.6.85', date: '2026.05.25', items: ['전체 UI 한국어/영어 번역 지원', '로그인 화면 언어 선택 버튼 추가'] },
         { ver: '1.6.75', date: '2026.05.22', items: ['클럽별 정산이력 정산인 선택 드롭다운 (2명 이상일 때만 표시)'] },
         { ver: '1.6.54', date: '2026.05.15', items: ['차트 탭 추가: 월별 추이, 예산 소진율, 카테고리 비중, 자부담 추이'] },
     ];
@@ -3909,18 +3918,37 @@ document.addEventListener('DOMContentLoaded', () => {
         const verEl    = document.getElementById('app-version-info');
         if (!overlay || !content || !verEl) return;
 
+        // 버전 표시를 app.js에 내장된 값으로 즉시 업데이트 (localStorage/SW 메시지 의존 제거)
+        verEl.textContent = `v${APP_VERSION}  ·  ${APP_VERSION_DATE} 업데이트`;
+
         function openChangelog() {
-            content.innerHTML = CHANGELOG.map(entry => `
+            // 날짜별로 그룹핑 (같은 날 여러 버전 → 한 블록으로)
+            const groups = [];
+            const seen = {};
+            for (const entry of CHANGELOG) {
+                if (!seen[entry.date]) {
+                    seen[entry.date] = { date: entry.date, versions: [], items: [] };
+                    groups.push(seen[entry.date]);
+                }
+                seen[entry.date].versions.push(entry.ver);
+                seen[entry.date].items.push(...entry.items);
+            }
+
+            content.innerHTML = groups.map(g => {
+                const vRange = g.versions.length === 1
+                    ? `v${g.versions[0]}`
+                    : `v${g.versions[g.versions.length - 1]} ~ v${g.versions[0]}`;
+                return `
                 <div style="margin-bottom:1rem; padding-bottom:1rem; border-bottom:1px solid rgba(139,92,246,0.15);">
-                    <div style="display:flex; align-items:baseline; gap:0.5rem; margin-bottom:0.35rem;">
-                        <span style="font-size:0.85rem; font-weight:700; color:#a78bfa;">v${entry.ver}</span>
-                        <span style="font-size:0.7rem; color:var(--text-muted);">${entry.date}</span>
+                    <div style="display:flex; align-items:baseline; gap:0.5rem; margin-bottom:0.35rem; flex-wrap:wrap;">
+                        <span style="font-size:0.8rem; font-weight:700; color:var(--text-muted);">${g.date}</span>
+                        <span style="font-size:0.75rem; color:#a78bfa;">${vRange}</span>
                     </div>
                     <ul style="margin:0; padding-left:1.1rem; display:flex; flex-direction:column; gap:0.2rem;">
-                        ${entry.items.map(i => `<li style="font-size:0.78rem; color:#cbd5e1; line-height:1.45;">${i}</li>`).join('')}
+                        ${g.items.map(i => `<li style="font-size:0.78rem; color:#cbd5e1; line-height:1.45;">${i}</li>`).join('')}
                     </ul>
-                </div>
-            `).join('');
+                </div>`;
+            }).join('');
             overlay.style.display = 'flex';
         }
 
