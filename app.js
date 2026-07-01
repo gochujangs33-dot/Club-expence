@@ -1,7 +1,7 @@
 /**
  * Club Expense Settlement App - Main JavaScript Logic
  */
-const APP_VERSION      = '1.6.164';
+const APP_VERSION      = '1.6.165';
 const APP_VERSION_DATE = '2026.07.01';
 
 // 인당 자부담 비용에 따라 강조 박스의 아이콘/색상을 전환 (100원 이상이면 🔥, 0이면 😊)
@@ -3880,6 +3880,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 변경이력 모달
     const CHANGELOG = [
+        { ver: '1.6.165', date: '2026.07.01', items: ['모바일 줄바꿈 개선: 탭 버튼 자연스러운 줄바꿈, 카드 헤더 오버플로 수정, 정산 날짜 힌트 줄 분리, 달력 네비게이션 정렬'] },
         { ver: '1.6.164', date: '2026.07.01', items: ['업데이트 내역 날짜별 그룹핑 표시, 버전 표시 app.js 내장값 기준으로 신뢰성 개선'] },
         { ver: '1.6.163', date: '2026.07.01', items: ['행사 사진 여러 장 첨부 지원 (엑셀 sheet3에 우측으로 순서대로 배치, 개별 삭제 가능)'] },
         { ver: '1.6.162', date: '2026.07.01', items: ['정산 날짜 달력 피커 추가 — 탭하면 달력 팝업으로 월/일 선택'] },

@@ -36,13 +36,14 @@
         background:#1e293b; border:1px solid rgba(255,255,255,0.15);
         border-radius:0.75rem; padding:0.75rem; box-shadow:0 8px 32px rgba(0,0,0,0.5);
     }
-    .cal-nav { display:flex; justify-content:space-between; align-items:center; margin-bottom:0.5rem; }
+    .cal-nav { display:flex; justify-content:space-between; align-items:center; margin-bottom:0.5rem; gap:0.25rem; }
     .cal-nav-btn {
         background:rgba(255,255,255,0.08); border:none; color:var(--text-primary);
         border-radius:0.4rem; padding:0.3rem 0.7rem; cursor:pointer; font-size:0.9rem;
+        flex-shrink:0;
     }
     .cal-nav-btn:hover { background:rgba(255,255,255,0.15); }
-    .cal-nav-label { font-weight:600; font-size:0.95rem; color:var(--text-primary); }
+    .cal-nav-label { font-weight:600; font-size:0.95rem; color:var(--text-primary); flex:1; text-align:center; min-width:0; }
     .cal-weekdays {
         display:grid; grid-template-columns:repeat(7,1fr); text-align:center;
         font-size:0.7rem; color:rgba(255,255,255,0.4); margin-bottom:0.3rem; gap:2px;
@@ -127,9 +128,13 @@
                     <!-- 1. Attendance Info Card -->
                     <div class="card" id="attendance-card">
                         <div class="card-header">
-                            <span class="card-icon">👥</span>
-                            <h2 data-i18n="section.attendance">참석자 및 기존 누적 정보</h2>
-                            <label for="event-photo-input" class="btn-secondary" style="margin-left:auto; cursor:pointer; padding:0.35rem 0.75rem; font-size:0.8rem; border-radius:8px; display:inline-flex; align-items:center; gap:0.3rem;">📷 행사 사진 첨부</label>
+                            <div class="header-split">
+                                <div class="header-left">
+                                    <span class="card-icon">👥</span>
+                                    <h2 data-i18n="section.attendance">참석자 및 기존 누적 정보</h2>
+                                </div>
+                                <label for="event-photo-input" class="btn-secondary" style="cursor:pointer; padding:0.35rem 0.7rem; font-size:0.8rem; border-radius:8px; display:inline-flex; align-items:center; gap:0.3rem; flex-shrink:0; white-space:nowrap;">📷 행사 사진</label>
+                            </div>
                             <input type="file" id="event-photo-input" accept="image/*" multiple style="display:none;">
                         </div>
                         <div id="event-photo-preview" class="hidden" style="margin-bottom:0.75rem; padding:0.4rem; border-radius:12px; background:rgba(15,23,42,0.6); display:flex; flex-wrap:wrap; gap:0.25rem; align-items:flex-start; overflow-x:auto;">
@@ -291,7 +296,7 @@
                         </div>
                         <div class="card-body">
                             <div style="margin-bottom:0.75rem; position:relative;">
-                                <label style="font-size:0.8rem; color:var(--text-muted); display:block; margin-bottom:0.3rem;">📅 정산 날짜 <span style="font-size:0.72rem;">(저번 달 등 과거 비용 등록 시 날짜 변경)</span></label>
+                                <label style="font-size:0.8rem; color:var(--text-muted); display:block; margin-bottom:0.3rem;">📅 정산 날짜 <span style="font-size:0.72rem; display:block; margin-top:0.1rem; line-height:1.4;">(저번 달 등 과거 비용 등록 시 날짜 변경)</span></label>
                                 <input type="date" id="settlement-date-input" style="display:none;">
                                 <button type="button" id="settlement-date-display-btn" class="settle-date-btn">
                                     <span id="settlement-date-display-text"></span>
