@@ -1,8 +1,8 @@
 /**
  * Club Expense Settlement App - Main JavaScript Logic
  */
-const APP_VERSION      = '1.6.178';
-const APP_VERSION_DATE = '2026.07.01';
+const APP_VERSION      = '1.6.179';
+const APP_VERSION_DATE = '2026.07.02';
 
 // 인당 자부담 비용에 따라 강조 박스의 아이콘/색상을 전환 (100원 이상이면 🔥, 0이면 😊)
 function updatePerPersonSelfPayIcon(perPersonSelfPay) {
@@ -840,20 +840,25 @@ const AppState = {
             regEntry = Object.values(this.clubRegistry).find(c => c.name === this.clubName) || null;
         }
         const priorUsed = regEntry ? (regEntry.priorUsed || 0) : 0;
-        // 관리자가 globalHistory 기준으로 동기화한 usedBudget 우선 사용
-        if (regEntry && regEntry.usedBudget !== undefined) {
-            return priorUsed + regEntry.usedBudget;
-        }
-        // fallback: 개인 정산 이력 합산 (관리자 미동기화 상태)
+
+        // 개인 정산 이력 합산 (올해, 이 클럽) — settlementDate 우선 연도 판별
         const fromHistory = (this.settlementHistory || [])
             .filter(e => {
                 if (!e || !e.date) return false;
-                if (new Date(e.date).getFullYear() !== currentYear) return false;
+                const entryYear = e.settlementDate
+                    ? parseInt(e.settlementDate.slice(0, 4), 10)
+                    : new Date(e.date).getFullYear();
+                if (entryYear !== currentYear) return false;
                 if (this.clubId) return e.clubId === this.clubId || e.clubName === this.clubName;
                 return e.clubName === this.clubName;
             })
             .reduce((sum, e) => sum + (e.finalSupportAmount || 0), 0);
-        return priorUsed + fromHistory;
+
+        // Firebase 동기화값 (다른 사용자 정산 포함 전체 누적 — 관리자 대시보드에서 갱신됨)
+        const firebaseUsed = (regEntry && regEntry.usedBudget) ? regEntry.usedBudget : 0;
+
+        // 둘 중 큰 값 사용: Firebase 미동기화 시 이력 합산으로 보완
+        return priorUsed + Math.max(fromHistory, firebaseUsed);
     },
 
     syncBudgetFromClub(clubName) {
@@ -3372,7 +3377,8 @@ document.addEventListener('DOMContentLoaded', () => {
                             sendEmailBtn.disabled = false;
                         }, 2000);
                     }
-                }
+                },
+                '확인'
             );
         });
     }
@@ -5835,14 +5841,41 @@ function resetCorpAmount() {
 }
 
 // 확인 커스텀 모달 (테마 적용)
-function showConfirmModal(message, onConfirm) {
+// okLabel 미지정 → 삭제 스타일(빨강), 지정 시 확인 스타일(파랑)
+function showConfirmModal(message, onConfirm, okLabel) {
     const overlay   = document.getElementById('confirm-modal-overlay');
     const msgEl     = document.getElementById('confirm-modal-msg');
     const okBtn     = document.getElementById('confirm-modal-ok');
     const cancelBtn = document.getElementById('confirm-modal-cancel');
     if (!overlay || !msgEl) { if (confirm(message)) onConfirm && onConfirm(); return; }
 
+    const isDelete = !okLabel;
+    const box      = document.getElementById('confirm-modal-box');
+    const iconEl   = document.getElementById('confirm-modal-icon');
+    const titleEl  = document.getElementById('confirm-modal-title');
+
     msgEl.textContent = message;
+
+    if (isDelete) {
+        if (box)    box.style.borderColor   = 'rgba(239,68,68,0.55)';
+        if (box)    box.style.boxShadow     = '0 0 40px rgba(239,68,68,0.22), 0 12px 48px rgba(0,0,0,0.7)';
+        if (iconEl) iconEl.textContent      = '🗑️';
+        if (titleEl){ titleEl.textContent   = '삭제 확인'; titleEl.style.color = 'rgba(239,68,68,0.7)'; }
+        okBtn.textContent     = '삭제';
+        okBtn.style.background = 'rgba(239,68,68,0.25)';
+        okBtn.style.border     = '2px solid rgba(239,68,68,0.65)';
+        okBtn.style.color      = '#fca5a5';
+    } else {
+        if (box)    box.style.borderColor   = 'rgba(99,102,241,0.55)';
+        if (box)    box.style.boxShadow     = '0 0 40px rgba(99,102,241,0.18), 0 12px 48px rgba(0,0,0,0.7)';
+        if (iconEl) iconEl.textContent      = '✅';
+        if (titleEl){ titleEl.textContent   = '확인'; titleEl.style.color = 'rgba(99,102,241,0.8)'; }
+        okBtn.textContent     = okLabel;
+        okBtn.style.background = 'rgba(99,102,241,0.25)';
+        okBtn.style.border     = '2px solid rgba(99,102,241,0.65)';
+        okBtn.style.color      = '#c7d2fe';
+    }
+
     overlay.style.display = 'flex';
 
     const close = () => {
