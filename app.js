@@ -1,7 +1,7 @@
 /**
  * Club Expense Settlement App - Main JavaScript Logic
  */
-const APP_VERSION      = '1.6.184';
+const APP_VERSION      = '1.6.185';
 const APP_VERSION_DATE = '2026.07.02';
 
 // 인당 자부담 비용에 따라 강조 박스의 아이콘/색상을 전환 (100원 이상이면 🔥, 0이면 😊)
@@ -5242,20 +5242,24 @@ document.addEventListener('DOMContentLoaded', () => {
 
     let selfPayTrendChartInstance = null;
 
-    // ── 자부담 vs 회사지원금 추이 (월별 누적 영역 그래프) ───────────────────
+    // ── 자부담 vs 회사지원금 추이 (월별 영역 그래프, 클럽 필터 적용) ─────────
     function renderSelfPayTrendChart(historyList) {
         const canvas = document.getElementById('selfpay-trend-chart');
         if (!canvas || typeof Chart === 'undefined') return;
 
+        // selectedOverallClubs 필터 적용 (다른 차트와 동일)
+        const filtered = (historyList || []).filter(entry =>
+            !selectedOverallClubs || selectedOverallClubs.has(entry.clubName || '기본 클럽')
+        );
+
         const byMonth = {};
-        (historyList || []).forEach(entry => {
+        filtered.forEach(entry => {
             const d = entry.settlementDate
                 ? new Date(entry.settlementDate + 'T00:00:00')
                 : (entry.date ? new Date(entry.date) : new Date(entry.id));
             const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
             if (!byMonth[key]) byMonth[key] = { selfPay: 0, support: 0 };
-            const finalSelfPay = (entry.finalSelfPay !== undefined && entry.finalSelfPay !== null) ? entry.finalSelfPay : (entry.totalSelfPay || 0);
-            byMonth[key].selfPay += finalSelfPay;
+            byMonth[key].selfPay += entry.totalSelfPay || 0;
             byMonth[key].support += entry.finalSupportAmount || 0;
         });
 
@@ -5275,19 +5279,21 @@ document.addEventListener('DOMContentLoaded', () => {
                         label: '회사 지원금',
                         data: labels.map(k => byMonth[k].support),
                         borderColor: 'rgba(52, 211, 153, 1)',
-                        backgroundColor: 'rgba(52, 211, 153, 0.25)',
+                        backgroundColor: 'rgba(52, 211, 153, 0.18)',
                         fill: true,
                         tension: 0.35,
-                        stack: 'stack1'
+                        pointRadius: 4,
+                        pointHoverRadius: 6
                     },
                     {
                         label: '자부담 비용',
                         data: labels.map(k => byMonth[k].selfPay),
                         borderColor: 'rgba(248, 113, 113, 1)',
-                        backgroundColor: 'rgba(248, 113, 113, 0.25)',
+                        backgroundColor: 'rgba(248, 113, 113, 0.18)',
                         fill: true,
                         tension: 0.35,
-                        stack: 'stack1'
+                        pointRadius: 4,
+                        pointHoverRadius: 6
                     }
                 ]
             },
@@ -5295,11 +5301,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 responsive: true,
                 maintainAspectRatio: false,
                 plugins: {
-                    legend: { labels: { color: '#cbd5e1' } }
+                    legend: { labels: { color: '#cbd5e1' } },
+                    tooltip: {
+                        callbacks: {
+                            label: ctx => `${ctx.dataset.label}: ${ctx.parsed.y.toLocaleString()}원`
+                        }
+                    }
                 },
                 scales: {
-                    x: { stacked: true, ticks: { color: '#cbd5e1' }, grid: { color: 'rgba(255,255,255,0.05)' } },
-                    y: { stacked: true, ticks: { color: '#cbd5e1' }, grid: { color: 'rgba(255,255,255,0.05)' }, beginAtZero: true }
+                    x: { ticks: { color: '#cbd5e1' }, grid: { color: 'rgba(255,255,255,0.05)' } },
+                    y: { ticks: { color: '#cbd5e1', callback: v => v.toLocaleString() }, grid: { color: 'rgba(255,255,255,0.05)' }, beginAtZero: true }
                 }
             }
         });
