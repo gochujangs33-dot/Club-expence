@@ -2902,8 +2902,8 @@ document.addEventListener('DOMContentLoaded', () => {
             // 차트 탭 전환 시: 숨겨진 상태에서 렌더링 불가 → 탭이 보인 후 재렌더
             if (tabId === 'tab-charts' && typeof renderAllCharts === 'function') {
                 requestAnimationFrame(() => {
+                    if (typeof renderClubFilters === 'function') renderClubFilters();
                     renderAllCharts(lastHistoryList || []);
-                    if (typeof updateChartsBudgetStats === 'function') updateChartsBudgetStats(lastHistoryList || []);
                 });
             }
         });
@@ -4639,6 +4639,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
             renderAdminHistory(historyList);
             lastHistoryList = historyList;
+            // 차트 탭이 활성 상태인 경우 필터 포함 즉시 갱신
+            const chartTabActive = document.getElementById('tab-charts') &&
+                !document.getElementById('tab-charts').classList.contains('hidden');
+            if (chartTabActive && typeof renderClubFilters === 'function') renderClubFilters();
             renderAllCharts(historyList);
         });
 
@@ -5364,7 +5368,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 차트 탭의 모든 그래프를 한 번에 갱신
     function renderAllCharts(historyList) {
-        updateChartsBudgetStats(historyList);
         renderOverallMonthlyChart(historyList);
         renderClubUsageChart(historyList);
         renderCategoryPieChart(historyList);
