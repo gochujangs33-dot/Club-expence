@@ -1,7 +1,7 @@
 /**
  * Club Expense Settlement App - Main JavaScript Logic
  */
-const APP_VERSION      = '1.6.182';
+const APP_VERSION      = '1.6.183';
 const APP_VERSION_DATE = '2026.07.02';
 
 // 인당 자부담 비용에 따라 강조 박스의 아이콘/색상을 전환 (100원 이상이면 🔥, 0이면 😊)
@@ -917,23 +917,26 @@ const AppState = {
         }
         const priorUsed = regEntry ? (regEntry.priorUsed || 0) : 0;
 
-        // 개인 정산 이력 합산 (올해, 이 클럽) — settlementDate 우선 연도 판별
-        const fromHistory = (this.settlementHistory || [])
+        // clubHistory(전체 사용자 이력)가 로드돼 있으면 우선 사용 — 없으면 개인 이력으로 fallback
+        const useClubHistory = this.clubHistory.length > 0;
+        const historySource = useClubHistory ? this.clubHistory : (this.settlementHistory || []);
+        const fromHistory = historySource
             .filter(e => {
                 if (!e || !e.date) return false;
                 const entryYear = e.settlementDate
                     ? parseInt(e.settlementDate.slice(0, 4), 10)
                     : new Date(e.date).getFullYear();
                 if (entryYear !== currentYear) return false;
+                // clubHistory는 이미 현재 클럽 기준으로 필터됨
+                if (useClubHistory) return true;
                 if (this.clubId) return e.clubId === this.clubId || e.clubName === this.clubName;
                 return e.clubName === this.clubName;
             })
             .reduce((sum, e) => sum + (e.finalSupportAmount || 0), 0);
 
-        // Firebase 동기화값 (다른 사용자 정산 포함 전체 누적 — 관리자 대시보드에서 갱신됨)
+        // Firebase 동기화값 (관리자 대시보드에서 갱신된 값 — 추가 보완용)
         const firebaseUsed = (regEntry && regEntry.usedBudget) ? regEntry.usedBudget : 0;
 
-        // 둘 중 큰 값 사용: Firebase 미동기화 시 이력 합산으로 보완
         return priorUsed + Math.max(fromHistory, firebaseUsed);
     },
 
@@ -2732,12 +2735,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 AppState.previousPrizeTotal = selectedClub ? (selectedClub.prizeUsed || 0) : 0;
                 if (prizeInput) prizeInput.value = formatAmount(AppState.previousPrizeTotal);
                 AppState.usedBudget = 0;
-                AppState.clubHistory = []; // 클럽 전환 시 이력 초기화 (다음 탭 전환 시 재로드)
+                AppState.clubHistory = [];
                 AppState.clearClubData();
             }
             AppState.syncBudgetFromClub(AppState.clubName);
             AppState.save();
             setSettingsFormValues(AppState.rules);
+            // 클럽 전환 시 globalHistory에서 전체 이력 로드 → 잔여 예산 즉시 반영
+            AppState.loadClubHistory().then(() => AppState.render());
             if (typeof setAdminRulesFormValues === 'function') setAdminRulesFormValues(AppState.rules);
         });
 
@@ -4029,7 +4034,12 @@ document.addEventListener('DOMContentLoaded', () => {
                         prizeInput.value = AppState.previousPrizeTotal || 0;
                         setSettingsFormValues(AppState.rules);
             if (typeof setAdminRulesFormValues === 'function') setAdminRulesFormValues(AppState.rules);
-                        AppState.render();
+                        // 로그인 시 현재 클럽의 전체 이력을 globalHistory에서 로드 → 잔여 예산 정확화
+                        if (AppState.clubName || AppState.clubId) {
+                            AppState.loadClubHistory().then(() => AppState.render());
+                        } else {
+                            AppState.render();
+                        }
                     }).catch(err => {
                         console.error(err);
                         pinErrorText.textContent = err.message || "서버 연결에 실패했습니다.";
