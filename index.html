@@ -767,7 +767,10 @@
                             <button type="button" id="cancel-edit-club-btn" class="btn-secondary hidden" data-i18n="btn.cancel_edit" style="flex:1;">수정 취소</button>
                         </div>
                     </form>
-                    <div id="club-list-container" class="scroll-y" style="max-height: 320px; margin-top: 0.75rem; display:flex; flex-direction:column; gap:0.5rem;">
+                    <div style="margin-top:0.75rem; display:flex; justify-content:flex-end;">
+                        <button type="button" id="dedup-clubs-btn" class="btn-secondary" style="font-size:0.78rem; padding:0.3rem 0.7rem; color:#f87171; border-color:rgba(239,68,68,0.4);">🧹 중복 클럽 정리</button>
+                    </div>
+                    <div id="club-list-container" class="scroll-y" style="max-height: 320px; margin-top: 0.5rem; display:flex; flex-direction:column; gap:0.5rem;">
                         <!-- Populated dynamically -->
                     </div>
                 </div>

@@ -1,7 +1,7 @@
 /**
  * Club Expense Settlement App - Main JavaScript Logic
  */
-const APP_VERSION      = '1.6.166';
+const APP_VERSION      = '1.6.167';
 const APP_VERSION_DATE = '2026.07.01';
 
 // 인당 자부담 비용에 따라 강조 박스의 아이콘/색상을 전환 (100원 이상이면 🔥, 0이면 😊)
@@ -3880,6 +3880,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 변경이력 모달
     const CHANGELOG = [
+        { ver: '1.6.167', date: '2026.07.01', items: ['중복 클럽 일괄 정리 버튼 추가 (클럽 관리 탭)'] },
         { ver: '1.6.166', date: '2026.07.01', items: ['클럽 이름 중복 추가 방지 — 동일 이름 등록 시 경고 팝업'] },
         { ver: '1.6.165', date: '2026.07.01', items: ['모바일 줄바꿈 개선: 탭 버튼 자연스러운 줄바꿈, 카드 헤더 오버플로 수정, 정산 날짜 힌트 줄 분리, 달력 네비게이션 정렬'] },
         { ver: '1.6.164', date: '2026.07.01', items: ['업데이트 내역 날짜별 그룹핑 표시, 버전 표시 app.js 내장값 기준으로 신뢰성 개선'] },
@@ -4459,6 +4460,50 @@ document.addEventListener('DOMContentLoaded', () => {
         clubBudgetFormInput.value = '';
         document.getElementById('add-club-btn').innerHTML = t('btn.add_club_active');
         cancelEditClubBtn.classList.add('hidden');
+    }
+
+    // 중복 클럽 정리 버튼
+    const dedupClubsBtn = document.getElementById('dedup-clubs-btn');
+    if (dedupClubsBtn) {
+        dedupClubsBtn.addEventListener('click', () => {
+            const registry = AppState.clubRegistry || {};
+            // 이름 기준으로 그룹핑 (대소문자 무관)
+            const groups = {};
+            for (const [id, club] of Object.entries(registry)) {
+                const key = club.name.trim().toLowerCase();
+                if (!groups[key]) groups[key] = [];
+                groups[key].push({ id, club });
+            }
+            // 중복이 있는 그룹만 추출
+            const dupGroups = Object.values(groups).filter(g => g.length > 1);
+            if (dupGroups.length === 0) {
+                showConfirmModal('중복된 클럽이 없습니다.');
+                return;
+            }
+            const totalDups = dupGroups.reduce((s, g) => s + g.length - 1, 0);
+            const names = dupGroups.map(g => `'${g[0].club.name}' (${g.length}개)`).join(', ');
+            showConfirmModal(
+                `중복 클럽 ${totalDups}개를 삭제합니다.\n${names}\n각 이름별로 예산이 가장 큰 항목 하나만 남깁니다.\n계속하시겠습니까?`,
+                () => {
+                    for (const group of dupGroups) {
+                        // 예산이 가장 큰 항목을 keep (같으면 첫 번째)
+                        group.sort((a, b) => (b.club.budget || 0) - (a.club.budget || 0));
+                        const [keep, ...remove] = group;
+                        // 남길 항목: priorUsed는 가장 큰 값 사용 (합산하면 과다)
+                        const maxPriorUsed = Math.max(...group.map(g => g.club.priorUsed || 0));
+                        if (maxPriorUsed !== (keep.club.priorUsed || 0)) {
+                            AppState.addOrUpdateClub(keep.id, keep.club.name, keep.club.budget || 0, maxPriorUsed, keep.club.prizeUsed || 0);
+                        }
+                        // 나머지 삭제
+                        for (const { id } of remove) {
+                            AppState.deleteClub(id);
+                        }
+                    }
+                    renderClubManagement();
+                    alert(`중복 클럽 ${totalDups}개 삭제 완료`);
+                }
+            );
+        });
     }
 
     if (clubTotalBudgetInput) {
