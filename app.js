@@ -1,7 +1,7 @@
 /**
  * Club Expense Settlement App - Main JavaScript Logic
  */
-const APP_VERSION      = '1.6.170';
+const APP_VERSION      = '1.6.171';
 const APP_VERSION_DATE = '2026.07.01';
 
 // 인당 자부담 비용에 따라 강조 박스의 아이콘/색상을 전환 (100원 이상이면 🔥, 0이면 😊)
@@ -2022,7 +2022,11 @@ const AppState = {
         }
 
         const wbout = await zip.generateAsync({ type: 'arraybuffer' });
-        const fileName = `클럽비용정산_${dateStr.replace(/[^0-9]/g, '')}.xlsx`;
+        const settleDateInput = document.getElementById('settlement-date-input');
+        const settleDateVal = settleDateInput ? settleDateInput.value : '';
+        const fileDateStr = (settleDateVal || new Date().toISOString().slice(0, 10)).replace(/-/g, '');
+        const safeClubName = (this.clubName || '클럽').replace(/[\\/:*?"<>|]/g, '_');
+        const fileName = `${safeClubName}(${fileDateStr}).xlsx`;
         return new File([wbout], fileName, { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
     },
 
