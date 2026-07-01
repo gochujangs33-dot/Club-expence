@@ -1,7 +1,7 @@
 /**
  * Club Expense Settlement App - Main JavaScript Logic
  */
-const APP_VERSION      = '1.6.181';
+const APP_VERSION      = '1.6.182';
 const APP_VERSION_DATE = '2026.07.02';
 
 // 인당 자부담 비용에 따라 강조 박스의 아이콘/색상을 전환 (100원 이상이면 🔥, 0이면 😊)
@@ -435,8 +435,67 @@ const AppState = {
         return results;
     },
 
+    // 관리자 전용: globalHistory 전체 기준으로 명부 카운트 재계산 (모든 사용자 정산 반영)
+    async recalculateDirectoryCountsFromGlobal() {
+        if (!this.firebaseDb) { this.recalculateDirectoryCounts(); return; }
+        const currentYear = new Date().getFullYear();
+
+        // 카운트 초기화
+        Object.keys(this.directory).forEach(name => {
+            const entry = this.directory[name];
+            if (typeof entry === 'object') entry.count = 0;
+            else this.directory[name] = { id: entry, count: 0 };
+        });
+
+        // 사번 → 명부 키 역방향 맵
+        const idToName = {};
+        Object.entries(this.directory).forEach(([name, entry]) => {
+            if (typeof entry !== 'object') return;
+            const ids = entry.ids ? entry.ids.map(String) : (entry.id ? [String(entry.id)] : []);
+            ids.forEach(id => { if (id) idToName[id] = name; });
+        });
+
+        try {
+            const [histSnap, deletedSnap] = await Promise.all([
+                this.firebaseDb.ref('globalHistory').once('value'),
+                this.firebaseDb.ref('deletedHistoryIds').once('value')
+            ]);
+            const deletedIds = new Set(Object.keys(deletedSnap.val() || {}));
+            const seenIds = new Set();
+
+            histSnap.forEach(child => {
+                const entry = child.val();
+                if (!entry || !entry.id) return;
+                if (deletedIds.has(String(child.key))) return;
+                if (seenIds.has(entry.id)) return;
+                seenIds.add(entry.id);
+
+                const entryYear = entry.settlementDate
+                    ? parseInt(entry.settlementDate.slice(0, 4), 10)
+                    : (entry.date ? new Date(entry.date).getFullYear() : new Date(entry.id).getFullYear());
+                if (entryYear !== currentYear) return;
+
+                (entry.attendees || []).forEach(att => {
+                    if (!att.name) return;
+                    const empId = att.employeeId ? String(att.employeeId) : '';
+                    const dirKey = (empId && idToName[empId]) || att.name;
+                    const cur = this.directory[dirKey];
+                    if (cur) {
+                        cur.count = (cur.count || 0) + 1;
+                    } else {
+                        this.directory[att.name] = { id: att.employeeId, count: 1 };
+                        if (empId) idToName[empId] = att.name;
+                    }
+                });
+            });
+        } catch (err) {
+            console.error('globalHistory 카운트 재계산 실패:', err);
+            this.recalculateDirectoryCounts(); // fallback
+        }
+    },
+
     // 명부의 "올해 누적 참석 횟수"를 본인 정산 이력(올해분)만 기준으로 다시 계산
-    // — 과거 동기화 실험(v1.6.69~73) 등으로 남은 잘못된 카운트를 매 로그인 시 자동 교정
+    // — 일반 사용자 전용 (관리자는 recalculateDirectoryCountsFromGlobal 사용)
     recalculateDirectoryCounts() {
         const currentYear = new Date().getFullYear();
         Object.keys(this.directory).forEach(name => {
@@ -557,9 +616,10 @@ const AppState = {
                     .then(list => this.bulkImportDirectory(list))
                     .catch(err => console.error("전사원 명부 자동 등록 실패:", err))
                     .finally(() => {
-                        this.recalculateDirectoryCounts();
-                        this.save();
-                        resolve(true);
+                        // 관리자: globalHistory 전체 기준으로 카운트 계산 (모든 사용자 정산 반영)
+                        this.recalculateDirectoryCountsFromGlobal()
+                            .then(() => { this.save(); resolve(true); })
+                            .catch(() => { this.recalculateDirectoryCounts(); this.save(); resolve(true); });
                     });
                 return;
             }
