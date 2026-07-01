@@ -22,6 +22,42 @@
     <!-- Vanilla CSS stylesheet -->
     <link rel="stylesheet" href="style.css">
     <script src="./lib/i18n.js"></script>
+    <style>
+    .settle-date-btn {
+        width:100%; box-sizing:border-box; padding:0.45rem 0.7rem;
+        background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.12);
+        color:var(--text-primary); border-radius:0.5rem; font-size:0.9rem;
+        text-align:left; cursor:pointer; display:flex; align-items:center; justify-content:space-between;
+    }
+    .settle-date-btn:hover { background:rgba(255,255,255,0.09); }
+    .settle-date-arrow { font-size:0.7rem; opacity:0.5; }
+    .custom-calendar {
+        position:absolute; top:calc(100% + 4px); left:0; right:0; z-index:9999;
+        background:#1e293b; border:1px solid rgba(255,255,255,0.15);
+        border-radius:0.75rem; padding:0.75rem; box-shadow:0 8px 32px rgba(0,0,0,0.5);
+    }
+    .cal-nav { display:flex; justify-content:space-between; align-items:center; margin-bottom:0.5rem; }
+    .cal-nav-btn {
+        background:rgba(255,255,255,0.08); border:none; color:var(--text-primary);
+        border-radius:0.4rem; padding:0.3rem 0.7rem; cursor:pointer; font-size:0.9rem;
+    }
+    .cal-nav-btn:hover { background:rgba(255,255,255,0.15); }
+    .cal-nav-label { font-weight:600; font-size:0.95rem; color:var(--text-primary); }
+    .cal-weekdays {
+        display:grid; grid-template-columns:repeat(7,1fr); text-align:center;
+        font-size:0.7rem; color:rgba(255,255,255,0.4); margin-bottom:0.3rem; gap:2px;
+    }
+    .cal-days-grid { display:grid; grid-template-columns:repeat(7,1fr); gap:2px; }
+    .cal-day {
+        text-align:center; padding:0.38rem 0; border-radius:0.4rem;
+        font-size:0.82rem; cursor:pointer; color:var(--text-primary);
+    }
+    .cal-day:not(.cal-empty):hover { background:rgba(255,255,255,0.1); }
+    .cal-day.cal-today { color:#818cf8; font-weight:700; }
+    .cal-day.cal-selected { background:#6d28d9; color:#fff; }
+    .cal-day.cal-selected:hover { background:#7c3aed; }
+    .cal-empty { cursor:default; }
+    </style>
 </head>
 <body>
     <!-- 업데이트 알림 배너 -->
@@ -256,9 +292,24 @@
                             <div class="divider"></div>
                         </div>
                         <div class="card-body">
-                            <div style="margin-bottom:0.75rem;">
-                                <label for="settlement-date-input" style="font-size:0.8rem; color:var(--text-muted); display:block; margin-bottom:0.3rem;">📅 정산 날짜 <span style="font-size:0.72rem;">(저번 달 등 과거 비용 등록 시 날짜 변경)</span></label>
-                                <input type="date" id="settlement-date-input" style="width:100%; box-sizing:border-box; padding:0.45rem 0.7rem; background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.12); color:var(--text-primary); border-radius:0.5rem; font-size:0.9rem;">
+                            <div style="margin-bottom:0.75rem; position:relative;">
+                                <label style="font-size:0.8rem; color:var(--text-muted); display:block; margin-bottom:0.3rem;">📅 정산 날짜 <span style="font-size:0.72rem;">(저번 달 등 과거 비용 등록 시 날짜 변경)</span></label>
+                                <input type="date" id="settlement-date-input" style="display:none;">
+                                <button type="button" id="settlement-date-display-btn" class="settle-date-btn">
+                                    <span id="settlement-date-display-text"></span>
+                                    <span class="settle-date-arrow">▼</span>
+                                </button>
+                                <div id="settlement-date-calendar" class="custom-calendar hidden">
+                                    <div class="cal-nav">
+                                        <button type="button" class="cal-nav-btn" id="cal-prev-month">◀</button>
+                                        <span class="cal-nav-label" id="cal-month-year"></span>
+                                        <button type="button" class="cal-nav-btn" id="cal-next-month">▶</button>
+                                    </div>
+                                    <div class="cal-weekdays">
+                                        <div>일</div><div>월</div><div>화</div><div>수</div><div>목</div><div>금</div><div>토</div>
+                                    </div>
+                                    <div id="cal-days-grid" class="cal-days-grid"></div>
+                                </div>
                             </div>
                             <div class="result-summary">
                                 <div class="summary-item main">
@@ -1176,6 +1227,101 @@
             document.getElementById('update-banner').classList.add('hidden');
         });
     }
+    </script>
+    <!-- 정산 날짜 달력 피커 -->
+    <script>
+    (function() {
+        const KO_MONTHS = ['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
+        function pad2(n) { return String(n).padStart(2,'0'); }
+        function toYMD(y,m,d) { return y+'-'+pad2(m)+'-'+pad2(d); }
+        function todayYMD() { return new Date().toISOString().slice(0,10); }
+        function fmtDisplay(ymd) {
+            if (!ymd) return '';
+            var p = ymd.split('-');
+            return p[0]+'년 '+parseInt(p[1])+'월 '+parseInt(p[2])+'일';
+        }
+
+        var calYear, calMonth, selectedYMD;
+
+        function initCalendar() {
+            var hi  = document.getElementById('settlement-date-input');
+            var btn = document.getElementById('settlement-date-display-btn');
+            var txt = document.getElementById('settlement-date-display-text');
+            var cal = document.getElementById('settlement-date-calendar');
+            var lbl = document.getElementById('cal-month-year');
+            var grd = document.getElementById('cal-days-grid');
+            var prv = document.getElementById('cal-prev-month');
+            var nxt = document.getElementById('cal-next-month');
+            if (!hi || !btn || !cal) return;
+
+            function setDate(ymd) {
+                selectedYMD = ymd;
+                hi.value = ymd;
+                txt.textContent = fmtDisplay(ymd);
+                var p = ymd.split('-');
+                calYear  = parseInt(p[0]);
+                calMonth = parseInt(p[1]);
+            }
+
+            function renderGrid() {
+                lbl.textContent = calYear+'년 '+KO_MONTHS[calMonth-1];
+                grd.innerHTML = '';
+                var today = todayYMD();
+                var firstDow = new Date(calYear, calMonth-1, 1).getDay();
+                var daysInMonth = new Date(calYear, calMonth, 0).getDate();
+                for (var i=0; i<firstDow; i++) {
+                    var e = document.createElement('div');
+                    e.className = 'cal-day cal-empty';
+                    grd.appendChild(e);
+                }
+                for (var d=1; d<=daysInMonth; d++) {
+                    (function(day) {
+                        var ymd = toYMD(calYear, calMonth, day);
+                        var el  = document.createElement('div');
+                        el.className = 'cal-day';
+                        el.textContent = day;
+                        if (ymd === today) el.classList.add('cal-today');
+                        if (ymd === selectedYMD) el.classList.add('cal-selected');
+                        el.addEventListener('click', function() {
+                            setDate(ymd);
+                            cal.classList.add('hidden');
+                            renderGrid();
+                        });
+                        grd.appendChild(el);
+                    })(d);
+                }
+            }
+
+            setDate(hi.value || todayYMD());
+
+            btn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                if (hi.value && hi.value !== selectedYMD) setDate(hi.value);
+                renderGrid();
+                cal.classList.toggle('hidden');
+            });
+            prv.addEventListener('click', function(e) {
+                e.stopPropagation();
+                calMonth--; if (calMonth < 1) { calMonth=12; calYear--; }
+                renderGrid();
+            });
+            nxt.addEventListener('click', function(e) {
+                e.stopPropagation();
+                calMonth++; if (calMonth > 12) { calMonth=1; calYear++; }
+                renderGrid();
+            });
+            cal.addEventListener('click', function(e) { e.stopPropagation(); });
+            document.addEventListener('click', function() { cal.classList.add('hidden'); });
+
+            window._onSettleDateReset = function() { setDate(todayYMD()); };
+        }
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initCalendar);
+        } else {
+            initCalendar();
+        }
+    })();
     </script>
 </body>
 </html>

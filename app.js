@@ -2287,6 +2287,7 @@ const AppState = {
         this.editingAttendeeId = null;
         const _sdi = document.getElementById('settlement-date-input');
         if (_sdi) _sdi.value = new Date().toISOString().slice(0, 10);
+        if (typeof window._onSettleDateReset === 'function') window._onSettleDateReset();
 
         this.save();
         this.render();
@@ -2338,6 +2339,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (typeof updateCardTypeUI === 'function') updateCardTypeUI();
             const settleDateEl = document.getElementById('settlement-date-input');
             if (settleDateEl) settleDateEl.value = new Date().toISOString().slice(0, 10);
+            if (typeof window._onSettleDateReset === 'function') window._onSettleDateReset();
             AppState.save();
             AppState.render();
         });
@@ -2346,6 +2348,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // 정산 날짜 입력 필드 오늘 날짜로 초기화
     const settleDateEl = document.getElementById('settlement-date-input');
     if (settleDateEl) settleDateEl.value = new Date().toISOString().slice(0, 10);
+    if (typeof window._onSettleDateReset === 'function') window._onSettleDateReset();
 
     // PIN 키패드 클릭이 항상 동작하도록 가장 먼저 위임 방식으로 등록
     // (이후 초기화 코드에서 오류가 발생해도 키패드 입력은 막히지 않음)
