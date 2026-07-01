@@ -1,7 +1,7 @@
 /**
  * Club Expense Settlement App - Main JavaScript Logic
  */
-const APP_VERSION      = '1.6.172';
+const APP_VERSION      = '1.6.173';
 const APP_VERSION_DATE = '2026.07.01';
 
 // 인당 자부담 비용에 따라 강조 박스의 아이콘/색상을 전환 (100원 이상이면 🔥, 0이면 😊)
@@ -2555,17 +2555,40 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     AppState.loadGlobalSettings();
 
-    // 수정 모드 완료 버튼 — 엑셀 재생성 + globalHistory 갱신 + 수정 모드 해제
+    // 수정 모드 완료 버튼 — 파일 다운로드 없이 데이터만 저장 (모바일 다운로드 차단 우회)
     const editModeDoneBtn = document.getElementById('edit-mode-done-btn');
     if (editModeDoneBtn) {
         editModeDoneBtn.addEventListener('click', async () => {
+            if (!AppState.editingHistoryId) return;
             editModeDoneBtn.disabled = true;
             editModeDoneBtn.textContent = '⏳ 저장 중...';
             try {
-                await AppState.downloadExcelOnly();
+                const result = SettlementCalculator.calculate(
+                    AppState.memberCount, AppState.expenseItems, AppState.previousPrizeTotal, AppState.rules
+                );
+                const finalTotalSelfPay = AppState.lastCalculatedSelfPay > 0
+                    ? AppState.lastCalculatedSelfPay : result.totalSelfPay;
+                const updatedFields = {
+                    memberCount: AppState.memberCount,
+                    totalCost: result.totalCost,
+                    finalSupportAmount: result.totalCost - finalTotalSelfPay,
+                    totalSelfPay: finalTotalSelfPay,
+                    perPersonSelfPay: AppState.memberCount > 0
+                        ? Math.round(finalTotalSelfPay / AppState.memberCount)
+                        : result.perPersonSelfPay,
+                    selfPayRatio: result.totalCost > 0 ? finalTotalSelfPay / result.totalCost : 0,
+                    expenseItems: JSON.parse(JSON.stringify(AppState.expenseItems)),
+                    attendees: JSON.parse(JSON.stringify(AppState.attendees)),
+                    clubName: AppState.clubName,
+                    clubId: AppState.clubId || '',
+                };
+                await AppState.updateHistoryEntry(AppState.editingHistoryId, updatedFields);
+                AppState.cancelEditMode();
+                AppState.render();
+                alert('수정 내용이 저장되었습니다.\n엑셀 파일이 필요하면 정산 이력에서 수정 후 다운로드하세요.');
             } catch (err) {
                 console.error(err);
-                alert('수정 저장 중 오류가 발생했습니다: ' + err.message);
+                alert('수정 저장 중 오류가 발생했습니다: ' + (err.message || ''));
             } finally {
                 editModeDoneBtn.disabled = false;
                 editModeDoneBtn.textContent = '✅ 수정 완료';
