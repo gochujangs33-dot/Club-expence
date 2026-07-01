@@ -2307,28 +2307,6 @@ document.addEventListener('DOMContentLoaded', () => {
     // 언어 설정 초기 적용
     if (typeof applyTranslations === 'function') applyTranslations();
 
-    // 로그인 페이지 언어 선택 (pill 버튼)
-    const langPillWrap = document.getElementById('login-lang-select-wrap');
-    if (langPillWrap) {
-        const updatePills = (lang) => {
-            langPillWrap.querySelectorAll('.lang-pill').forEach(btn => {
-                const isActive = btn.dataset.lang === lang;
-                btn.style.background = isActive ? 'rgba(255,255,255,0.15)' : 'transparent';
-                btn.style.color = isActive ? 'var(--text-primary)' : 'var(--text-secondary)';
-            });
-        };
-        updatePills(getLang());
-        langPillWrap.querySelectorAll('.lang-pill').forEach(btn => {
-            btn.addEventListener('click', () => {
-                setLang(btn.dataset.lang);
-                updatePills(btn.dataset.lang);
-                if (typeof AppState !== 'undefined' && AppState.isLoggedIn) {
-                    AppState.render();
-                }
-                applyTranslations();
-            });
-        });
-    }
 
     // 현재 정산 초기화 버튼
     const resetSessionBtn = document.getElementById('reset-session-btn');
@@ -3192,9 +3170,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 const todayStr = new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' });
                 runFinalizeSettlement();
-                if (getLang() === 'en') {
-                    alert(`📂 ${todayStr} — Excel file saved.\n\n✅ Session cleared.\n📧 Please email the saved file.\n📋 View this record in the History tab.`);
-                } else {
+                {
                     alert(
                         `📂 ${todayStr} 정산 엑셀 파일이 생성되어 다운로드 폴더에 저장되었습니다.\n\n` +
                         `✅ 전체 항목이 초기화되었습니다.\n` +
@@ -3446,7 +3422,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 alert(t('alert.select_items_to_delete'));
                 return;
             }
-            if (!confirm(getLang() === 'en' ? `Delete ${checked.length} request(s)?` : `선택한 ${checked.length}건의 요청사항을 삭제하시겠습니까?`)) return;
+            if (!confirm(`선택한 ${checked.length}건의 요청사항을 삭제하시겠습니까?`)) return;
             const updates = {};
             checked.forEach(cb => { updates[cb.getAttribute('data-key')] = null; });
             firebaseDb.ref('requests').update(updates).then(() => renderFeedbackList());
@@ -4092,9 +4068,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function deleteAdminUser(pin, name) {
         showConfirmModal(
-            getLang() === 'en'
-                ? `Delete user '${name}' (${pin})?\nThis cannot be undone.`
-                : `'${name}' (${pin}) 회원을 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`,
+            `'${name}' (${pin}) 회원을 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`,
             () => {
                 Promise.all([
                     firebaseDb.ref(`users/${pin}`).remove(),
@@ -4162,7 +4136,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 listContainer.querySelectorAll('.btn-delete-feedback').forEach(btn => {
                     btn.addEventListener('click', () => {
                         const key = btn.getAttribute('data-key');
-                        if (!confirm(getLang() === 'en' ? 'Delete this request?' : '이 요청사항을 삭제하시겠습니까?')) return;
+                        if (!confirm('이 요청사항을 삭제하시겠습니까?')) return;
                         firebaseDb.ref(`requests/${key}`).remove().then(() => renderFeedbackList());
                     });
                 });
@@ -4412,8 +4386,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const clubId = btn.getAttribute('data-id');
                 const club = AppState.clubRegistry[clubId];
                 if (!club) return;
-                const msg = getLang() === 'en' ? `Delete club '${club.name}'?` : `'${club.name}' 클럽을 삭제하시겠습니까?`;
-                showConfirmModal(msg, () => {
+                showConfirmModal(`'${club.name}' 클럽을 삭제하시겠습니까?`, () => {
                     AppState.deleteClub(clubId);
                     renderClubManagement();
                 });
@@ -5094,9 +5067,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const entry = historyList.find(e => String(e.id) === String(id));
                 if (!entry) return;
                 showConfirmModal(
-                    getLang() === 'en'
-                        ? `Delete this record?\nAttendee counts (${entry.memberCount} persons) will be decreased.`
-                        : `이 정산 기록을 삭제하시겠습니까?\n참석자 ${entry.memberCount}명의 누적 참석 횟수도 함께 차감됩니다.`,
+                    `이 정산 기록을 삭제하시겠습니까?\n참석자 ${entry.memberCount}명의 누적 참석 횟수도 함께 차감됩니다.`,
                     () => {
 
                 if (entry.attendees) {
