@@ -1,7 +1,7 @@
 /**
  * Club Expense Settlement App - Main JavaScript Logic
  */
-const APP_VERSION      = '1.6.175';
+const APP_VERSION      = '1.6.176';
 const APP_VERSION_DATE = '2026.07.01';
 
 // 인당 자부담 비용에 따라 강조 박스의 아이콘/색상을 전환 (100원 이상이면 🔥, 0이면 😊)
@@ -1720,8 +1720,15 @@ const AppState = {
                 historyContainer.innerHTML = `<div class="empty-state"><span class="empty-icon">📋</span><p>${t('empty.history')}</p></div>`;
             } else {
                 this.settlementHistory.forEach((entry) => {
-                    const d = new Date(entry.date);
-                    const dateStr = `${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+                    // 정산 날짜(settlementDate) 우선, 없으면 등록 시각(date) 표시
+                    let dateStr;
+                    if (entry.settlementDate) {
+                        const [sy, sm, sd] = entry.settlementDate.split('-');
+                        dateStr = `${sy}.${sm}.${sd}`;
+                    } else {
+                        const d = new Date(entry.date);
+                        dateStr = `${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+                    }
                     const card = document.createElement('div');
                     card.className = 'history-entry';
 
@@ -1735,8 +1742,13 @@ const AppState = {
                     const editedBadge = entry.isEdited
                         ? `<span class="badge-edited">${t('badge.edited')}</span>`
                         : '';
+                    // 수정 시각은 날짜+시간 모두 표시
                     const editedAtStr = entry.isEdited && entry.editedAt
-                        ? ` <span style="font-size:0.75rem;color:var(--text-muted);">(${t('label.edited_at')}: ${new Date(entry.editedAt).toLocaleDateString()})</span>`
+                        ? (() => {
+                            const ea = new Date(entry.editedAt);
+                            const eaStr = `${ea.getFullYear()}.${String(ea.getMonth()+1).padStart(2,'0')}.${String(ea.getDate()).padStart(2,'0')} ${String(ea.getHours()).padStart(2,'0')}:${String(ea.getMinutes()).padStart(2,'0')}`;
+                            return ` <span style="font-size:0.75rem;color:var(--text-muted);">(수정: ${eaStr})</span>`;
+                        })()
                         : '';
 
                     card.innerHTML = `
