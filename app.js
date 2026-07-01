@@ -1,7 +1,7 @@
 /**
  * Club Expense Settlement App - Main JavaScript Logic
  */
-const APP_VERSION      = '1.6.168';
+const APP_VERSION      = '1.6.169';
 const APP_VERSION_DATE = '2026.07.01';
 
 // 인당 자부담 비용에 따라 강조 박스의 아이콘/색상을 전환 (100원 이상이면 🔥, 0이면 😊)
@@ -753,6 +753,7 @@ const AppState = {
             if (!groups[key]) groups[key] = [];
             groups[key].push({ id, club });
         }
+        const toRemove = {};
         for (const group of Object.values(groups)) {
             if (group.length <= 1) continue;
             // 예산 큰 것 유지, 같으면 ID가 작은(오래된) 것 유지
@@ -760,8 +761,12 @@ const AppState = {
             const [, ...remove] = group;
             for (const { id } of remove) {
                 delete this.clubRegistry[id];
-                if (this.firebaseDb) this.firebaseDb.ref(`clubRegistry/${id}`).remove().catch(() => {});
+                toRemove[id] = null; // Firebase multi-path update용
             }
+        }
+        // 단 한 번의 update() 호출로 모든 중복 삭제 → 리스너 재호출 1회로 제한 (깜빡임 방지)
+        if (Object.keys(toRemove).length > 0 && this.firebaseDb) {
+            this.firebaseDb.ref('clubRegistry').update(toRemove).catch(() => {});
         }
     },
 
@@ -3211,15 +3216,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 sendEmailBtn.innerHTML = `<span class='btn-icon'>✓</span> ${t('state.saved')}`;
 
                 const todayStr = new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' });
-                runFinalizeSettlement();
-                {
-                    alert(
-                        `📂 ${todayStr} 정산 엑셀 파일이 생성되어 다운로드 폴더에 저장되었습니다.\n\n` +
-                        `✅ 전체 항목이 초기화되었습니다.\n` +
-                        `📧 저장된 파일을 이메일로 보내주세요.\n` +
-                        `📋 이번 정산 내역은 [정산 이력] 탭에서 확인하실 수 있습니다.`
-                    );
-                }
+                // skipConfirm=true: 버튼 클릭 자체가 확인 의사 표명 — 추가 confirm 팝업 불필요
+                runFinalizeSettlement(true);
+                alert(
+                    `📂 ${todayStr} 정산 엑셀 파일이 생성되어 다운로드 폴더에 저장되었습니다.\n\n` +
+                    `✅ 전체 항목이 초기화되었습니다.\n` +
+                    `📧 저장된 파일을 이메일로 보내주세요.\n` +
+                    `📋 이번 정산 내역은 [정산 이력] 탭에서 확인하실 수 있습니다.`
+                );
             } catch (err) {
                 console.error(err);
                 sendEmailBtn.innerHTML = `<span class='btn-icon'>❌</span> ${t('state.save_failed')}`;
