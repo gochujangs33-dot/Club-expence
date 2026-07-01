@@ -1,7 +1,7 @@
 /**
  * Club Expense Settlement App - Main JavaScript Logic
  */
-const APP_VERSION      = '1.6.180';
+const APP_VERSION      = '1.6.181';
 const APP_VERSION_DATE = '2026.07.02';
 
 // 인당 자부담 비용에 따라 강조 박스의 아이콘/색상을 전환 (100원 이상이면 🔥, 0이면 😊)
@@ -444,17 +444,32 @@ const AppState = {
             if (typeof entry === 'object') entry.count = 0;
             else this.directory[name] = { id: entry, count: 0 };
         });
+
+        // 사번 → 명부 키(이름) 역방향 조회 맵 (동명이인 구분용)
+        const idToName = {};
+        Object.entries(this.directory).forEach(([name, entry]) => {
+            if (typeof entry !== 'object') return;
+            const ids = entry.ids ? entry.ids.map(String) : (entry.id ? [String(entry.id)] : []);
+            ids.forEach(id => { if (id) idToName[id] = name; });
+        });
+
         // 수정된 이력(isEdited)도 카운트에 포함 — 단 동일 id 항목은 1회만 집계
         const seenIds = new Set();
         (this.settlementHistory || []).forEach(entry => {
             if (!entry || !entry.id) return;
             if (seenIds.has(entry.id)) return; // 중복 방지
             seenIds.add(entry.id);
-            const d = entry.date ? new Date(entry.date) : new Date(entry.id);
-            if (d.getFullYear() !== currentYear) return;
+            // settlementDate 기준 연도 판별 (소급 등록 대응)
+            const entryYear = entry.settlementDate
+                ? parseInt(entry.settlementDate.slice(0, 4), 10)
+                : (entry.date ? new Date(entry.date).getFullYear() : new Date(entry.id).getFullYear());
+            if (entryYear !== currentYear) return;
             (entry.attendees || []).forEach(att => {
                 if (!att.name) return;
-                const cur = this.directory[att.name];
+                const empId = att.employeeId ? String(att.employeeId) : '';
+                // 사번으로 명부 항목 먼저 찾고, 없으면 이름으로 검색
+                const dirKey = (empId && idToName[empId]) || att.name;
+                const cur = this.directory[dirKey];
                 if (cur) {
                     cur.count = (cur.count || 0) + 1;
                 } else {
