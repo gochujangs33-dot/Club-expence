@@ -4170,6 +4170,8 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('tab-settlement').classList.remove('hidden');
         }
 
+        AppState.cancelEditMode(); // 수정 모드 중 로그아웃 시 상태 초기화
+        AppState.clubHistory = [];
         AppState.isLoggedIn = false;
         AppState.currentPin = null;
         AppState.userName = null;
