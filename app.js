@@ -1,7 +1,7 @@
 /**
  * Club Expense Settlement App - Main JavaScript Logic
  */
-const APP_VERSION      = '1.6.174';
+const APP_VERSION      = '1.6.175';
 const APP_VERSION_DATE = '2026.07.01';
 
 // 인당 자부담 비용에 따라 강조 박스의 아이콘/색상을 전환 (100원 이상이면 🔥, 0이면 😊)
@@ -2216,12 +2216,18 @@ const AppState = {
             this.clubId = match ? match[0] : '';
         }
         this.lastCalculatedSelfPay = entry.totalSelfPay || 0;
-        // 정산 날짜 입력란을 이력 원본 날짜로 복원
-        const _sdiEdit = document.getElementById('settlement-date-input');
-        if (_sdiEdit && entry.settlementDate) {
-            _sdiEdit.value = entry.settlementDate;
-            if (typeof window._onSettleDateReset === 'function') window._onSettleDateReset();
+        // 정산 날짜 입력란을 이력 원본 날짜로 복원 (_onSettleDateChange: 특정 날짜 지정)
+        if (entry.settlementDate) {
+            if (typeof window._onSettleDateChange === 'function') {
+                window._onSettleDateChange(entry.settlementDate);
+            } else {
+                const _sdiEdit = document.getElementById('settlement-date-input');
+                if (_sdiEdit) _sdiEdit.value = entry.settlementDate;
+            }
         }
+        // 수정 모드에서 "파일 저장 및 정산 완료" 버튼 숨기기
+        const _sendEmailBtn = document.getElementById('send-email-btn');
+        if (_sendEmailBtn) _sendEmailBtn.classList.add('hidden');
         // 수정 모드 배너 표시
         const banner = document.getElementById('edit-mode-banner');
         const dateEl = document.getElementById('edit-mode-date');
@@ -2268,6 +2274,11 @@ const AppState = {
         this.editingHistoryId = null;
         const banner = document.getElementById('edit-mode-banner');
         if (banner) banner.classList.add('hidden');
+        // 숨겼던 버튼 복원
+        const sendBtn = document.getElementById('send-email-btn');
+        if (sendBtn) sendBtn.classList.remove('hidden');
+        // 날짜를 오늘로 초기화
+        if (typeof window._onSettleDateReset === 'function') window._onSettleDateReset();
     },
 
     // 엑셀 + 사진(참석자/영수증)을 묶어 공유 시트로 전달

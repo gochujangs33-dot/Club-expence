@@ -1322,7 +1322,8 @@
             cal.addEventListener('click', function(e) { e.stopPropagation(); });
             document.addEventListener('click', function() { cal.classList.add('hidden'); });
 
-            window._onSettleDateReset = function() { setDate(todayYMD()); };
+            window._onSettleDateReset  = function() { setDate(todayYMD()); };
+            window._onSettleDateChange = function(ymd) { setDate(ymd); };
         }
 
         if (document.readyState === 'loading') {
