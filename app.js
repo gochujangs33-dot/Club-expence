@@ -434,31 +434,13 @@ const AppState = {
 
     // 관리자 전용: globalHistory 전체 기준으로 명부 카운트 재계산 (모든 사용자 정산 반영)
     // ── 사번 기준 카운트 공통 헬퍼 ───────────────────────────────────────
-    // attendeeList: [{name, employeeId},...], 사번 없는 경우 이름으로 단일 매핑 시도
-    // 사번을 확정할 수 없으면 해당 참석자는 카운트 대상에서 제외 (이름 기준 카운트 없음)
+    // 사번(employeeId) 필수 — 없으면 해당 참석자는 카운트 제외
     _countAttendeesByEmpId(attendeeList, idToName) {
         attendeeList.forEach(att => {
-            if (!att.name) return;
-            let empId = att.employeeId ? String(att.employeeId) : '';
-            let dirKey = empId ? idToName[empId] : null;
-
-            // 사번이 없으면 이름으로 명부 조회 — 동명이인 없이 1명뿐일 때만 귀속
-            if (!empId || !dirKey) {
-                const nameEntry = this.directory[att.name];
-                if (nameEntry && typeof nameEntry === 'object') {
-                    const knownIds = (nameEntry.ids ? nameEntry.ids : (nameEntry.id ? [String(nameEntry.id)] : [])).map(String).filter(Boolean);
-                    if (knownIds.length === 1) {
-                        empId = empId || knownIds[0];
-                        dirKey = att.name;
-                    } else {
-                        return; // 동명이인 여러 명 — 어느 사번인지 특정 불가, 스킵
-                    }
-                } else {
-                    return; // 명부에 없는 이름, 스킵
-                }
-            }
-
-            if (!empId || !dirKey) return;
+            if (!att.name || !att.employeeId) return; // 사번 없으면 무조건 스킵
+            const empId = String(att.employeeId);
+            const dirKey = idToName[empId];
+            if (!dirKey) return; // 명부에 등록되지 않은 사번
             const cur = this.directory[dirKey];
             if (!cur || typeof cur !== 'object') return;
             cur.counts[empId] = (cur.counts[empId] || 0) + 1;
@@ -3032,7 +3014,8 @@ document.addEventListener('DOMContentLoaded', () => {
     function trySubmitAttendee() {
         const name = attendeeNameInput.value.trim();
         const id = attendeeIdInput.value.trim();
-        if (!name || !id) return;
+        if (!name) { showAttendeeError('이름을 입력해 주세요.'); return; }
+        if (!id) { showAttendeeError('사번(EMP ID)은 필수입니다.'); return; }
 
         if (AppState.editingAttendeeId === null) {
             const isDuplicate = AppState.attendees.some(att => att.name === name && att.employeeId === id);
