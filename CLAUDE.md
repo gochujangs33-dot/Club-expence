@@ -53,6 +53,17 @@
      카운트 초기화 사고를 일으켜 **전면 롤백(v1.6.74)** 됨. 유사한 "공유/병합" 기능은 다시 시도하기 전
      반드시 사용자와 설계를 재확인할 것.
    - 사용자가 회귀(데이터 초기화 등)를 보고하면 **추가 패치보다 즉시 직전 안정 버전으로 롤백**을 우선.
+6. **버그 수정 코드 — 재수정·롤백 금지** ⛔ (아래 4개 항목은 각각 재발 버그를 잡은 fix임)
+
+   | 함수 / 위치 | 핵심 불변량 | 수정 버전 | 재수정 시 재발하는 버그 |
+   |---|---|---|---|
+   | `_countAttendeesByEmpId` | 사번(`employeeId`) 없는 참석자는 **무조건 스킵** — 이름 기반 폴백 코드 없음 | v1.6.198 | 동명이인 카운트 오귀속 (이진호 4277↔4035 혼용) |
+   | `recalculateDirectoryCountsFromGlobal` | 비동기 처리 완료 후 `if (this.isLoggedIn) this.render()` 호출 필수 + `cur.count` 집계합 동기화 | v1.6.197 | 전사원 명부 카운트 0회 표시 |
+   | `loadClubRegistry` | `.on('value', ...)` 등록 **직전** 반드시 `.off('value')` 호출 | v1.6.200 | 탭 전환마다 리스너 누적 → 클럽 중복 생성 |
+   | `renderAdminDashboard` step 3 | `AppState.loadClubRegistry().then(...)` **재호출 금지** — UI 함수(`renderClubManagement` 등) 직접 호출 | v1.6.200 | loadClubRegistry 재호출로 리스너 누적 우회 불가 |
+
+   - 위 항목 중 하나라도 되돌리거나 "리팩토링"하면 대응하는 버그가 즉시 재발함.
+   - 구조 변경이 꼭 필요한 경우 먼저 사용자에게 위 표를 보여주고 명시적 승인을 받아야 함.
 
 ---
 
@@ -61,7 +72,7 @@
 ```
 1. 파일 수정 (app.js / index.html / style.css 등)
 2. node --check app.js   ← 문법 오류 확인
-3. sw.js 의 APP_VERSION 1 증가 (현재 1.6.99)
+3. sw.js 의 APP_VERSION 1 증가 (현재 1.6.200)
 4. git add -A && git commit -q -m "..." && git push -q
 ```
 
@@ -120,4 +131,4 @@
 - [`PERMISSIONS.md`](PERMISSIONS.md) — 권한별 가능/불가 기능 정리
 - [`CHANGES.md`](CHANGES.md) — 버전별 변경 이력
 
-현재 버전: **v1.6.120** (`sw.js` `APP_VERSION`)
+현재 버전: **v1.6.200** (`sw.js` `APP_VERSION`)

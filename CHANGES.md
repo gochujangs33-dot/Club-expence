@@ -2,6 +2,51 @@
 
 ---
 
+## v1.6.200 — 클럽 중복 생성 방지 + 클럽 목록 넘버링 추가
+
+### 버그 수정
+- **클럽 중복 생성 재발 원인 제거**: `loadClubRegistry()`가 탭 전환 때마다 새 Firebase `.on('value', ...)` 리스너를 누적 등록하던 문제 수정
+  - `.on()` 등록 전 `.off('value')` 호출 추가 → 항상 리스너 1개만 유지
+  - 복수 리스너가 동시에 `_autoDeduplicateClubs()`를 호출하며 Firebase에 충돌 write를 일으키던 경쟁조건 제거
+- **`renderAdminDashboard`에서 `loadClubRegistry()` 재호출 제거**: 탭 전환 시 기존 실시간 리스너(`AppState.clubRegistry` 자동 최신화)를 재사용하도록 변경
+  - 기존: `AppState.loadClubRegistry().then(...)` — 탭 전환마다 새 리스너 추가
+  - 변경 후: `renderClubManagement()` 등 UI 함수 직접 호출
+
+### 기능 추가
+- **클럽 목록 넘버링**: 클럽 관리 탭 목록에 클럽명 왼쪽에 순서 번호(`1.` `2.` ...) 표시
+
+---
+
+## v1.6.199 — 잔여 예산 미반영 경쟁조건 수정
+
+- **현상**: 관리자 대시보드에서 클럽 관리 탭 진입 시 모든 클럽의 잔여 예산이 0으로 표시되는 경우 발생
+- **원인**: `clubRegistry` (빠름)가 `globalHistory` (느림)보다 먼저 로드 완료되어 `renderClubManagement()` 호출 시 `lastHistoryList = []` 상태
+- **수정**: `globalHistory` `.then()` 블록에서 `lastHistoryList` 설정 직후 `renderClubManagement()` 재호출 추가
+  → `globalHistory` 로드 완료 시점에 클럽 관리 UI가 정확한 사용액으로 갱신됨
+
+---
+
+## v1.6.198 — 전사원 명부 카운트 이름 기반 폴백 완전 제거
+
+- **현상**: 동명이인(이진호 4035 / 이진호 4277) 중 사번 없는 구형 정산 기록이 이름 폴백으로 잘못된 인물에 카운트 귀속
+- **원인**: `_countAttendeesByEmpId` 내 이름 기반 폴백 로직 — 사번 없으면 이름으로 `directory` 검색 후 카운트
+- **수정**: 사번(`employeeId`) 없는 참석자 기록은 카운트에서 **완전 제외**
+  - 이름 폴백 코드 전면 삭제, 사번 기준 단일 경로만 유지
+  - `idToName` 맵에 없는 사번도 무시 (명부 미등록 사원 오귀속 방지)
+
+---
+
+## v1.6.197 — 전사원 명부 카운트 0회 표시 수정
+
+- **현상**: 정산 이력이 있음에도 전사원 명부의 "올해 누적 N회"가 0으로 표시
+- **원인**: `recalculateDirectoryCountsFromGlobal()` 비동기 처리 완료 후 UI 갱신 누락 + `cur.count` 집계값 미동기화
+- **수정**:
+  - `_countAttendeesByEmpId`: `cur.counts[empId]` 업데이트 후 `cur.count`(집계합) 동기화 추가
+  - `recalculateDirectoryCountsFromGlobal`: 처리 완료 후 `this.render()` 호출로 UI 즉시 반영
+  - 진단용 콘솔 로그 추가: `[명부 카운트] YYYY년 정산 N건 처리, 명부 M명`
+
+---
+
 ## v1.6.145 — 상품 카테고리 선택 안내 팝업 문구 다듬기
 
 - 번역투 문장을 자연스러운 한국어로 수정
