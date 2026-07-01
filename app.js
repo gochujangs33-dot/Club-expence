@@ -433,29 +433,68 @@ const AppState = {
     },
 
     // 관리자 전용: globalHistory 전체 기준으로 명부 카운트 재계산 (모든 사용자 정산 반영)
-    async recalculateDirectoryCountsFromGlobal() {
-        if (!this.firebaseDb) { this.recalculateDirectoryCounts(); return; }
-        const currentYear = new Date().getFullYear();
+    // ── 사번 기준 카운트 공통 헬퍼 ───────────────────────────────────────
+    // attendeeList: [{name, employeeId},...], 사번 없는 경우 이름으로 단일 매핑 시도
+    // 사번을 확정할 수 없으면 해당 참석자는 카운트 대상에서 제외 (이름 기준 카운트 없음)
+    _countAttendeesByEmpId(attendeeList, idToName) {
+        attendeeList.forEach(att => {
+            if (!att.name) return;
+            let empId = att.employeeId ? String(att.employeeId) : '';
+            let dirKey = empId ? idToName[empId] : null;
 
-        // 카운트 초기화 — 알려진 모든 사번을 0으로 선언(undefined 폴백 방지)
+            // 사번이 없으면 이름으로 명부 조회 — 동명이인 없이 1명뿐일 때만 귀속
+            if (!empId || !dirKey) {
+                const nameEntry = this.directory[att.name];
+                if (nameEntry && typeof nameEntry === 'object') {
+                    const knownIds = (nameEntry.ids ? nameEntry.ids : (nameEntry.id ? [String(nameEntry.id)] : [])).map(String).filter(Boolean);
+                    if (knownIds.length === 1) {
+                        empId = empId || knownIds[0];
+                        dirKey = att.name;
+                    } else {
+                        return; // 동명이인 여러 명 — 어느 사번인지 특정 불가, 스킵
+                    }
+                } else {
+                    return; // 명부에 없는 이름, 스킵
+                }
+            }
+
+            if (!empId || !dirKey) return;
+            const cur = this.directory[dirKey];
+            if (!cur || typeof cur !== 'object') return;
+            cur.counts[empId] = (cur.counts[empId] || 0) + 1;
+        });
+    },
+
+    // ── 카운트 초기화 공통 헬퍼 ─────────────────────────────────────────
+    _resetDirectoryCounts() {
         Object.keys(this.directory).forEach(name => {
             const entry = this.directory[name];
             const ids = (typeof entry === 'object' && entry.ids)
                 ? entry.ids.map(String)
                 : (typeof entry === 'object' && entry.id ? [String(entry.id)] : []);
             const freshCounts = {};
-            ids.forEach(id => { if (id && id !== 'undefined') freshCounts[id] = 0; });
+            ids.forEach(id => { if (id && id !== 'undefined' && id !== 'null') freshCounts[id] = 0; });
             if (typeof entry === 'object') { entry.count = 0; entry.counts = freshCounts; }
             else this.directory[name] = { id: entry, count: 0, counts: freshCounts };
         });
+    },
 
-        // 사번 → 명부 키 역방향 맵
+    // ── 사번 → 명부 키 역방향 맵 생성 ────────────────────────────────────
+    _buildIdToName() {
         const idToName = {};
         Object.entries(this.directory).forEach(([name, entry]) => {
             if (typeof entry !== 'object') return;
             const ids = entry.ids ? entry.ids.map(String) : (entry.id ? [String(entry.id)] : []);
             ids.forEach(id => { if (id) idToName[id] = name; });
         });
+        return idToName;
+    },
+
+    async recalculateDirectoryCountsFromGlobal() {
+        if (!this.firebaseDb) { this.recalculateDirectoryCounts(); return; }
+        const currentYear = new Date().getFullYear();
+        this._resetDirectoryCounts();
+        const idToName = this._buildIdToName();
 
         try {
             const [histSnap, deletedSnap] = await Promise.all([
@@ -471,88 +510,33 @@ const AppState = {
                 if (deletedIds.has(String(child.key))) return;
                 if (seenIds.has(entry.id)) return;
                 seenIds.add(entry.id);
-
                 const entryYear = entry.settlementDate
                     ? parseInt(entry.settlementDate.slice(0, 4), 10)
                     : (entry.date ? new Date(entry.date).getFullYear() : new Date(entry.id).getFullYear());
                 if (entryYear !== currentYear) return;
-
-                (entry.attendees || []).forEach(att => {
-                    if (!att.name) return;
-                    const empId = att.employeeId ? String(att.employeeId) : '';
-                    const dirKey = (empId && idToName[empId]) || att.name;
-                    const cur = this.directory[dirKey];
-                    if (cur) {
-                        // 사번별 개인 카운트
-                        if (empId) {
-                            cur.counts = cur.counts || {};
-                            cur.counts[empId] = (cur.counts[empId] || 0) + 1;
-                        }
-                        cur.count = (cur.count || 0) + 1;
-                    } else {
-                        const newEntry = { id: att.employeeId, count: 1, counts: {} };
-                        if (empId) newEntry.counts[empId] = 1;
-                        this.directory[att.name] = newEntry;
-                        if (empId) idToName[empId] = att.name;
-                    }
-                });
+                this._countAttendeesByEmpId(entry.attendees || [], idToName);
             });
         } catch (err) {
             console.error('globalHistory 카운트 재계산 실패:', err);
-            this.recalculateDirectoryCounts(); // fallback
+            this.recalculateDirectoryCounts();
         }
     },
 
-    // 명부의 "올해 누적 참석 횟수"를 본인 정산 이력(올해분)만 기준으로 다시 계산
-    // — 일반 사용자 전용 (관리자는 recalculateDirectoryCountsFromGlobal 사용)
+    // — 일반 사용자 전용 (자신의 정산 이력만 접근 가능)
     recalculateDirectoryCounts() {
         const currentYear = new Date().getFullYear();
-        Object.keys(this.directory).forEach(name => {
-            const entry = this.directory[name];
-            const ids = (typeof entry === 'object' && entry.ids)
-                ? entry.ids.map(String)
-                : (typeof entry === 'object' && entry.id ? [String(entry.id)] : []);
-            const freshCounts = {};
-            ids.forEach(id => { if (id && id !== 'undefined') freshCounts[id] = 0; });
-            if (typeof entry === 'object') { entry.count = 0; entry.counts = freshCounts; }
-            else this.directory[name] = { id: entry, count: 0, counts: freshCounts };
-        });
-
-        // 사번 → 명부 키(이름) 역방향 조회 맵 (동명이인 구분용)
-        const idToName = {};
-        Object.entries(this.directory).forEach(([name, entry]) => {
-            if (typeof entry !== 'object') return;
-            const ids = entry.ids ? entry.ids.map(String) : (entry.id ? [String(entry.id)] : []);
-            ids.forEach(id => { if (id) idToName[id] = name; });
-        });
-
-        // 수정된 이력(isEdited)도 카운트에 포함 — 단 동일 id 항목은 1회만 집계
+        this._resetDirectoryCounts();
+        const idToName = this._buildIdToName();
         const seenIds = new Set();
         (this.settlementHistory || []).forEach(entry => {
             if (!entry || !entry.id) return;
-            if (seenIds.has(entry.id)) return; // 중복 방지
+            if (seenIds.has(entry.id)) return;
             seenIds.add(entry.id);
             const entryYear = entry.settlementDate
                 ? parseInt(entry.settlementDate.slice(0, 4), 10)
                 : (entry.date ? new Date(entry.date).getFullYear() : new Date(entry.id).getFullYear());
             if (entryYear !== currentYear) return;
-            (entry.attendees || []).forEach(att => {
-                if (!att.name) return;
-                const empId = att.employeeId ? String(att.employeeId) : '';
-                const dirKey = (empId && idToName[empId]) || att.name;
-                const cur = this.directory[dirKey];
-                if (cur) {
-                    if (empId) {
-                        cur.counts = cur.counts || {};
-                        cur.counts[empId] = (cur.counts[empId] || 0) + 1;
-                    }
-                    cur.count = (cur.count || 0) + 1;
-                } else {
-                    const newEntry = { id: att.employeeId, count: 1, counts: {} };
-                    if (empId) newEntry.counts[empId] = 1;
-                    this.directory[att.name] = newEntry;
-                }
-            });
+            this._countAttendeesByEmpId(entry.attendees || [], idToName);
         });
     },
 
@@ -1776,11 +1760,9 @@ const AppState = {
 
                 dirRows.forEach(({ name, id }) => {
                     const entry = this.directory[name];
-                    // counts 객체가 있으면 사번별 값(없으면 0), 없으면 총 count로 폴백
-                    const countValue = typeof entry === 'object'
-                        ? (entry.counts
-                            ? (entry.counts[id] || 0)
-                            : (entry.count || 0))
+                    // 사번 기준 카운트만 사용 — 이름 기준 합산(count)으로 폴백하지 않음
+                    const countValue = (typeof entry === 'object' && entry.counts)
+                        ? (entry.counts[id] || 0)
                         : 0;
                     const isAdded = this.attendees.some(att => att.name === name && String(att.employeeId) === id);
 
