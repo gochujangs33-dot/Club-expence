@@ -700,6 +700,8 @@ const AppState = {
         // 실시간 리스너: 관리자가 클럽명/예산 수정 시 모든 접속자에게 즉시 반영
         return new Promise((resolve) => {
             let initialLoad = true; // 첫 번째 수신은 초기 로드 — 삭제 팝업 억제
+            // 기존 리스너 제거 후 재등록 — 탭 전환마다 loadClubRegistry()가 호출돼 리스너가 누적되는 문제 방지
+            this.firebaseDb.ref('clubRegistry').off('value');
             this.firebaseDb.ref('clubRegistry').on('value', snapshot => {
                 this.clubRegistry = snapshot.val() || {};
                 // 이름 중복 자동 정리: 관리자 세션에서만 Firebase에서 즉시 제거
@@ -4656,15 +4658,13 @@ document.addEventListener('DOMContentLoaded', () => {
             renderAllCharts(historyList);
         });
 
-        // 3. Fetch Club Registry & Total Budget
-        AppState.loadClubRegistry().then(() => {
-            renderClubManagement();
-            // 총 클럽비용은 비동기로 로드되므로, 차트의 예산 통계를 다시 갱신
-            updateChartsBudgetStats(lastHistoryList);
-            renderClubFilters();
-            renderClubHistorySelect();
-            renderAllCharts(lastHistoryList);
-        });
+        // 3. 클럽 관리 UI 갱신 — loadClubRegistry()는 로그인 시 1회만 호출(실시간 리스너 유지)
+        //    탭 전환 때마다 재호출하면 리스너가 누적되어 중복 클럽 생성 등 부작용 발생
+        renderClubManagement();
+        updateChartsBudgetStats(lastHistoryList);
+        renderClubFilters();
+        renderClubHistorySelect();
+        renderAllCharts(lastHistoryList);
     }
 
     // ── 클럽별 정산이력 탭 - 클럽 선택 드롭다운 ───────────────────────────
@@ -4717,7 +4717,7 @@ document.addEventListener('DOMContentLoaded', () => {
             clubListContainer.innerHTML = `<div class="empty-state"><span class="empty-icon">🏷️</span><p>${t('empty.no_clubs')}</p></div>`;
             return;
         }
-        clubs.sort((a, b) => a[1].name.localeCompare(b[1].name)).forEach(([clubId, club]) => {
+        clubs.sort((a, b) => a[1].name.localeCompare(b[1].name)).forEach(([clubId, club], idx) => {
             const _thisYear = new Date().getFullYear();
             // 상품비: globalHistory 기준으로 올해 실제 사용액 계산 후 Firebase에도 동기화
             const prizeUsed = lastHistoryList
@@ -4755,7 +4755,7 @@ document.addEventListener('DOMContentLoaded', () => {
             row.style.cssText = 'padding:0.6rem 0.75rem; height:auto; align-items:center; flex-wrap:wrap;';
             row.innerHTML = `
                 <div class="expense-row-left" style="flex:1.4; min-width:90px;">
-                    <span class="expense-row-title" style="font-size:0.9rem; white-space:normal; line-height:1.3;">${AppState.escapeHtml(club.name)}</span>
+                    <span class="expense-row-title" style="font-size:0.9rem; white-space:normal; line-height:1.3;"><span style="color:var(--text-muted); margin-right:0.3em; font-weight:400;">${idx + 1}.</span>${AppState.escapeHtml(club.name)}</span>
                 </div>
                 <div style="flex:1.2; min-width:100px; text-align:center;">
                     <div style="font-size:0.7rem; color:var(--text-secondary);">${t('club.assigned_budget')}</div>
