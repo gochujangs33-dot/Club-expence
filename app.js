@@ -1,7 +1,7 @@
 /**
  * Club Expense Settlement App - Main JavaScript Logic
  */
-const APP_VERSION      = '1.6.186';
+const APP_VERSION      = '1.6.187';
 const APP_VERSION_DATE = '2026.07.02';
 
 // 인당 자부담 비용에 따라 강조 박스의 아이콘/색상을 전환 (100원 이상이면 🔥, 0이면 😊)
@@ -173,9 +173,6 @@ const SettlementCalculator = Object.freeze({
 
         const warnings = [];
 
-        if (prizeCost > 0 && memberCount < 10) {
-            warnings.push("정회원 10명 이상 참석 시에만 상품비 사용이 가능합니다.");
-        }
         if (prizeCost + previousPrizeTotal > (rules.prizeLimit || 500000)) {
             warnings.push("상품비 연 한도 50만원을 초과할 수 없습니다.");
         }
