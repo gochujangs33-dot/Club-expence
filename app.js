@@ -1,7 +1,7 @@
 /**
  * Club Expense Settlement App - Main JavaScript Logic
  */
-const APP_VERSION      = '1.6.179';
+const APP_VERSION      = '1.6.180';
 const APP_VERSION_DATE = '2026.07.02';
 
 // 인당 자부담 비용에 따라 강조 박스의 아이콘/색상을 전환 (100원 이상이면 🔥, 0이면 😊)
@@ -251,6 +251,7 @@ const AppState = {
     clubName: '',
     clubId: '',
     settlementHistory: [],
+    clubHistory: [],
     clubRegistry: {},
     clubTotalBudget: 0,
     editingHistoryId: null,   // 수정 모드 중인 이력 항목 ID
@@ -859,6 +860,54 @@ const AppState = {
 
         // 둘 중 큰 값 사용: Firebase 미동기화 시 이력 합산으로 보완
         return priorUsed + Math.max(fromHistory, firebaseUsed);
+    },
+
+    // globalHistory에서 현재 클럽의 전체 이력 로드 (모든 사용자 포함)
+    async loadClubHistory() {
+        const currentClubId = this.clubId;
+        const currentClubName = this.clubName;
+        if (!currentClubId && !currentClubName) {
+            this.clubHistory = [...(this.settlementHistory || [])];
+            return;
+        }
+        if (!this.firebaseDb || !this.isLoggedIn) {
+            this.clubHistory = (this.settlementHistory || []).filter(e =>
+                e && (currentClubId
+                    ? (e.clubId === currentClubId || e.clubName === currentClubName)
+                    : e.clubName === currentClubName)
+            );
+            return;
+        }
+        try {
+            const [histSnap, deletedSnap] = await Promise.all([
+                this.firebaseDb.ref('globalHistory').once('value'),
+                this.firebaseDb.ref('deletedHistoryIds').once('value')
+            ]);
+            const deletedIds = new Set(Object.keys(deletedSnap.val() || {}));
+            const allHistory = [];
+            histSnap.forEach(child => {
+                const entry = child.val();
+                if (!entry || deletedIds.has(String(child.key))) return;
+                const matchById = currentClubId && (entry.clubId === currentClubId || entry.clubName === currentClubName);
+                const matchByName = !currentClubId && entry.clubName === currentClubName;
+                if (!matchById && !matchByName) return;
+                allHistory.push(entry);
+            });
+            allHistory.sort((a, b) => {
+                const da = a.settlementDate || (a.date ? a.date.slice(0, 10) : '');
+                const db = b.settlementDate || (b.date ? b.date.slice(0, 10) : '');
+                if (da > db) return -1;
+                if (da < db) return 1;
+                return (b.id || 0) - (a.id || 0);
+            });
+            this.clubHistory = allHistory;
+        } catch {
+            this.clubHistory = (this.settlementHistory || []).filter(e =>
+                e && (currentClubId
+                    ? (e.clubId === currentClubId || e.clubName === currentClubName)
+                    : e.clubName === currentClubName)
+            );
+        }
     },
 
     syncBudgetFromClub(clubName) {
@@ -1721,10 +1770,12 @@ const AppState = {
         const historyContainer = document.getElementById('history-container');
         if (historyContainer) {
             historyContainer.innerHTML = '';
-            if (this.settlementHistory.length === 0) {
+            // clubHistory(전체 클럽원 이력)가 로드돼 있으면 우선 사용, 없으면 개인 이력
+            const historyList = this.clubHistory.length > 0 ? this.clubHistory : (this.settlementHistory || []);
+            if (historyList.length === 0) {
                 historyContainer.innerHTML = `<div class="empty-state"><span class="empty-icon">📋</span><p>${t('empty.history')}</p></div>`;
             } else {
-                this.settlementHistory.forEach((entry) => {
+                historyList.forEach((entry) => {
                     // 정산 날짜(settlementDate) 우선, 없으면 등록 시각(date) 표시
                     let dateStr;
                     if (entry.settlementDate) {
@@ -1737,10 +1788,10 @@ const AppState = {
                     const card = document.createElement('div');
                     card.className = 'history-entry';
 
-                    const itemsHtml = entry.expenseItems.map(it =>
+                    const itemsHtml = (entry.expenseItems || []).map(it =>
                         `<li>${this.escapeHtml(it.description)} <span style="color:var(--color-secondary)">${SettlementCalculator.formatCurrency(it.amount)}</span></li>`
                     ).join('');
-                    const attendeesHtml = entry.attendees.map(a =>
+                    const attendeesHtml = (entry.attendees || []).map(a =>
                         `<span class="expense-category-badge">${this.escapeHtml(a.name)}</span>`
                     ).join(' ');
 
@@ -1756,16 +1807,28 @@ const AppState = {
                         })()
                         : '';
 
+                    // 정산인 표시 (본인이면 '나', 타인이면 이름)
+                    const isMyEntry = !entry.creatorPin || entry.creatorPin === this.currentPin;
+                    const creatorLabel = entry.creatorName
+                        ? `<span style="font-size:0.72rem;color:var(--text-muted);white-space:nowrap;">👤 ${this.escapeHtml(entry.creatorName)}</span>`
+                        : '';
+
+                    // 수정 버튼은 본인 항목에만 표시
+                    const editBtnHtml = isMyEntry
+                        ? `<button class="btn-edit-history" data-id="${entry.id}" style="font-size:0.75rem;padding:0.2rem 0.6rem;background:rgba(99,102,241,0.15);border:1px solid rgba(99,102,241,0.4);color:#a5b4fc;border-radius:0.3rem;cursor:pointer;white-space:nowrap;">✏️ ${t('btn.edit')}</button>`
+                        : '';
+
                     card.innerHTML = `
                         <div class="history-header">
                             <div style="display:flex;align-items:center;gap:0.4rem;flex-wrap:wrap;">
                                 <span class="history-date">${dateStr}</span>
                                 ${entry.clubName ? `<span class="history-club">${this.escapeHtml(entry.clubName)}</span>` : ''}
+                                ${creatorLabel}
                                 ${editedBadge}${editedAtStr}
                             </div>
                             <div style="display:flex;gap:0.3rem;flex-shrink:0;">
                                 <button class="btn-download-history" data-id="${entry.id}" style="font-size:0.75rem;padding:0.2rem 0.6rem;background:rgba(16,185,129,0.15);border:1px solid rgba(16,185,129,0.4);color:#6ee7b7;border-radius:0.3rem;cursor:pointer;white-space:nowrap;">📥 엑셀</button>
-                                <button class="btn-edit-history" data-id="${entry.id}" style="font-size:0.75rem;padding:0.2rem 0.6rem;background:rgba(99,102,241,0.15);border:1px solid rgba(99,102,241,0.4);color:#a5b4fc;border-radius:0.3rem;cursor:pointer;white-space:nowrap;">✏️ ${t('btn.edit')}</button>
+                                ${editBtnHtml}
                             </div>
                         </div>
                         <div class="history-summary">
@@ -1787,7 +1850,7 @@ const AppState = {
                 historyContainer.querySelectorAll('.btn-download-history').forEach(btn => {
                     btn.addEventListener('click', async () => {
                         const id = Number(btn.getAttribute('data-id'));
-                        const entry = AppState.settlementHistory.find(e => e.id === id);
+                        const entry = historyList.find(e => e.id === id);
                         if (!entry) return;
                         btn.disabled = true;
                         btn.textContent = '⏳';
@@ -1800,7 +1863,7 @@ const AppState = {
                     });
                 });
 
-                // 수정 버튼 이벤트
+                // 수정 버튼 이벤트 (본인 항목만 렌더링됨)
                 historyContainer.querySelectorAll('.btn-edit-history').forEach(btn => {
                     btn.addEventListener('click', () => {
                         const id = Number(btn.getAttribute('data-id'));
@@ -2386,6 +2449,8 @@ const AppState = {
 
         // Save to local history
         this.settlementHistory.unshift(newHistoryItem);
+        // clubHistory에도 즉시 반영 (로드돼 있는 경우)
+        if (this.clubHistory.length > 0) this.clubHistory.unshift(newHistoryItem);
 
         // Save to Firebase global history
         if (this.isLoggedIn && this.firebaseDb) {
@@ -2592,6 +2657,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 AppState.previousPrizeTotal = selectedClub ? (selectedClub.prizeUsed || 0) : 0;
                 if (prizeInput) prizeInput.value = formatAmount(AppState.previousPrizeTotal);
                 AppState.usedBudget = 0;
+                AppState.clubHistory = []; // 클럽 전환 시 이력 초기화 (다음 탭 전환 시 재로드)
                 AppState.clearClubData();
             }
             AppState.syncBudgetFromClub(AppState.clubName);
@@ -2751,6 +2817,10 @@ document.addEventListener('DOMContentLoaded', () => {
             // 관리자 탭 전환 시: globalHistory 최신화 (대시보드·클럽이력·차트 공통)
             if ((tabId === 'tab-admin' || tabId === 'tab-club-history' || tabId === 'tab-charts') && typeof renderAdminDashboard === 'function') {
                 renderAdminDashboard();
+            }
+            // 이력 탭 전환 시: 동일 클럽의 전체 사용자 이력 로드
+            if (tabId === 'tab-history') {
+                AppState.loadClubHistory().then(() => AppState.render());
             }
             // 차트 탭 전환 시: 숨겨진 상태에서 렌더링 불가 → 탭이 보인 후 재렌더
             if (tabId === 'tab-charts' && typeof renderAllCharts === 'function') {
