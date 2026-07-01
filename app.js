@@ -1,7 +1,7 @@
 /**
  * Club Expense Settlement App - Main JavaScript Logic
  */
-const APP_VERSION      = '1.6.185';
+const APP_VERSION      = '1.6.186';
 const APP_VERSION_DATE = '2026.07.02';
 
 // 인당 자부담 비용에 따라 강조 박스의 아이콘/색상을 전환 (100원 이상이면 🔥, 0이면 😊)
@@ -5488,7 +5488,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <div class="history-header">
                     <div style="display:flex;align-items:center;gap:0.4rem;flex-wrap:wrap;">
                         <strong>${AppState.escapeHtml(entry.clubName || t('label.default_club'))}</strong>
-                        <span class="history-club" style="color:var(--color-secondary);">${t('label.settler')}: ${AppState.escapeHtml(entry.creatorName || t('status.offline'))}</span>
+                        <span class="history-club admin-edit-creator" data-id="${entry.id}" style="color:var(--color-secondary);cursor:pointer;text-decoration:underline dotted;" title="탭하여 정산인 이름 수정">${t('label.settler')}: ${AppState.escapeHtml(entry.creatorName || t('status.offline'))}</span>
                         ${editedBadgeAdmin}
                     </div>
                     <div style="display:flex;align-items:center;gap:0.4rem;">
@@ -5538,6 +5538,40 @@ document.addEventListener('DOMContentLoaded', () => {
             container.appendChild(div);
         });
         
+        // 정산인 이름 수정 (관리자 전용)
+        container.querySelectorAll('.admin-edit-creator').forEach(span => {
+            span.addEventListener('click', () => {
+                const id = span.getAttribute('data-id');
+                const entry = historyList.find(e => String(e.id) === String(id));
+                if (!entry) return;
+                const current = entry.creatorName || '';
+                showEditModal('정산인 이름 수정', '수정할 이름을 입력하세요', current, newName => {
+                    if (!newName || !newName.trim() || newName.trim() === current) return;
+                    const trimmed = newName.trim();
+                    if (!firebaseDb) { alert('Firebase 연결이 필요합니다.'); return; }
+                    firebaseDb.ref(`globalHistory/${id}/creatorName`).set(trimmed)
+                        .then(() => {
+                            entry.creatorName = trimmed;
+                            span.textContent = `정산인: ${trimmed}`;
+                            // 해당 사용자의 개인 이력도 동기화
+                            if (entry.creatorPin) {
+                                firebaseDb.ref(`settlements/${entry.creatorPin}/settlementHistory`).once('value').then(snap => {
+                                    const raw = snap.val();
+                                    if (!raw) return;
+                                    const arr = Array.isArray(raw) ? raw : Object.values(raw);
+                                    const idx = arr.findIndex(h => h && String(h.id) === String(id));
+                                    if (idx >= 0) {
+                                        arr[idx].creatorName = trimmed;
+                                        firebaseDb.ref(`settlements/${entry.creatorPin}/settlementHistory`).set(arr).catch(() => {});
+                                    }
+                                }).catch(() => {});
+                            }
+                        })
+                        .catch(() => alert('저장 중 오류가 발생했습니다.'));
+                });
+            });
+        });
+
         // 정산 기록 삭제 → globalHistory에서 제거 + 참석자 누적 참석 횟수 차감
         container.querySelectorAll('.btn-delete-history').forEach(btn => {
             btn.addEventListener('click', () => {
@@ -6020,6 +6054,42 @@ function resetCorpAmount() {
 
     const corp = _calcCorpForItem(total, category);
     corpAmountInput.value = corp > 0 ? formatAmount(corp) : '';
+}
+
+// 텍스트 입력 모달 (관리자 인라인 수정용)
+function showEditModal(title, hint, defaultValue, onConfirm) {
+    const existing = document.getElementById('edit-modal-overlay');
+    if (existing) existing.remove();
+
+    const overlay = document.createElement('div');
+    overlay.id = 'edit-modal-overlay';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;z-index:9999;';
+    overlay.innerHTML = `
+        <div style="background:var(--card-bg,#1e1e2e);border:2px solid rgba(99,102,241,0.55);border-radius:1rem;padding:1.5rem;width:min(90vw,360px);box-shadow:0 12px 48px rgba(0,0,0,0.7);">
+            <div style="font-size:1rem;font-weight:700;color:#c7d2fe;margin-bottom:0.75rem;">✏️ ${title}</div>
+            <div style="font-size:0.8rem;color:var(--text-muted,#94a3b8);margin-bottom:0.5rem;">${hint}</div>
+            <input id="edit-modal-input" type="text" value="${defaultValue.replace(/"/g,'&quot;')}" style="width:100%;box-sizing:border-box;padding:0.5rem 0.75rem;border-radius:0.5rem;border:1px solid rgba(99,102,241,0.5);background:rgba(255,255,255,0.05);color:#e2e8f0;font-size:0.95rem;outline:none;margin-bottom:1rem;">
+            <div style="display:flex;gap:0.5rem;justify-content:flex-end;">
+                <button id="edit-modal-cancel" style="padding:0.4rem 1rem;border-radius:0.5rem;border:1px solid rgba(255,255,255,0.2);background:transparent;color:#94a3b8;cursor:pointer;">취소</button>
+                <button id="edit-modal-ok" style="padding:0.4rem 1rem;border-radius:0.5rem;border:2px solid rgba(99,102,241,0.65);background:rgba(99,102,241,0.25);color:#c7d2fe;cursor:pointer;font-weight:600;">저장</button>
+            </div>
+        </div>`;
+    document.body.appendChild(overlay);
+
+    const input = overlay.querySelector('#edit-modal-input');
+    const okBtn = overlay.querySelector('#edit-modal-ok');
+    const cancelBtn = overlay.querySelector('#edit-modal-cancel');
+
+    setTimeout(() => { input.focus(); input.select(); }, 50);
+
+    const close = () => overlay.remove();
+    cancelBtn.addEventListener('click', close);
+    overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+    okBtn.addEventListener('click', () => { close(); onConfirm(input.value); });
+    input.addEventListener('keydown', e => {
+        if (e.key === 'Enter') { close(); onConfirm(input.value); }
+        if (e.key === 'Escape') close();
+    });
 }
 
 // 확인 커스텀 모달 (테마 적용)
