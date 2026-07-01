@@ -466,6 +466,8 @@ const AppState = {
             if (!cur || typeof cur !== 'object') return;
             if (!cur.counts) cur.counts = {};
             cur.counts[empId] = (cur.counts[empId] || 0) + 1;
+            // aggregate count 동기화 (정렬 기준)
+            cur.count = Object.values(cur.counts).reduce((s, v) => s + v, 0);
         });
     },
 
@@ -507,6 +509,7 @@ const AppState = {
             ]);
             const deletedIds = new Set(Object.keys(deletedSnap.val() || {}));
             const seenIds = new Set();
+            let counted = 0;
 
             histSnap.forEach(child => {
                 const entry = child.val();
@@ -518,12 +521,16 @@ const AppState = {
                     ? parseInt(entry.settlementDate.slice(0, 4), 10)
                     : (entry.date ? new Date(entry.date).getFullYear() : new Date(entry.id).getFullYear());
                 if (entryYear !== currentYear) return;
+                counted++;
                 this._countAttendeesByEmpId(entry.attendees || [], idToName);
             });
+            console.log(`[명부 카운트] ${currentYear}년 정산 ${counted}건 처리, 명부 ${Object.keys(this.directory).length}명`);
         } catch (err) {
             console.error('globalHistory 카운트 재계산 실패:', err);
             this.recalculateDirectoryCounts();
         }
+        // 카운트 갱신 후 UI 즉시 반영 (로그인 완료 전 호출되는 경우 스킵)
+        if (this.isLoggedIn && typeof this.render === 'function') this.render();
     },
 
     // — 일반 사용자 전용 (자신의 정산 이력만 접근 가능)
