@@ -573,86 +573,114 @@
 
         <!-- Tab Content 6: 차트 (관리자 전용) -->
         <div id="tab-charts" class="tab-pane hidden">
-            <div class="card" id="overall-monthly-chart-card">
-                <div class="card-header">
-                    <span class="card-icon">📊</span>
-                    <h2 data-i18n="chart.monthly_title">월별 클럽 지출 현황</h2>
+
+            <!-- KPI 요약 카드 -->
+            <div class="charts-kpi-row">
+                <div class="charts-kpi-card">
+                    <div class="charts-kpi-label">💰 전체 예산</div>
+                    <div class="charts-kpi-val" id="charts-total-budget">0원</div>
                 </div>
-                <div class="card-body">
-                    <div class="admin-stats-grid" style="margin-bottom:1rem;">
-                        <div class="stat-card">
-                            <span class="stat-label" data-i18n="stat.total_budget">💰 총 예산</span>
-                            <span class="stat-val" id="charts-total-budget">0원</span>
+                <div class="charts-kpi-card kpi-used">
+                    <div class="charts-kpi-label">💸 사용 예산</div>
+                    <div class="charts-kpi-val" id="charts-used-budget">0원</div>
+                </div>
+                <div class="charts-kpi-card">
+                    <div class="charts-kpi-label">🟢 잔여 예산</div>
+                    <div class="charts-kpi-val" id="charts-remaining-budget">0원</div>
+                </div>
+                <div class="charts-kpi-card kpi-count">
+                    <div class="charts-kpi-label">📋 총 정산 횟수</div>
+                    <div class="charts-kpi-val" id="charts-total-count">0건</div>
+                </div>
+            </div>
+
+            <!-- 공통 클럽 필터 -->
+            <div class="charts-filter-card">
+                <div class="charts-filter-label">클럽 필터</div>
+                <div id="club-filter-container" class="club-filter-row">
+                    <!-- Populated dynamically -->
+                </div>
+            </div>
+
+            <!-- 2-컬럼 그리드 차트 -->
+            <div class="charts-grid">
+                <!-- 월별 클럽 지출 현황 -->
+                <div class="card chart-card-glow">
+                    <div class="card-header">
+                        <span class="card-icon">📊</span>
+                        <div>
+                            <h2>월별 지출 현황</h2>
+                            <div class="chart-subtitle">클럽별 월간 지출액 비교</div>
                         </div>
-                        <div class="stat-card">
-                            <span class="stat-label" data-i18n="stat.used_budget">💸 사용 예산</span>
-                            <span class="stat-val" id="charts-used-budget">0원</span>
-                        </div>
-                        <div class="stat-card">
-                            <span class="stat-label" data-i18n="stat.remaining_budget">🟢 잔여 예산</span>
-                            <span class="stat-val" id="charts-remaining-budget">0원</span>
+                    </div>
+                    <div class="card-body">
+                        <div class="chart-canvas-wrap">
+                            <canvas id="overall-monthly-chart"></canvas>
                         </div>
                     </div>
-                    <div id="club-filter-container" class="club-filter-row">
-                        <!-- Populated dynamically: 전체 클럽 + per-club chips -->
+                </div>
+
+                <!-- 클럽별 예산 소진율 -->
+                <div class="card chart-card-glow">
+                    <div class="card-header">
+                        <span class="card-icon">🎯</span>
+                        <div>
+                            <h2>예산 소진율</h2>
+                            <div class="chart-subtitle">클럽별 연간 예산 사용 비율</div>
+                        </div>
                     </div>
-                    <div class="chart-canvas-wrap" style="max-height:340px;">
-                        <canvas id="overall-monthly-chart" height="120"></canvas>
+                    <div class="card-body">
+                        <div class="chart-canvas-wrap">
+                            <canvas id="club-usage-chart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 카테고리별 비용 비중 -->
+                <div class="card chart-card-glow">
+                    <div class="card-header">
+                        <span class="card-icon">🥧</span>
+                        <div>
+                            <h2>카테고리별 비용 비중</h2>
+                            <div class="chart-subtitle">행사비 · 시설비 · 상품비 비율</div>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div class="chart-canvas-wrap">
+                            <canvas id="category-pie-chart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 클럽별 정산 횟수 -->
+                <div class="card chart-card-glow">
+                    <div class="card-header">
+                        <span class="card-icon">🏃</span>
+                        <div>
+                            <h2>클럽별 정산 횟수</h2>
+                            <div class="chart-subtitle">올해 정산 활동량 비교</div>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div class="chart-canvas-wrap">
+                            <canvas id="club-activity-chart"></canvas>
+                        </div>
                     </div>
                 </div>
             </div>
 
-            <!-- 클럽별 예산 소진율 -->
-            <div class="card chart-card-glow" id="club-usage-chart-card">
-                <div class="card-header">
-                    <span class="card-icon">🎯</span>
-                    <h2 data-i18n="chart.usage_title">클럽별 예산 소진율</h2>
-                </div>
-                <div class="card-body">
-                    <div id="club-usage-filter-container" class="club-filter-row">
-                        <!-- Populated dynamically: 클럽별 체크박스 (중복 선택 가능) -->
-                    </div>
-                    <div class="chart-canvas-wrap" style="max-height:340px;">
-                        <canvas id="club-usage-chart"></canvas>
-                    </div>
-                </div>
-            </div>
-
-            <!-- 카테고리별 누적 비중 -->
-            <div class="card chart-card-glow" id="category-pie-chart-card">
-                <div class="card-header">
-                    <span class="card-icon">🥧</span>
-                    <h2 data-i18n="chart.cat_title">카테고리별 누적 비용 비중</h2>
-                </div>
-                <div class="card-body">
-                    <div class="chart-canvas-wrap" style="max-height:320px; max-width:320px; margin:0 auto;">
-                        <canvas id="category-pie-chart"></canvas>
-                    </div>
-                </div>
-            </div>
-
-            <!-- 클럽별 지출 비교 -->
-            <div class="card chart-card-glow" id="club-spend-chart-card">
-                <div class="card-header">
-                    <span class="card-icon">🏷️</span>
-                    <h2>클럽별 비용 지출 비교</h2>
-                </div>
-                <div class="card-body">
-                    <div class="chart-canvas-wrap" style="max-height:360px;">
-                        <canvas id="club-spend-chart"></canvas>
-                    </div>
-                </div>
-            </div>
-
-            <!-- 자부담 vs 회사지원금 추이 -->
-            <div class="card chart-card-glow" id="selfpay-trend-chart-card">
+            <!-- 전폭: 자부담 vs 회사지원금 추이 -->
+            <div class="card chart-card-glow">
                 <div class="card-header">
                     <span class="card-icon">📐</span>
-                    <h2 data-i18n="chart.selfpay_title">자부담 / 회사지원금 추이</h2>
+                    <div>
+                        <h2>자부담 / 회사지원금 추이</h2>
+                        <div class="chart-subtitle">월별 회사 지원금 vs 참석자 자부담 변화</div>
+                    </div>
                 </div>
                 <div class="card-body">
-                    <div class="chart-canvas-wrap" style="max-height:340px;">
-                        <canvas id="selfpay-trend-chart" height="120"></canvas>
+                    <div class="chart-canvas-wrap tall">
+                        <canvas id="selfpay-trend-chart"></canvas>
                     </div>
                 </div>
             </div>
@@ -1080,11 +1108,11 @@
         </div>
     </div>
 
-    <!-- 삭제 확인 공통 모달 -->
+    <!-- 확인 공통 모달 -->
     <div id="confirm-modal-overlay" style="display:none; position:fixed; inset:0; z-index:10200; background:rgba(0,0,0,0.75); backdrop-filter:blur(6px); align-items:center; justify-content:center;">
-        <div style="background:linear-gradient(160deg,#0d0a18,#120e22); border:2px solid rgba(239,68,68,0.55); border-radius:20px; padding:1.6rem 1.4rem 1.3rem; max-width:340px; width:calc(100% - 2.4rem); box-shadow:0 0 40px rgba(239,68,68,0.22), 0 12px 48px rgba(0,0,0,0.7); text-align:center;">
-            <div style="font-size:2.6rem; margin-bottom:0.6rem;">🗑️</div>
-            <div style="font-size:0.72rem; color:rgba(239,68,68,0.7); font-weight:700; letter-spacing:0.1em; text-transform:uppercase; margin-bottom:0.5rem;">삭제 확인</div>
+        <div id="confirm-modal-box" style="background:linear-gradient(160deg,#0d0a18,#120e22); border:2px solid rgba(239,68,68,0.55); border-radius:20px; padding:1.6rem 1.4rem 1.3rem; max-width:340px; width:calc(100% - 2.4rem); box-shadow:0 0 40px rgba(239,68,68,0.22), 0 12px 48px rgba(0,0,0,0.7); text-align:center;">
+            <div id="confirm-modal-icon" style="font-size:2.6rem; margin-bottom:0.6rem;">🗑️</div>
+            <div id="confirm-modal-title" style="font-size:0.72rem; color:rgba(239,68,68,0.7); font-weight:700; letter-spacing:0.1em; text-transform:uppercase; margin-bottom:0.5rem;">삭제 확인</div>
             <p id="confirm-modal-msg" style="font-size:0.97rem; font-weight:800; color:#fff; line-height:1.6; margin:0 0 1.3rem; white-space:pre-line;"></p>
             <div style="display:flex; gap:0.6rem; justify-content:center; margin-top:0.5rem;">
                 <button id="confirm-modal-ok" style="padding:0.5rem 1.6rem; background:rgba(239,68,68,0.25); border:2px solid rgba(239,68,68,0.65); color:#fca5a5; border-radius:10px; font-size:0.9rem; font-weight:800; cursor:pointer; letter-spacing:0.03em;">삭제</button>

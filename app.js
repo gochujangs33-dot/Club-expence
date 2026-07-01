@@ -4964,7 +4964,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     selectedOverallClubs.clear();
                 }
                 renderClubFilters();
-                renderOverallMonthlyChart(lastHistoryList);
+                renderAllCharts(lastHistoryList);
             });
         }
 
@@ -4976,26 +4976,34 @@ document.addEventListener('DOMContentLoaded', () => {
                     selectedOverallClubs.delete(input.value);
                 }
                 renderClubFilters();
-                renderOverallMonthlyChart(lastHistoryList);
+                renderAllCharts(lastHistoryList);
             });
         });
     }
 
-    // ── 차트 탭 상단 - 총 예산 / 사용 예산 / 잔여 예산 ────────────────────
+    // ── 차트 탭 상단 KPI 카드 업데이트 ────────────────────────────────────
     function updateChartsBudgetStats(historyList) {
         const totalBudgetEl = document.getElementById('charts-total-budget');
         const usedBudgetEl = document.getElementById('charts-used-budget');
         const remainingBudgetEl = document.getElementById('charts-remaining-budget');
+        const countEl = document.getElementById('charts-total-count');
         if (!totalBudgetEl || !usedBudgetEl || !remainingBudgetEl) return;
 
-        const totalBudget = AppState.clubTotalBudget || 0;
-        const usedBudget = (historyList || []).reduce((sum, entry) => sum + (entry.totalCost || 0), 0);
+        const filtered = (historyList || []).filter(e =>
+            !selectedOverallClubs || selectedOverallClubs.has(e.clubName || '기본 클럽')
+        );
+
+        const totalBudget = Object.values(AppState.clubRegistry || {})
+            .filter(c => !selectedOverallClubs || selectedOverallClubs.has(c.name))
+            .reduce((sum, c) => sum + (c.budget || 0), 0);
+        const usedBudget = filtered.reduce((sum, e) => sum + (e.finalSupportAmount || 0), 0);
         const remaining = totalBudget - usedBudget;
 
         totalBudgetEl.textContent = SettlementCalculator.formatCurrency(totalBudget);
         usedBudgetEl.textContent = SettlementCalculator.formatCurrency(usedBudget);
         remainingBudgetEl.textContent = SettlementCalculator.formatCurrency(remaining);
-        remainingBudgetEl.style.color = remaining < 0 ? 'var(--warning-text, #ff6b6b)' : 'var(--color-secondary)';
+        remainingBudgetEl.style.color = remaining < 0 ? '#f87171' : 'var(--color-secondary)';
+        if (countEl) countEl.textContent = `${filtered.length}건`;
     }
 
     let overallMonthlyChartInstance = null;
@@ -5006,8 +5014,6 @@ document.addEventListener('DOMContentLoaded', () => {
     function renderOverallMonthlyChart(historyList) {
         const canvas = document.getElementById('overall-monthly-chart');
         if (!canvas || typeof Chart === 'undefined') return;
-
-        updateChartsBudgetStats(historyList);
 
         const palette = [
             'rgba(139, 92, 246, 0.6)',
@@ -5047,16 +5053,16 @@ document.addEventListener('DOMContentLoaded', () => {
         const datasets = sortedClubs.map((club, idx) => ({
             label: club,
             data: labels.map(month => (spendByMonthClub[month] && spendByMonthClub[month][club]) || 0),
-            backgroundColor: palette[idx % palette.length],
-            borderColor: palette[idx % palette.length].replace('0.6', '0.9'),
-            borderWidth: 1
+            backgroundColor: palette[idx % palette.length].replace('0.6', '0.82'),
+            borderColor: palette[idx % palette.length].replace('0.6', '1'),
+            borderWidth: 0,
+            borderRadius: 6,
+            borderSkipped: false
         }));
 
         const stacked = sortedClubs.length > 1;
 
-        if (overallMonthlyChartInstance) {
-            overallMonthlyChartInstance.destroy();
-        }
+        if (overallMonthlyChartInstance) overallMonthlyChartInstance.destroy();
         overallMonthlyChartInstance = new Chart(canvas.getContext('2d'), {
             type: 'bar',
             data: { labels, datasets },
@@ -5064,101 +5070,51 @@ document.addEventListener('DOMContentLoaded', () => {
                 responsive: true,
                 maintainAspectRatio: false,
                 plugins: {
-                    legend: { labels: { color: '#cbd5e1' } }
+                    legend: { labels: { color: '#cbd5e1', boxWidth: 12, boxHeight: 12, borderRadius: 4, padding: 12 } },
+                    tooltip: {
+                        callbacks: {
+                            label: ctx => `${ctx.dataset.label}: ${SettlementCalculator.formatCurrency(ctx.parsed.y)}`
+                        }
+                    }
                 },
                 scales: {
-                    x: { stacked, ticks: { color: '#cbd5e1' }, grid: { color: 'rgba(255,255,255,0.05)' } },
-                    y: { stacked, ticks: { color: '#cbd5e1' }, grid: { color: 'rgba(255,255,255,0.05)' }, beginAtZero: true }
+                    x: { stacked, ticks: { color: '#94a3b8', font: { size: 11 } }, grid: { color: 'rgba(255,255,255,0.04)' } },
+                    y: { stacked, ticks: { color: '#94a3b8', callback: v => v >= 1000000 ? (v/1000000).toFixed(1)+'M' : v >= 1000 ? (v/1000).toFixed(0)+'K' : v }, grid: { color: 'rgba(255,255,255,0.05)' }, beginAtZero: true }
                 }
             }
         });
     }
 
     let clubUsageChartInstance = null;
-    let selectedUsageClubs = null; // null = 전체 표시, Set이면 해당 클럽만 표시
 
-    // ── 클럽별 예산 소진율 체크박스 필터 ──────────────────────────────────
-    function renderClubUsageFilter(allClubNames, historyList) {
-        const container = document.getElementById('club-usage-filter-container');
-        if (!container) return;
-
-        // 최초 렌더(또는 클럽 목록 변경 시): 전체 선택 상태로 초기화
-        if (!selectedUsageClubs) {
-            selectedUsageClubs = new Set(allClubNames);
-        } else {
-            allClubNames.forEach(name => {
-                if (!selectedUsageClubs.has(name) && !container.dataset.initialized) {
-                    selectedUsageClubs.add(name);
-                }
-            });
-        }
-        container.dataset.initialized = '1';
-
-        const allSelected = allClubNames.length > 0 && allClubNames.every(name => selectedUsageClubs.has(name));
-
-        container.innerHTML = `
-            <label class="club-filter-chip ${allSelected ? 'active' : ''}">
-                <input type="checkbox" data-club-usage-select-all ${allSelected ? 'checked' : ''}>
-                전체 선택
-            </label>
-        ` + allClubNames.map(name => `
-            <label class="club-filter-chip ${selectedUsageClubs.has(name) ? 'active' : ''}">
-                <input type="checkbox" data-club-usage-filter value="${AppState.escapeHtml(name)}" ${selectedUsageClubs.has(name) ? 'checked' : ''}>
-                ${AppState.escapeHtml(name)}
-            </label>
-        `).join('');
-
-        const selectAllInput = container.querySelector('input[data-club-usage-select-all]');
-        if (selectAllInput) {
-            selectAllInput.addEventListener('change', () => {
-                if (selectAllInput.checked) {
-                    allClubNames.forEach(name => selectedUsageClubs.add(name));
-                } else {
-                    selectedUsageClubs.clear();
-                }
-                renderClubUsageChart(historyList);
-            });
-        }
-
-        container.querySelectorAll('input[data-club-usage-filter]').forEach(input => {
-            input.addEventListener('change', () => {
-                if (input.checked) {
-                    selectedUsageClubs.add(input.value);
-                } else {
-                    selectedUsageClubs.delete(input.value);
-                }
-                input.closest('.club-filter-chip').classList.toggle('active', input.checked);
-                renderClubUsageChart(historyList);
-            });
-        });
-    }
-
-    // ── 클럽별 예산 소진율 (가로 막대) ──────────────────────────────────
+    // ── 클럽별 예산 소진율 (가로 막대, 공통 필터 사용) ────────────────────
     function renderClubUsageChart(historyList) {
         const canvas = document.getElementById('club-usage-chart');
         if (!canvas || typeof Chart === 'undefined') return;
 
         const allClubs = Object.values(AppState.clubRegistry || {}).sort((a, b) => a.name.localeCompare(b.name));
-        renderClubUsageFilter(allClubs.map(c => c.name), historyList);
+        const clubs = allClubs.filter(c => !selectedOverallClubs || selectedOverallClubs.has(c.name));
 
-        const clubs = allClubs.filter(c => selectedUsageClubs.has(c.name));
-        const labels = clubs.map(c => c.name);
-        const usageRatio = [];
-        const usageColors = [];
-        clubs.forEach(club => {
+        // 소진율 높은 순 정렬
+        const clubData = clubs.map(club => {
             const spent = (historyList || [])
                 .filter(entry => (entry.clubName || '기본 클럽') === club.name)
                 .reduce((sum, entry) => sum + (entry.finalSupportAmount || 0), 0);
             const usedTotal = (club.priorUsed || 0) + spent;
             const budget = club.budget || 0;
             const ratio = budget > 0 ? (usedTotal / budget) * 100 : 0;
-            usageRatio.push(Math.round(ratio * 10) / 10);
-            usageColors.push(ratio >= 100 ? 'rgba(248, 113, 113, 0.75)' : ratio >= 80 ? 'rgba(251, 191, 36, 0.75)' : 'rgba(52, 211, 153, 0.75)');
-        });
+            return { name: club.name, ratio: Math.round(ratio * 10) / 10, usedTotal, budget };
+        }).sort((a, b) => b.ratio - a.ratio);
 
-        if (clubUsageChartInstance) {
-            clubUsageChartInstance.destroy();
-        }
+        const labels = clubData.map(d => d.name);
+        const usageRatio = clubData.map(d => d.ratio);
+        const usageColors = clubData.map(d =>
+            d.ratio >= 100 ? 'rgba(248, 113, 113, 0.85)' :
+            d.ratio >= 80  ? 'rgba(251, 191, 36, 0.85)' :
+                             'rgba(52, 211, 153, 0.85)'
+        );
+
+        if (clubUsageChartInstance) clubUsageChartInstance.destroy();
         if (labels.length === 0) return;
 
         clubUsageChartInstance = new Chart(canvas.getContext('2d'), {
@@ -5166,12 +5122,12 @@ document.addEventListener('DOMContentLoaded', () => {
             data: {
                 labels,
                 datasets: [{
-                    label: '예산 소진율 (%)',
+                    label: '예산 소진율',
                     data: usageRatio,
                     backgroundColor: usageColors,
-                    borderColor: usageColors.map(c => c.replace('0.75', '1')),
-                    borderWidth: 1,
-                    borderRadius: 6
+                    borderColor: usageColors.map(c => c.replace('0.85', '1')),
+                    borderWidth: 0,
+                    borderRadius: 8
                 }]
             },
             options: {
@@ -5180,11 +5136,18 @@ document.addEventListener('DOMContentLoaded', () => {
                 maintainAspectRatio: false,
                 plugins: {
                     legend: { display: false },
-                    tooltip: { callbacks: { label: (ctx) => `${ctx.parsed.x}% 소진` } }
+                    tooltip: {
+                        callbacks: {
+                            label: (ctx) => {
+                                const d = clubData[ctx.dataIndex];
+                                return [`소진율: ${ctx.parsed.x}%`, `사용: ${SettlementCalculator.formatCurrency(d.usedTotal)}`, `예산: ${SettlementCalculator.formatCurrency(d.budget)}`];
+                            }
+                        }
+                    }
                 },
                 scales: {
-                    x: { ticks: { color: '#cbd5e1', callback: (v) => v + '%' }, grid: { color: 'rgba(255,255,255,0.05)' }, beginAtZero: true },
-                    y: { ticks: { color: '#cbd5e1' }, grid: { display: false } }
+                    x: { ticks: { color: '#94a3b8', callback: (v) => v + '%' }, grid: { color: 'rgba(255,255,255,0.04)' }, beginAtZero: true, max: 120 },
+                    y: { ticks: { color: '#cbd5e1', font: { size: 11 } }, grid: { display: false } }
                 }
             }
         });
@@ -5192,46 +5155,53 @@ document.addEventListener('DOMContentLoaded', () => {
 
     let categoryPieChartInstance = null;
 
-    // ── 카테고리별(행사비/시설비/상품) 누적 비용 비중 (도넛) ───────────────
-    // entry에 eventCost/facilityCost/prizeCost가 없으므로 expenseItems에서 직접 계산
+    // ── 카테고리별(행사비/시설비/상품) 누적 비용 비중 (도넛, 클럽 필터 적용) ─
     function renderCategoryPieChart(historyList) {
         const canvas = document.getElementById('category-pie-chart');
         if (!canvas || typeof Chart === 'undefined') return;
 
+        const filtered = (historyList || []).filter(e =>
+            !selectedOverallClubs || selectedOverallClubs.has(e.clubName || '기본 클럽')
+        );
+
         let eventCost = 0, facilityCost = 0, prizeCost = 0;
-        (historyList || []).forEach(entry => {
+        filtered.forEach(entry => {
             (entry.expenseItems || []).forEach(item => {
                 const amt = item.amount || 0;
                 if (item.category === 'FACILITY') facilityCost += amt;
                 else if (item.category === 'PRIZE') prizeCost += amt;
-                else eventCost += amt; // EVENT or legacy
+                else eventCost += amt;
             });
         });
 
-        if (categoryPieChartInstance) {
-            categoryPieChartInstance.destroy();
-        }
+        if (categoryPieChartInstance) categoryPieChartInstance.destroy();
         if (eventCost + facilityCost + prizeCost === 0) return;
 
+        const total = eventCost + facilityCost + prizeCost;
         categoryPieChartInstance = new Chart(canvas.getContext('2d'), {
             type: 'doughnut',
             data: {
-                labels: ['행사비', '시설 및 장비 이용료', '상품'],
+                labels: ['행사비', '시설·장비', '상품비'],
                 datasets: [{
                     data: [eventCost, facilityCost, prizeCost],
-                    backgroundColor: ['rgba(139, 92, 246, 0.75)', 'rgba(56, 189, 248, 0.75)', 'rgba(251, 191, 36, 0.75)'],
-                    borderColor: 'rgba(15, 23, 42, 0.9)',
-                    borderWidth: 2
+                    backgroundColor: ['rgba(139, 92, 246, 0.88)', 'rgba(56, 189, 248, 0.88)', 'rgba(251, 191, 36, 0.88)'],
+                    borderColor: 'rgba(15, 23, 42, 0.6)',
+                    borderWidth: 3,
+                    hoverOffset: 8
                 }]
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
+                cutout: '62%',
                 plugins: {
-                    legend: { position: 'bottom', labels: { color: '#cbd5e1' } },
+                    legend: { position: 'bottom', labels: { color: '#cbd5e1', padding: 16, font: { size: 12 } } },
                     tooltip: {
                         callbacks: {
-                            label: (ctx) => `${ctx.label}: ${SettlementCalculator.formatCurrency(ctx.parsed)}`
+                            label: (ctx) => {
+                                const pct = total > 0 ? Math.round(ctx.parsed / total * 1000) / 10 : 0;
+                                return `${ctx.label}: ${SettlementCalculator.formatCurrency(ctx.parsed)} (${pct}%)`;
+                            }
                         }
                     }
                 }
@@ -5278,95 +5248,115 @@ document.addEventListener('DOMContentLoaded', () => {
                         label: '회사 지원금',
                         data: labels.map(k => byMonth[k].support),
                         borderColor: 'rgba(52, 211, 153, 1)',
-                        backgroundColor: 'rgba(52, 211, 153, 0.18)',
+                        backgroundColor: 'rgba(52, 211, 153, 0.12)',
                         fill: true,
-                        tension: 0.35,
-                        pointRadius: 4,
-                        pointHoverRadius: 6
+                        tension: 0.4,
+                        pointRadius: 5,
+                        pointHoverRadius: 8,
+                        pointBackgroundColor: 'rgba(52, 211, 153, 1)',
+                        pointBorderColor: '#0f172a',
+                        pointBorderWidth: 2
                     },
                     {
                         label: '자부담 비용',
                         data: labels.map(k => byMonth[k].selfPay),
                         borderColor: 'rgba(248, 113, 113, 1)',
-                        backgroundColor: 'rgba(248, 113, 113, 0.18)',
+                        backgroundColor: 'rgba(248, 113, 113, 0.12)',
                         fill: true,
-                        tension: 0.35,
-                        pointRadius: 4,
-                        pointHoverRadius: 6
+                        tension: 0.4,
+                        pointRadius: 5,
+                        pointHoverRadius: 8,
+                        pointBackgroundColor: 'rgba(248, 113, 113, 1)',
+                        pointBorderColor: '#0f172a',
+                        pointBorderWidth: 2
                     }
                 ]
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
                 plugins: {
-                    legend: { labels: { color: '#cbd5e1' } },
+                    legend: { labels: { color: '#cbd5e1', boxWidth: 12, boxHeight: 12, borderRadius: 4, padding: 14 } },
                     tooltip: {
                         callbacks: {
-                            label: ctx => `${ctx.dataset.label}: ${ctx.parsed.y.toLocaleString()}원`
+                            label: ctx => `${ctx.dataset.label}: ${SettlementCalculator.formatCurrency(ctx.parsed.y)}`
                         }
                     }
                 },
                 scales: {
-                    x: { ticks: { color: '#cbd5e1' }, grid: { color: 'rgba(255,255,255,0.05)' } },
-                    y: { ticks: { color: '#cbd5e1', callback: v => v.toLocaleString() }, grid: { color: 'rgba(255,255,255,0.05)' }, beginAtZero: true }
+                    x: { ticks: { color: '#94a3b8', font: { size: 11 } }, grid: { color: 'rgba(255,255,255,0.04)' } },
+                    y: { ticks: { color: '#94a3b8', callback: v => v >= 1000000 ? (v/1000000).toFixed(1)+'M' : v >= 1000 ? (v/1000).toFixed(0)+'K' : v }, grid: { color: 'rgba(255,255,255,0.05)' }, beginAtZero: true }
                 }
             }
         });
     }
 
-    let clubSpendChartInstance = null;
+    let clubActivityChartInstance = null;
 
-    // ── 클럽별 비용 지출 비교 (행사비/시설비/상품비 누적 스택 가로 막대) ────
-    function renderClubSpendChart(historyList) {
-        const canvas = document.getElementById('club-spend-chart');
+    // ── 클럽별 정산 횟수 (올해 활동량, 가로 막대) ─────────────────────────
+    function renderClubActivityChart(historyList) {
+        const canvas = document.getElementById('club-activity-chart');
         if (!canvas || typeof Chart === 'undefined') return;
 
-        const clubs = Object.values(AppState.clubRegistry || {}).sort((a, b) => a.name.localeCompare(b.name));
-        const labels = clubs.map(c => c.name);
-        const eventData = [], facilityData = [], prizeData = [];
+        const currentYear = new Date().getFullYear();
+        const countMap = {};
+        Object.values(AppState.clubRegistry || {}).forEach(c => { countMap[c.name] = 0; });
 
-        clubs.forEach(club => {
-            let ev = 0, fa = 0, pr = 0;
-            (historyList || [])
-                .filter(e => e.clubName === club.name)
-                .forEach(entry => {
-                    (entry.expenseItems || []).forEach(item => {
-                        const amt = item.amount || 0;
-                        if (item.category === 'FACILITY') fa += amt;
-                        else if (item.category === 'PRIZE') pr += amt;
-                        else ev += amt;
-                    });
-                });
-            eventData.push(ev);
-            facilityData.push(fa);
-            prizeData.push(pr);
-        });
+        (historyList || [])
+            .filter(e => {
+                if (!selectedOverallClubs || selectedOverallClubs.has(e.clubName || '기본 클럽')) {
+                    const y = e.settlementDate
+                        ? parseInt(e.settlementDate.slice(0, 4), 10)
+                        : (e.date ? new Date(e.date).getFullYear() : currentYear);
+                    return y === currentYear;
+                }
+                return false;
+            })
+            .forEach(e => {
+                const club = e.clubName || '기본 클럽';
+                countMap[club] = (countMap[club] || 0) + 1;
+            });
 
-        if (clubSpendChartInstance) clubSpendChartInstance.destroy();
+        const sorted = Object.entries(countMap)
+            .filter(([name]) => !selectedOverallClubs || selectedOverallClubs.has(name))
+            .sort((a, b) => b[1] - a[1]);
+
+        const labels = sorted.map(([name]) => name);
+        const counts = sorted.map(([, cnt]) => cnt);
+
+        const palette = [
+            'rgba(139,92,246,0.85)', 'rgba(56,189,248,0.85)', 'rgba(52,211,153,0.85)',
+            'rgba(251,191,36,0.85)', 'rgba(248,113,113,0.85)', 'rgba(236,72,153,0.85)',
+            'rgba(129,140,248,0.85)'
+        ];
+
+        if (clubActivityChartInstance) clubActivityChartInstance.destroy();
         if (labels.length === 0) return;
 
-        clubSpendChartInstance = new Chart(canvas.getContext('2d'), {
+        clubActivityChartInstance = new Chart(canvas.getContext('2d'), {
             type: 'bar',
             data: {
                 labels,
-                datasets: [
-                    { label: '행사비', data: eventData, backgroundColor: 'rgba(139,92,246,0.75)', borderRadius: 4 },
-                    { label: '시설·장비', data: facilityData, backgroundColor: 'rgba(56,189,248,0.75)', borderRadius: 4 },
-                    { label: '상품비', data: prizeData, backgroundColor: 'rgba(251,191,36,0.75)', borderRadius: 4 }
-                ]
+                datasets: [{
+                    label: '정산 횟수',
+                    data: counts,
+                    backgroundColor: labels.map((_, i) => palette[i % palette.length]),
+                    borderWidth: 0,
+                    borderRadius: 8
+                }]
             },
             options: {
                 indexAxis: 'y',
                 responsive: true,
                 maintainAspectRatio: false,
                 plugins: {
-                    legend: { labels: { color: '#cbd5e1' } },
-                    tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${SettlementCalculator.formatCurrency(ctx.parsed.x)}` } }
+                    legend: { display: false },
+                    tooltip: { callbacks: { label: ctx => `정산 ${ctx.parsed.x}건` } }
                 },
                 scales: {
-                    x: { stacked: true, ticks: { color: '#cbd5e1', callback: (v) => (v >= 1000000 ? (v/1000000).toFixed(1)+'M' : v >= 1000 ? (v/1000).toFixed(0)+'K' : v) }, grid: { color: 'rgba(255,255,255,0.05)' }, beginAtZero: true },
-                    y: { stacked: true, ticks: { color: '#cbd5e1' }, grid: { display: false } }
+                    x: { ticks: { color: '#94a3b8', stepSize: 1 }, grid: { color: 'rgba(255,255,255,0.04)' }, beginAtZero: true },
+                    y: { ticks: { color: '#cbd5e1', font: { size: 11 } }, grid: { display: false } }
                 }
             }
         });
@@ -5374,10 +5364,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 차트 탭의 모든 그래프를 한 번에 갱신
     function renderAllCharts(historyList) {
+        updateChartsBudgetStats(historyList);
         renderOverallMonthlyChart(historyList);
         renderClubUsageChart(historyList);
         renderCategoryPieChart(historyList);
-        renderClubSpendChart(historyList);
+        renderClubActivityChart(historyList);
         renderSelfPayTrendChart(historyList);
     }
 
