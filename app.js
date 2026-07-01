@@ -434,15 +434,37 @@ const AppState = {
 
     // 관리자 전용: globalHistory 전체 기준으로 명부 카운트 재계산 (모든 사용자 정산 반영)
     // ── 사번 기준 카운트 공통 헬퍼 ───────────────────────────────────────
-    // 사번(employeeId) 필수 — 없으면 해당 참석자는 카운트 제외
+    // 사번 있으면 사번으로 귀속, 없으면 이름으로 조회해 단일 사번일 때만 귀속
+    // (구버전 이력 데이터에 employeeId 미포함 케이스 대응)
     _countAttendeesByEmpId(attendeeList, idToName) {
         attendeeList.forEach(att => {
-            if (!att.name || !att.employeeId) return; // 사번 없으면 무조건 스킵
-            const empId = String(att.employeeId);
-            const dirKey = idToName[empId];
-            if (!dirKey) return; // 명부에 등록되지 않은 사번
+            if (!att.name) return;
+            let empId = att.employeeId ? String(att.employeeId) : '';
+            let dirKey = empId ? idToName[empId] : null;
+
+            if (!dirKey) {
+                // 사번 없거나 명부 미등록 → 이름으로 재시도 (동명이인 1명인 경우만)
+                const nameEntry = this.directory[att.name];
+                if (nameEntry && typeof nameEntry === 'object') {
+                    const knownIds = (nameEntry.ids
+                        ? nameEntry.ids.map(String)
+                        : (nameEntry.id ? [String(nameEntry.id)] : [])
+                    ).filter(id => id && id !== 'undefined' && id !== 'null');
+                    if (knownIds.length === 1) {
+                        empId = knownIds[0];
+                        dirKey = att.name;
+                    } else {
+                        return; // 동명이인 복수 → 귀속 불가, 스킵
+                    }
+                } else {
+                    return; // 명부에 없는 이름, 스킵
+                }
+            }
+
+            if (!empId || !dirKey) return;
             const cur = this.directory[dirKey];
             if (!cur || typeof cur !== 'object') return;
+            if (!cur.counts) cur.counts = {};
             cur.counts[empId] = (cur.counts[empId] || 0) + 1;
         });
     },
