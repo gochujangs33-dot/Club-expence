@@ -1,7 +1,7 @@
 /**
  * Club Expense Settlement App - Main JavaScript Logic
  */
-const APP_VERSION      = '1.6.167';
+const APP_VERSION      = '1.6.168';
 const APP_VERSION_DATE = '2026.07.01';
 
 // 인당 자부담 비용에 따라 강조 박스의 아이콘/색상을 전환 (100원 이상이면 🔥, 0이면 😊)
@@ -631,6 +631,8 @@ const AppState = {
             let initialLoad = true; // 첫 번째 수신은 초기 로드 — 삭제 팝업 억제
             this.firebaseDb.ref('clubRegistry').on('value', snapshot => {
                 this.clubRegistry = snapshot.val() || {};
+                // 이름 중복 자동 정리: 관리자 세션에서만 Firebase에서 즉시 제거
+                if (this.currentPin === '000000') this._autoDeduplicateClubs();
                 // 클럽 레지스트리 로드/갱신 시 previousPrizeTotal을 항상 club.prizeUsed 기준으로 동기화
                 if (this.clubId && this.clubRegistry[this.clubId]) {
                     this.previousPrizeTotal = this.clubRegistry[this.clubId].prizeUsed || 0;
@@ -739,6 +741,27 @@ const AppState = {
         delete this.clubRegistry[clubId];
         if (this.firebaseDb) {
             this.firebaseDb.ref(`clubRegistry/${clubId}`).remove().catch(err => console.error("클럽 삭제 실패:", err));
+        }
+    },
+
+    _autoDeduplicateClubs() {
+        const registry = this.clubRegistry;
+        const groups = {};
+        for (const [id, club] of Object.entries(registry)) {
+            const key = (club.name || '').trim().toLowerCase();
+            if (!key) continue;
+            if (!groups[key]) groups[key] = [];
+            groups[key].push({ id, club });
+        }
+        for (const group of Object.values(groups)) {
+            if (group.length <= 1) continue;
+            // 예산 큰 것 유지, 같으면 ID가 작은(오래된) 것 유지
+            group.sort((a, b) => (b.club.budget || 0) - (a.club.budget || 0) || a.id.localeCompare(b.id));
+            const [, ...remove] = group;
+            for (const { id } of remove) {
+                delete this.clubRegistry[id];
+                if (this.firebaseDb) this.firebaseDb.ref(`clubRegistry/${id}`).remove().catch(() => {});
+            }
         }
     },
 
@@ -2488,7 +2511,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 alert(t('alert.enter_club_name'));
                 return;
             }
-            let newClubId = Object.entries(AppState.clubRegistry || {}).find(([, c]) => c.name === name)?.[0];
+            const _clubNameKey = name.trim().toLowerCase();
+            let newClubId = Object.entries(AppState.clubRegistry || {}).find(([, c]) => (c.name || '').trim().toLowerCase() === _clubNameKey)?.[0];
             if (!newClubId) {
                 newClubId = 'club_' + Date.now();
                 AppState.addOrUpdateClub(newClubId, name, 0);
@@ -4338,7 +4362,13 @@ document.addEventListener('DOMContentLoaded', () => {
             clubTotalBudgetInput.value = formatAmount(AppState.clubTotalBudget || 0);
         }
 
-        const clubs = Object.entries(AppState.clubRegistry || {});
+        const _seenClubNames = new Set();
+        const clubs = Object.entries(AppState.clubRegistry || {}).filter(([, c]) => {
+            const key = (c.name || '').trim().toLowerCase();
+            if (!key || _seenClubNames.has(key)) return false;
+            _seenClubNames.add(key);
+            return true;
+        });
         const allocated = clubs.reduce((sum, [, c]) => sum + (c.budget || 0), 0);
         const remaining = (AppState.clubTotalBudget || 0) - allocated;
         if (clubBudgetSummary) {
