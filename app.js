@@ -1879,9 +1879,10 @@ const AppState = {
                     const itemsHtml = (entry.expenseItems || []).map(it =>
                         `<li>${this.escapeHtml(it.description)} <span style="color:var(--color-secondary)">${SettlementCalculator.formatCurrency(it.amount)}</span></li>`
                     ).join('');
-                    const attendeesHtml = (entry.attendees || []).map(a =>
-                        `<span class="expense-category-badge">${this.escapeHtml(a.name)}</span>`
-                    ).join(' ');
+                    const attendeesHtml = (entry.attendees || []).map(a => {
+                        const empIdStr = a.employeeId ? `<span style="font-size:0.68rem;color:var(--text-muted);margin-left:2px;">(${AppState.escapeHtml(String(a.employeeId))})</span>` : '';
+                        return `<span class="expense-category-badge">${this.escapeHtml(a.name)}${empIdStr}</span>`;
+                    }).join(' ');
 
                     const editedBadge = entry.isEdited
                         ? `<span class="badge-edited">${t('badge.edited')}</span>`
@@ -5475,7 +5476,10 @@ document.addEventListener('DOMContentLoaded', () => {
             
             let attendeesHtml = '';
             if (entry.attendees) {
-                attendeesHtml = entry.attendees.map(att => att.name).join(', ');
+                attendeesHtml = entry.attendees.map(att => {
+                    const idPart = att.employeeId ? ` (${AppState.escapeHtml(String(att.employeeId))})` : '';
+                    return AppState.escapeHtml(att.name) + idPart;
+                }).join(', ');
             }
             
             let itemsHtml = '';
