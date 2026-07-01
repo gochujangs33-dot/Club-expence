@@ -129,12 +129,10 @@
                         <div class="card-header">
                             <span class="card-icon">👥</span>
                             <h2 data-i18n="section.attendance">참석자 및 기존 누적 정보</h2>
-                            <label for="event-photo-input" class="btn-secondary" data-i18n="label.event_photo" style="margin-left:auto; cursor:pointer; padding:0.35rem 0.75rem; font-size:0.8rem; border-radius:8px; display:inline-flex; align-items:center; gap:0.3rem;">📷 참석자 사진 첨부</label>
-                            <input type="file" id="event-photo-input" accept="image/*" style="display:none;">
+                            <label for="event-photo-input" class="btn-secondary" style="margin-left:auto; cursor:pointer; padding:0.35rem 0.75rem; font-size:0.8rem; border-radius:8px; display:inline-flex; align-items:center; gap:0.3rem;">📷 행사 사진 첨부</label>
+                            <input type="file" id="event-photo-input" accept="image/*" multiple style="display:none;">
                         </div>
-                        <div id="event-photo-preview" class="hidden" style="margin-bottom:0.75rem; border-radius:12px; overflow:hidden; max-height:240px; position:relative; background:rgba(15,23,42,0.6); display:flex; align-items:center; justify-content:center;">
-                            <img id="event-photo-img" src="" alt="행사 사진" style="width:100%; max-height:240px; object-fit:contain; display:block; border-radius:12px;">
-                            <button id="delete-event-photo-btn" style="position:absolute; top:6px; right:6px; background:rgba(239,68,68,0.9); border:none; color:white; border-radius:50%; width:24px; height:24px; font-size:14px; cursor:pointer; display:flex; align-items:center; justify-content:center; font-weight:bold;">&times;</button>
+                        <div id="event-photo-preview" class="hidden" style="margin-bottom:0.75rem; padding:0.4rem; border-radius:12px; background:rgba(15,23,42,0.6); display:flex; flex-wrap:wrap; gap:0.25rem; align-items:flex-start; overflow-x:auto;">
                         </div>
                         <div class="card-body">
                             <div class="input-group">

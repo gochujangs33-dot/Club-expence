@@ -245,7 +245,7 @@ const AppState = {
     annualBudget: 0,
     usedBudget: 0,
     reportEmail: 'finance@club.com',
-    eventPhoto: null,
+    eventPhotos: [],
     clubName: '',
     clubId: '',
     settlementHistory: [],
@@ -283,8 +283,13 @@ const AppState = {
             // annualBudget → clubRegistry.budget, usedBudget → 동적 계산 — localStorage 구버전 무시
             const savedReportEmail = localStorage.getItem('club_report_email');
             if (savedReportEmail) this.reportEmail = savedReportEmail;
-            const savedEventPhoto = localStorage.getItem('club_event_photo');
-            if (savedEventPhoto) this.eventPhoto = savedEventPhoto;
+            const savedEventPhotos = localStorage.getItem('club_event_photos');
+            if (savedEventPhotos) {
+                try { this.eventPhotos = JSON.parse(savedEventPhotos); } catch(_) {}
+            } else {
+                const legacy = localStorage.getItem('club_event_photo');
+                if (legacy) this.eventPhotos = [legacy];
+            }
             const savedClubName = localStorage.getItem('club_name');
             if (savedClubName) this.clubName = savedClubName;
             const savedClubId = localStorage.getItem('club_id');
@@ -471,10 +476,10 @@ const AppState = {
             localStorage.setItem('club_name', this.clubName);
             localStorage.setItem('club_id', this.clubId || '');
             try { localStorage.setItem('club_settlement_history', JSON.stringify(this.settlementHistory)); } catch(_) {}
-            if (this.eventPhoto) {
-                try { localStorage.setItem('club_event_photo', this.eventPhoto); } catch(_) {}
+            if (this.eventPhotos && this.eventPhotos.length > 0) {
+                try { localStorage.setItem('club_event_photos', JSON.stringify(this.eventPhotos)); } catch(_) {}
             } else {
-                localStorage.removeItem('club_event_photo');
+                localStorage.removeItem('club_event_photos');
             }
         } catch (e) {
             console.error("Local storage save failed:", e);
@@ -492,7 +497,7 @@ const AppState = {
                 clubId: this.clubId || '', // 마지막 선택 클럽 ID (편의용)
                 reportEmail: this.reportEmail || '',
                 settlementHistory: this.settlementHistory,
-                eventPhoto: this.eventPhoto || null,
+                eventPhotos: (this.eventPhotos && this.eventPhotos.length > 0) ? this.eventPhotos : null,
                 lastUpdated: Date.now()
                 // rules → globalSettings/rules (관리자 전용)
                 // annualBudget → clubRegistry.budget (관리자 전용)
@@ -571,7 +576,11 @@ const AppState = {
                                 if (data.clubId !== undefined) this.clubId = data.clubId;
                                 if (data.reportEmail !== undefined) this.reportEmail = data.reportEmail;
                                 this.settlementHistory = data.settlementHistory || [];
-                                if (data.eventPhoto) this.eventPhoto = data.eventPhoto;
+                                if (data.eventPhotos) {
+                                    this.eventPhotos = Array.isArray(data.eventPhotos) ? data.eventPhotos : [data.eventPhotos];
+                                } else if (data.eventPhoto) {
+                                    this.eventPhotos = [data.eventPhoto];
+                                }
                                 console.log(`Firebase data loaded successfully for PIN: ${pin} (${this.userName})`);
 
                                 // globalHistory backfill 제거 — 관리자가 삭제한 항목을 로그인할 때마다 되살리는 원인
@@ -579,7 +588,7 @@ const AppState = {
                                 // Firebase에 데이터가 없을 경우(신규 계정) - 이 기기에 남아있던
                                 // 이전 계정의 로컬 데이터를 그대로 올리지 않도록 정산 관련 상태를 초기화
                                 console.log(`No existing data on Firebase for PIN: ${pin}. Resetting local state for new account.`);
-                                this.expenseItems = [];
+                                this.expenseItems = []; this.eventPhotos = [];
                                 this.attendees = [];
                                 this.memberCount = 0;
                                 this.previousPrizeTotal = 0;
@@ -587,7 +596,7 @@ const AppState = {
                                 this.usedBudget = 0;
                                 this.clubName = '';
                                 this.settlementHistory = [];
-                                this.eventPhoto = null;
+                                this.eventPhotos = [];
                                 this.isLoggedIn = true;
                                 this.currentPin = pin;
                                 this.save();
@@ -1221,7 +1230,7 @@ const AppState = {
         this.attendees = [];
         this.memberCount = 0;
         this.previousPrizeTotal = 0;
-        this.eventPhoto = null;
+        this.eventPhotos = [];
         this.tempCorpReceiptImage = null;
         this.tempPersonalReceiptImage = null;
         this.lastCalculatedSelfPay = 0;
@@ -1311,12 +1320,15 @@ const AppState = {
 
         // Event photo display
         const eventPhotoPreview = document.getElementById('event-photo-preview');
-        const eventPhotoImg = document.getElementById('event-photo-img');
-        if (eventPhotoPreview && eventPhotoImg) {
-            if (this.eventPhoto) {
-                eventPhotoImg.src = this.eventPhoto;
+        if (eventPhotoPreview) {
+            const photos = this.eventPhotos || [];
+            if (photos.length > 0) {
+                eventPhotoPreview.innerHTML = photos.map((src, idx) =>
+                    `<div style="position:relative;display:inline-block;margin:0.2rem;"><img src="${src}" alt="행사 사진 ${idx+1}" style="height:90px;width:auto;border-radius:8px;object-fit:cover;display:block;"><button type="button" class="del-event-photo-btn" data-pidx="${idx}" style="position:absolute;top:3px;right:3px;background:rgba(239,68,68,0.9);border:none;color:#fff;border-radius:50%;width:20px;height:20px;font-size:12px;cursor:pointer;font-weight:bold;line-height:1;">&times;</button></div>`
+                ).join('');
                 eventPhotoPreview.classList.remove('hidden');
             } else {
+                eventPhotoPreview.innerHTML = '';
                 eventPhotoPreview.classList.add('hidden');
             }
         }
@@ -1942,11 +1954,12 @@ const AppState = {
         const RECEIPT_W = 220, RECEIPT_H = 300; // 영수증
         const RECEIPT_ROW_STEP = 16;
 
-        if (this.eventPhoto) {
+        const eventPhotos = this.eventPhotos || [];
+        for (let pi = 0; pi < eventPhotos.length; pi++) {
             placements.push({
                 sheetFile: 'sheet3.xml',
-                col: 1, row: 2,
-                blob: await this.dataUrlToFile(this.eventPhoto, 'event'),
+                col: 1 + pi * 5, row: 2,
+                blob: await this.dataUrlToFile(eventPhotos[pi], `event${pi + 1}`),
                 widthPx: PHOTO_W, heightPx: PHOTO_H
             });
         }
@@ -2048,8 +2061,8 @@ const AppState = {
         const files = [];
         files.push(await this.generateExcelFile());
 
-        if (this.eventPhoto) {
-            files.push(await this.dataUrlToFile(this.eventPhoto, '참석자_사진'));
+        for (let pi = 0; pi < (this.eventPhotos || []).length; pi++) {
+            files.push(await this.dataUrlToFile(this.eventPhotos[pi], `행사_사진${pi + 1}`));
         }
 
         for (let i = 0; i < this.expenseItems.length; i++) {
@@ -2282,7 +2295,7 @@ const AppState = {
             ? (this.clubRegistry[this.clubId].prizeUsed || 0)
             : 0;
         this.lastCalculatedSelfPay = 0;
-        this.eventPhoto = null;
+        this.eventPhotos = [];
         this.editingItemId = null;
         this.editingAttendeeId = null;
         const _sdi = document.getElementById('settlement-date-input');
@@ -2327,7 +2340,7 @@ document.addEventListener('DOMContentLoaded', () => {
             AppState.memberCount = 0;
             AppState.previousPrizeTotal = 0;
             AppState.lastCalculatedSelfPay = 0;
-            AppState.eventPhoto = null;
+            AppState.eventPhotos = [];
             document.getElementById('expense-desc-input').value = '';
             document.getElementById('expense-amount-input').value = '';
             document.getElementById('expense-category-select').selectedIndex = 0;
@@ -3336,29 +3349,42 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     updateRemainingDisplay();
 
-    // Event photo upload handler
+    // Event photo upload handler (여러 장 지원)
     const eventPhotoInput = document.getElementById('event-photo-input');
-    const deleteEventPhotoBtn = document.getElementById('delete-event-photo-btn');
 
     if (eventPhotoInput) {
         eventPhotoInput.addEventListener('change', (e) => {
-            const file = e.target.files[0];
-            if (file) {
+            const files = Array.from(e.target.files);
+            if (!files.length) return;
+            const slots = new Array(files.length);
+            let processed = 0;
+            files.forEach((file, idx) => {
                 compressReceiptImage(file, (compressed) => {
-                    AppState.eventPhoto = compressed;
-                    AppState.save();
-                    AppState.render();
+                    slots[idx] = compressed;
+                    processed++;
+                    if (processed === files.length) {
+                        AppState.eventPhotos.push(...slots);
+                        AppState.save();
+                        AppState.render();
+                    }
                 });
-            }
+            });
+            eventPhotoInput.value = '';
         });
     }
 
-    if (deleteEventPhotoBtn) {
-        deleteEventPhotoBtn.addEventListener('click', () => {
-            AppState.eventPhoto = null;
-            if (eventPhotoInput) eventPhotoInput.value = '';
-            AppState.save();
-            AppState.render();
+    // 개별 사진 삭제 — preview 컨테이너에 위임 방식으로 등록
+    const eventPhotoPreviewEl = document.getElementById('event-photo-preview');
+    if (eventPhotoPreviewEl) {
+        eventPhotoPreviewEl.addEventListener('click', (e) => {
+            const btn = e.target.closest('.del-event-photo-btn');
+            if (!btn) return;
+            const idx = parseInt(btn.dataset.pidx, 10);
+            if (!isNaN(idx)) {
+                AppState.eventPhotos.splice(idx, 1);
+                AppState.save();
+                AppState.render();
+            }
         });
     }
 
