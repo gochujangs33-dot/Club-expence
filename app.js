@@ -437,11 +437,16 @@ const AppState = {
         if (!this.firebaseDb) { this.recalculateDirectoryCounts(); return; }
         const currentYear = new Date().getFullYear();
 
-        // 카운트 초기화 (사번별 counts 맵도 함께 초기화)
+        // 카운트 초기화 — 알려진 모든 사번을 0으로 선언(undefined 폴백 방지)
         Object.keys(this.directory).forEach(name => {
             const entry = this.directory[name];
-            if (typeof entry === 'object') { entry.count = 0; entry.counts = {}; }
-            else this.directory[name] = { id: entry, count: 0, counts: {} };
+            const ids = (typeof entry === 'object' && entry.ids)
+                ? entry.ids.map(String)
+                : (typeof entry === 'object' && entry.id ? [String(entry.id)] : []);
+            const freshCounts = {};
+            ids.forEach(id => { if (id && id !== 'undefined') freshCounts[id] = 0; });
+            if (typeof entry === 'object') { entry.count = 0; entry.counts = freshCounts; }
+            else this.directory[name] = { id: entry, count: 0, counts: freshCounts };
         });
 
         // 사번 → 명부 키 역방향 맵
@@ -504,8 +509,13 @@ const AppState = {
         const currentYear = new Date().getFullYear();
         Object.keys(this.directory).forEach(name => {
             const entry = this.directory[name];
-            if (typeof entry === 'object') { entry.count = 0; entry.counts = {}; }
-            else this.directory[name] = { id: entry, count: 0, counts: {} };
+            const ids = (typeof entry === 'object' && entry.ids)
+                ? entry.ids.map(String)
+                : (typeof entry === 'object' && entry.id ? [String(entry.id)] : []);
+            const freshCounts = {};
+            ids.forEach(id => { if (id && id !== 'undefined') freshCounts[id] = 0; });
+            if (typeof entry === 'object') { entry.count = 0; entry.counts = freshCounts; }
+            else this.directory[name] = { id: entry, count: 0, counts: freshCounts };
         });
 
         // 사번 → 명부 키(이름) 역방향 조회 맵 (동명이인 구분용)
@@ -1766,10 +1776,10 @@ const AppState = {
 
                 dirRows.forEach(({ name, id }) => {
                     const entry = this.directory[name];
-                    // 사번별 개인 카운트 우선, 없으면 전체 count 사용 (backward compat)
+                    // counts 객체가 있으면 사번별 값(없으면 0), 없으면 총 count로 폴백
                     const countValue = typeof entry === 'object'
-                        ? (id && entry.counts && entry.counts[id] !== undefined
-                            ? entry.counts[id]
+                        ? (entry.counts
+                            ? (entry.counts[id] || 0)
                             : (entry.count || 0))
                         : 0;
                     const isAdded = this.attendees.some(att => att.name === name && String(att.employeeId) === id);
