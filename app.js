@@ -1,7 +1,7 @@
 /**
  * Club Expense Settlement App - Main JavaScript Logic
  */
-const APP_VERSION      = '1.6.171';
+const APP_VERSION      = '1.6.172';
 const APP_VERSION_DATE = '2026.07.01';
 
 // 인당 자부담 비용에 따라 강조 박스의 아이콘/색상을 전환 (100원 이상이면 🔥, 0이면 😊)
@@ -2554,6 +2554,24 @@ document.addEventListener('DOMContentLoaded', () => {
         AppState.render();
     };
     AppState.loadGlobalSettings();
+
+    // 수정 모드 완료 버튼 — 엑셀 재생성 + globalHistory 갱신 + 수정 모드 해제
+    const editModeDoneBtn = document.getElementById('edit-mode-done-btn');
+    if (editModeDoneBtn) {
+        editModeDoneBtn.addEventListener('click', async () => {
+            editModeDoneBtn.disabled = true;
+            editModeDoneBtn.textContent = '⏳ 저장 중...';
+            try {
+                await AppState.downloadExcelOnly();
+            } catch (err) {
+                console.error(err);
+                alert('수정 저장 중 오류가 발생했습니다: ' + err.message);
+            } finally {
+                editModeDoneBtn.disabled = false;
+                editModeDoneBtn.textContent = '✅ 수정 완료';
+            }
+        });
+    }
 
     // 수정 모드 취소 버튼
     const editModeCancelBtn = document.getElementById('edit-mode-cancel-btn');
