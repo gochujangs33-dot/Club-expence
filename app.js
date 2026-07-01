@@ -1,7 +1,7 @@
 /**
  * Club Expense Settlement App - Main JavaScript Logic
  */
-const APP_VERSION      = '1.6.173';
+const APP_VERSION      = '1.6.174';
 const APP_VERSION_DATE = '2026.07.01';
 
 // 인당 자부담 비용에 따라 강조 박스의 아이콘/색상을 전환 (100원 이상이면 🔥, 0이면 😊)
@@ -1746,7 +1746,10 @@ const AppState = {
                                 ${entry.clubName ? `<span class="history-club">${this.escapeHtml(entry.clubName)}</span>` : ''}
                                 ${editedBadge}${editedAtStr}
                             </div>
-                            <button class="btn-edit-history" data-id="${entry.id}" style="font-size:0.75rem;padding:0.2rem 0.6rem;background:rgba(99,102,241,0.15);border:1px solid rgba(99,102,241,0.4);color:#a5b4fc;border-radius:0.3rem;cursor:pointer;white-space:nowrap;">✏️ ${t('btn.edit')}</button>
+                            <div style="display:flex;gap:0.3rem;flex-shrink:0;">
+                                <button class="btn-download-history" data-id="${entry.id}" style="font-size:0.75rem;padding:0.2rem 0.6rem;background:rgba(16,185,129,0.15);border:1px solid rgba(16,185,129,0.4);color:#6ee7b7;border-radius:0.3rem;cursor:pointer;white-space:nowrap;">📥 엑셀</button>
+                                <button class="btn-edit-history" data-id="${entry.id}" style="font-size:0.75rem;padding:0.2rem 0.6rem;background:rgba(99,102,241,0.15);border:1px solid rgba(99,102,241,0.4);color:#a5b4fc;border-radius:0.3rem;cursor:pointer;white-space:nowrap;">✏️ ${t('btn.edit')}</button>
+                            </div>
                         </div>
                         <div class="history-summary">
                             <div class="history-stat"><span>${t('hist.attendees')}</span><strong>${entry.memberCount}${t('unit.person')}</strong></div>
@@ -1761,6 +1764,23 @@ const AppState = {
                         </details>
                     `;
                     historyContainer.appendChild(card);
+                });
+
+                // 엑셀 다운로드 버튼 이벤트
+                historyContainer.querySelectorAll('.btn-download-history').forEach(btn => {
+                    btn.addEventListener('click', async () => {
+                        const id = Number(btn.getAttribute('data-id'));
+                        const entry = AppState.settlementHistory.find(e => e.id === id);
+                        if (!entry) return;
+                        btn.disabled = true;
+                        btn.textContent = '⏳';
+                        try {
+                            await AppState.downloadHistoryExcel(entry);
+                        } finally {
+                            btn.disabled = false;
+                            btn.textContent = '📥 엑셀';
+                        }
+                    });
                 });
 
                 // 수정 버튼 이벤트
@@ -2048,6 +2068,46 @@ const AppState = {
         });
     },
 
+    // 이력 항목의 데이터를 기반으로 엑셀 생성 후 다운로드 (AppState를 임시 교체 후 복원)
+    async downloadHistoryExcel(entry) {
+        const sdi = document.getElementById('settlement-date-input');
+        const prev = {
+            memberCount: this.memberCount, expenseItems: this.expenseItems,
+            attendees: this.attendees, clubName: this.clubName, clubId: this.clubId,
+            lastCalculatedSelfPay: this.lastCalculatedSelfPay,
+            previousPrizeTotal: this.previousPrizeTotal,
+            editingHistoryId: this.editingHistoryId,
+            sdiVal: sdi ? sdi.value : '',
+        };
+        try {
+            this.memberCount = entry.memberCount || (entry.attendees ? entry.attendees.length : 0);
+            this.expenseItems = JSON.parse(JSON.stringify(entry.expenseItems || []));
+            this.attendees = JSON.parse(JSON.stringify(entry.attendees || []));
+            this.clubName = entry.clubName || '';
+            this.clubId = entry.clubId || '';
+            this.lastCalculatedSelfPay = entry.totalSelfPay || 0;
+            this.previousPrizeTotal = 0;
+            this.editingHistoryId = null;
+            if (sdi) sdi.value = entry.settlementDate || new Date().toISOString().slice(0, 10);
+            const file = await this.generateExcelFile();
+            const url = URL.createObjectURL(file);
+            const a = document.createElement('a');
+            a.href = url; a.download = file.name;
+            document.body.appendChild(a); a.click(); document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        } catch (err) {
+            console.error('이력 엑셀 다운로드 실패:', err);
+            alert('엑셀 파일 생성 중 오류가 발생했습니다: ' + (err.message || ''));
+        } finally {
+            this.memberCount = prev.memberCount; this.expenseItems = prev.expenseItems;
+            this.attendees = prev.attendees; this.clubName = prev.clubName;
+            this.clubId = prev.clubId; this.lastCalculatedSelfPay = prev.lastCalculatedSelfPay;
+            this.previousPrizeTotal = prev.previousPrizeTotal;
+            this.editingHistoryId = prev.editingHistoryId;
+            if (sdi) sdi.value = prev.sdiVal;
+        }
+    },
+
     // 엑셀 파일만 로컬 다운로드 폴더에 저장 (수정 모드이면 이력도 갱신)
     async downloadExcelOnly() {
         try {
@@ -2156,6 +2216,12 @@ const AppState = {
             this.clubId = match ? match[0] : '';
         }
         this.lastCalculatedSelfPay = entry.totalSelfPay || 0;
+        // 정산 날짜 입력란을 이력 원본 날짜로 복원
+        const _sdiEdit = document.getElementById('settlement-date-input');
+        if (_sdiEdit && entry.settlementDate) {
+            _sdiEdit.value = entry.settlementDate;
+            if (typeof window._onSettleDateReset === 'function') window._onSettleDateReset();
+        }
         // 수정 모드 배너 표시
         const banner = document.getElementById('edit-mode-banner');
         const dateEl = document.getElementById('edit-mode-date');
@@ -2568,6 +2634,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 );
                 const finalTotalSelfPay = AppState.lastCalculatedSelfPay > 0
                     ? AppState.lastCalculatedSelfPay : result.totalSelfPay;
+                const _sdi = document.getElementById('settlement-date-input');
+                const settlementDate = (_sdi && _sdi.value)
+                    ? _sdi.value : new Date().toISOString().slice(0, 10);
                 const updatedFields = {
                     memberCount: AppState.memberCount,
                     totalCost: result.totalCost,
@@ -2581,6 +2650,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     attendees: JSON.parse(JSON.stringify(AppState.attendees)),
                     clubName: AppState.clubName,
                     clubId: AppState.clubId || '',
+                    settlementDate,
                 };
                 await AppState.updateHistoryEntry(AppState.editingHistoryId, updatedFields);
                 AppState.cancelEditMode();
