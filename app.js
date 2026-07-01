@@ -439,29 +439,11 @@ const AppState = {
     _countAttendeesByEmpId(attendeeList, idToName) {
         attendeeList.forEach(att => {
             if (!att.name) return;
-            let empId = att.employeeId ? String(att.employeeId) : '';
-            let dirKey = empId ? idToName[empId] : null;
-
-            if (!dirKey) {
-                // 사번 없거나 명부 미등록 → 이름으로 재시도 (동명이인 1명인 경우만)
-                const nameEntry = this.directory[att.name];
-                if (nameEntry && typeof nameEntry === 'object') {
-                    const knownIds = (nameEntry.ids
-                        ? nameEntry.ids.map(String)
-                        : (nameEntry.id ? [String(nameEntry.id)] : [])
-                    ).filter(id => id && id !== 'undefined' && id !== 'null');
-                    if (knownIds.length === 1) {
-                        empId = knownIds[0];
-                        dirKey = att.name;
-                    } else {
-                        return; // 동명이인 복수 → 귀속 불가, 스킵
-                    }
-                } else {
-                    return; // 명부에 없는 이름, 스킵
-                }
-            }
-
-            if (!empId || !dirKey) return;
+            const empId = att.employeeId ? String(att.employeeId) : '';
+            // 사번 없으면 완전 스킵 — 이름 기반 폴백 없음 (무조건 사번 기준)
+            if (!empId) return;
+            const dirKey = idToName[empId];
+            if (!dirKey) return; // 명부에 없는 사번
             const cur = this.directory[dirKey];
             if (!cur || typeof cur !== 'object') return;
             if (!cur.counts) cur.counts = {};
