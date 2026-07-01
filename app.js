@@ -437,11 +437,11 @@ const AppState = {
         if (!this.firebaseDb) { this.recalculateDirectoryCounts(); return; }
         const currentYear = new Date().getFullYear();
 
-        // 카운트 초기화
+        // 카운트 초기화 (사번별 counts 맵도 함께 초기화)
         Object.keys(this.directory).forEach(name => {
             const entry = this.directory[name];
-            if (typeof entry === 'object') entry.count = 0;
-            else this.directory[name] = { id: entry, count: 0 };
+            if (typeof entry === 'object') { entry.count = 0; entry.counts = {}; }
+            else this.directory[name] = { id: entry, count: 0, counts: {} };
         });
 
         // 사번 → 명부 키 역방향 맵
@@ -478,9 +478,16 @@ const AppState = {
                     const dirKey = (empId && idToName[empId]) || att.name;
                     const cur = this.directory[dirKey];
                     if (cur) {
+                        // 사번별 개인 카운트
+                        if (empId) {
+                            cur.counts = cur.counts || {};
+                            cur.counts[empId] = (cur.counts[empId] || 0) + 1;
+                        }
                         cur.count = (cur.count || 0) + 1;
                     } else {
-                        this.directory[att.name] = { id: att.employeeId, count: 1 };
+                        const newEntry = { id: att.employeeId, count: 1, counts: {} };
+                        if (empId) newEntry.counts[empId] = 1;
+                        this.directory[att.name] = newEntry;
                         if (empId) idToName[empId] = att.name;
                     }
                 });
@@ -497,8 +504,8 @@ const AppState = {
         const currentYear = new Date().getFullYear();
         Object.keys(this.directory).forEach(name => {
             const entry = this.directory[name];
-            if (typeof entry === 'object') entry.count = 0;
-            else this.directory[name] = { id: entry, count: 0 };
+            if (typeof entry === 'object') { entry.count = 0; entry.counts = {}; }
+            else this.directory[name] = { id: entry, count: 0, counts: {} };
         });
 
         // 사번 → 명부 키(이름) 역방향 조회 맵 (동명이인 구분용)
@@ -515,7 +522,6 @@ const AppState = {
             if (!entry || !entry.id) return;
             if (seenIds.has(entry.id)) return; // 중복 방지
             seenIds.add(entry.id);
-            // settlementDate 기준 연도 판별 (소급 등록 대응)
             const entryYear = entry.settlementDate
                 ? parseInt(entry.settlementDate.slice(0, 4), 10)
                 : (entry.date ? new Date(entry.date).getFullYear() : new Date(entry.id).getFullYear());
@@ -523,13 +529,18 @@ const AppState = {
             (entry.attendees || []).forEach(att => {
                 if (!att.name) return;
                 const empId = att.employeeId ? String(att.employeeId) : '';
-                // 사번으로 명부 항목 먼저 찾고, 없으면 이름으로 검색
                 const dirKey = (empId && idToName[empId]) || att.name;
                 const cur = this.directory[dirKey];
                 if (cur) {
+                    if (empId) {
+                        cur.counts = cur.counts || {};
+                        cur.counts[empId] = (cur.counts[empId] || 0) + 1;
+                    }
                     cur.count = (cur.count || 0) + 1;
                 } else {
-                    this.directory[att.name] = { id: att.employeeId, count: 1 };
+                    const newEntry = { id: att.employeeId, count: 1, counts: {} };
+                    if (empId) newEntry.counts[empId] = 1;
+                    this.directory[att.name] = newEntry;
                 }
             });
         });
@@ -1755,7 +1766,12 @@ const AppState = {
 
                 dirRows.forEach(({ name, id }) => {
                     const entry = this.directory[name];
-                    const countValue = typeof entry === 'object' ? (entry.count || 0) : 0;
+                    // 사번별 개인 카운트 우선, 없으면 전체 count 사용 (backward compat)
+                    const countValue = typeof entry === 'object'
+                        ? (id && entry.counts && entry.counts[id] !== undefined
+                            ? entry.counts[id]
+                            : (entry.count || 0))
+                        : 0;
                     const isAdded = this.attendees.some(att => att.name === name && String(att.employeeId) === id);
 
                     const row = document.createElement('div');
@@ -1777,7 +1793,7 @@ const AppState = {
                         <div class="expense-row-left">
                             <span class="expense-row-title" style="font-size: 0.88rem;">
                                 ${this.escapeHtml(name)}
-                                <span style="font-size: 0.72rem; color: var(--color-secondary); font-weight: 600; margin-left: 0.3rem;">(올해 누적: ${this.userName === '관리자' ? `<input type="number" class="dir-count-input" data-name="${this.escapeHtml(name)}" value="${countValue}" min="0" style="width:34px; padding:0 2px; font-size:0.72rem; font-weight:700; color:var(--color-secondary); background:transparent; border:none; border-bottom:1px dashed var(--color-secondary); outline:none; text-align:center; -moz-appearance:textfield; appearance:textfield;">` : countValue}회)</span>
+                                <span style="font-size: 0.72rem; color: var(--color-secondary); font-weight: 600; margin-left: 0.3rem;">(올해 누적: ${this.userName === '관리자' ? `<input type="number" class="dir-count-input" data-name="${this.escapeHtml(name)}" data-id="${this.escapeHtml(id)}" value="${countValue}" min="0" style="width:34px; padding:0 2px; font-size:0.72rem; font-weight:700; color:var(--color-secondary); background:transparent; border:none; border-bottom:1px dashed var(--color-secondary); outline:none; text-align:center; -moz-appearance:textfield; appearance:textfield;">` : countValue}회)</span>
                             </span>
                             <span style="font-size: 0.75rem; color: var(--text-secondary);">EMP ID: ${this.escapeHtml(id)}</span>
                         </div>
@@ -1795,13 +1811,18 @@ const AppState = {
                     input.addEventListener('keydown', (e) => { if (e.key === 'Enter') input.blur(); });
                     input.addEventListener('change', () => {
                         const dirName = input.getAttribute('data-name');
+                        const dirId = input.getAttribute('data-id');
                         const newCount = Math.max(0, parseInt(input.value, 10) || 0);
                         input.value = newCount;
                         if (this.directory[dirName] !== undefined) {
                             const cur = this.directory[dirName];
                             const curId = typeof cur === 'object' ? cur.id : cur;
                             const curIds = typeof cur === 'object' && Array.isArray(cur.ids) ? cur.ids : [curId];
-                            this.directory[dirName] = { id: curId, count: newCount, ids: curIds };
+                            const curCounts = (typeof cur === 'object' && cur.counts) ? Object.assign({}, cur.counts) : {};
+                            if (dirId) curCounts[dirId] = newCount;
+                            // 전체 count는 사번별 counts 합산으로 갱신
+                            const totalCount = Object.values(curCounts).reduce((s, v) => s + v, 0);
+                            this.directory[dirName] = { id: curId, count: totalCount, ids: curIds, counts: curCounts };
                             this.save();
                         }
                     });
