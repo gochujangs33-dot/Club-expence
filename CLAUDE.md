@@ -72,7 +72,7 @@
 ```
 1. 파일 수정 (app.js / index.html / style.css 등)
 2. node --check app.js   ← 문법 오류 확인
-3. sw.js 의 APP_VERSION 1 증가 (현재 1.6.200)
+3. sw.js 의 APP_VERSION 1 증가 (현재 1.6.201)
 4. git add -A && git commit -q -m "..." && git push -q
 ```
 
@@ -131,4 +131,4 @@
 - [`PERMISSIONS.md`](PERMISSIONS.md) — 권한별 가능/불가 기능 정리
 - [`CHANGES.md`](CHANGES.md) — 버전별 변경 이력
 
-현재 버전: **v1.6.200** (`sw.js` `APP_VERSION`)
+현재 버전: **v1.6.201** (`sw.js` `APP_VERSION`)

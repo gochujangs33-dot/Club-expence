@@ -2,6 +2,33 @@
 
 ---
 
+## v1.6.201 — 전체 코드 검증(코드리뷰) 후속 수정
+
+v1.6.197~200 작업분 전체를 다각도 코드리뷰로 검증한 결과 발견된 문제 수정.
+
+### 버그 수정
+- **이력 로드 전 Firebase 0원 덮어쓰기 사고 방지** (핵심):
+  - `renderClubManagement()`가 globalHistory 로드 완료 **전**(빈 `lastHistoryList`)에 실행되면
+    모든 클럽의 `prizeUsed`/`usedBudget`을 0으로 계산해 공유 `clubRegistry`에 **0을 써버리던 문제**
+  - `historyLoaded` 플래그 추가 — globalHistory 최초 로드 완료 후에만 Firebase 동기화 쓰기 허용
+  - 이것이 "잔여 예산이 가끔 안 보임" 증상의 근본 원인 (v1.6.199는 표시만 교정, 쓰기 사고는 잔존했음)
+- **차트 예산 통계 타일 첫 로드 시 0원 표시**: `updateChartsBudgetStats`가 동기 블록에서만 호출되어
+  로그인 후 첫 대시보드 진입 시 빈 이력 기준 0원으로 남던 문제 → globalHistory `.then()`에도 호출 추가
+- **`_countAttendeesByEmpId` 상단 주석 정정**: 제거된 "이름 폴백" 동작을 여전히 설명하던 구식 주석
+  → 실제 동작(사번 없으면 스킵) + 재도입 금지 경고로 교체 (주석만 수정, 로직 무변경)
+
+### 개선
+- **차트 3중 렌더 제거**: 차트 탭 클릭 시 renderAllCharts가 3회(동기 step 3 + rAF + `.then()`) 실행되며
+  차트가 깜빡이던 문제 → step 3의 중복 호출 제거 (rAF 핸들러 + `.then()` 2경로가 담당)
+
+### 검증 결과 이상 없음 확인 항목
+- `CALCULATION_LOCKED` 영역(계산 로직)은 이번 작업분과 무관 — 미접촉 확인
+- `.off('value')` 광역 해제로 인한 타 리스너 오삭제 없음 (clubRegistry value 리스너 등록처는 1곳뿐)
+- `_buildIdToName`/`_countAttendeesByEmpId` 사번 String 변환 일관성 확인
+- `recalculateDirectoryCountsFromGlobal`의 `this.render()`/`this.isLoggedIn` 유효성 확인
+
+---
+
 ## v1.6.200 — 클럽 중복 생성 방지 + 클럽 목록 넘버링 추가
 
 ### 버그 수정

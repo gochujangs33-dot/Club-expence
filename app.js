@@ -434,8 +434,8 @@ const AppState = {
 
     // 관리자 전용: globalHistory 전체 기준으로 명부 카운트 재계산 (모든 사용자 정산 반영)
     // ── 사번 기준 카운트 공통 헬퍼 ───────────────────────────────────────
-    // 사번 있으면 사번으로 귀속, 없으면 이름으로 조회해 단일 사번일 때만 귀속
-    // (구버전 이력 데이터에 employeeId 미포함 케이스 대응)
+    // 무조건 사번(employeeId) 기준 귀속 — 사번 없는 참석자는 스킵 (v1.6.198)
+    // ⚠️ 이름 기반 폴백 재도입 금지: 동명이인 카운트 오귀속 버그 재발함 (CLAUDE.md §1-6 참조)
     _countAttendeesByEmpId(attendeeList, idToName) {
         attendeeList.forEach(att => {
             if (!att.name) return;
@@ -4649,8 +4649,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
             renderAdminHistory(historyList);
             lastHistoryList = historyList;
+            historyLoaded = true; // 최초 로드 완료 — 이후 renderClubManagement의 Firebase 동기화 허용
             // globalHistory 로드 후 클럽 관리 재렌더 — clubRegistry보다 늦게 로드되면 잔여예산이 0으로 표시되는 경쟁조건 해결
             if (typeof renderClubManagement === 'function') renderClubManagement();
+            // 차트 예산 통계 타일도 최신 이력 기준으로 갱신 (첫 로드 시 0원 표시 방지)
+            if (typeof updateChartsBudgetStats === 'function') updateChartsBudgetStats(historyList);
             // 차트 탭이 활성 상태인 경우 필터 포함 즉시 갱신
             const chartTabActive = document.getElementById('tab-charts') &&
                 !document.getElementById('tab-charts').classList.contains('hidden');
@@ -4660,11 +4663,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // 3. 클럽 관리 UI 갱신 — loadClubRegistry()는 로그인 시 1회만 호출(실시간 리스너 유지)
         //    탭 전환 때마다 재호출하면 리스너가 누적되어 중복 클럽 생성 등 부작용 발생
+        //    (renderAllCharts는 여기서 호출하지 않음 — 차트 탭 rAF 핸들러와 globalHistory .then이 담당,
+        //     세 곳에서 중복 호출하면 탭 전환마다 차트가 3회 재생성되어 깜빡임 발생)
         renderClubManagement();
         updateChartsBudgetStats(lastHistoryList);
         renderClubFilters();
         renderClubHistorySelect();
-        renderAllCharts(lastHistoryList);
     }
 
     // ── 클럽별 정산이력 탭 - 클럽 선택 드롭다운 ───────────────────────────
@@ -4681,6 +4685,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // ── 클럽 관리 (관리자 대시보드) ───────────────────────────────────────
     let editingClubId = null;
     let lastHistoryList = [];
+    let historyLoaded = false; // globalHistory 최초 로드 완료 여부 — 로드 전 빈 리스트 기준으로 Firebase에 0을 써버리는 사고 방지
     let cachedDeletedIds = {}; // tombstone 캐시 — 어떤 경로로도 삭제된 항목이 보이지 않도록
     let selectedOverallClubs = null; // null = 전체 표시, Set이면 해당 클럽만 표시
 
@@ -4740,8 +4745,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 })
                 .reduce((sum, entry) => sum + (entry.finalSupportAmount || 0), 0);
             // Firebase 값과 다를 때만 업데이트 (prizeUsed + usedBudget 동시 처리)
+            // historyLoaded 전에는 쓰기 금지 — 이력 로드 전 빈 리스트로 계산된 0원이
+            // 공유 clubRegistry를 덮어써 다른 접속자에게 잔여예산이 잘못 표시되는 사고 방지
             const needsUpdate = (club.prizeUsed || 0) !== prizeUsed || (club.usedBudget || 0) !== usedBudget;
-            if (needsUpdate && firebaseDb) {
+            if (needsUpdate && firebaseDb && historyLoaded) {
                 club.prizeUsed  = prizeUsed;
                 club.usedBudget = usedBudget;
                 firebaseDb.ref(`clubRegistry/${clubId}`).update({ prizeUsed, usedBudget }).catch(() => {});
