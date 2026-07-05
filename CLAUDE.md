@@ -60,7 +60,9 @@
    | `_countAttendeesByEmpId` | 사번(`employeeId`) 없는 참석자는 **무조건 스킵** — 이름 기반 폴백 코드 없음 | v1.6.198 | 동명이인 카운트 오귀속 (이진호 4277↔4035 혼용) |
    | `recalculateDirectoryCountsFromGlobal` | 비동기 처리 완료 후 `if (this.isLoggedIn) this.render()` 호출 필수 + `cur.count` 집계합 동기화 | v1.6.197 | 전사원 명부 카운트 0회 표시 |
    | `loadClubRegistry` | `.on('value', ...)` 등록 **직전** 반드시 `.off('value')` 호출 | v1.6.200 | 탭 전환마다 리스너 누적 → 클럽 중복 생성 |
-   | `renderAdminDashboard` step 3 | `AppState.loadClubRegistry().then(...)` **재호출 금지** — UI 함수(`renderClubManagement` 등) 직접 호출 | v1.6.200 | loadClubRegistry 재호출로 리스너 누적 우회 불가 |
+   | `renderAdminDashboard` step 3 | `AppState.loadClubRegistry().then(...)` **재호출 금지** — UI 함수 직접 호출, `renderAllCharts`는 호출하지 않음(rAF+`.then()` 담당) | v1.6.200~201 | 리스너 누적 / 차트 3중 렌더 깜빡임 |
+   | `renderClubManagement` | Firebase 동기화 쓰기는 `historyLoaded === true`일 때만 (`needsUpdate && firebaseDb && historyLoaded`) | v1.6.201 | 이력 로드 전 0원이 공유 clubRegistry를 덮어씀 → 전 접속자 잔여예산 오표시 |
+   | `renderAdminDashboard` globalHistory `.then()` | `historyLoaded = true` 세팅 + `renderClubManagement()`·`updateChartsBudgetStats()` 호출 유지 | v1.6.199~201 | 잔여예산·차트 통계 타일 0원 표시 |
 
    - 위 항목 중 하나라도 되돌리거나 "리팩토링"하면 대응하는 버그가 즉시 재발함.
    - 구조 변경이 꼭 필요한 경우 먼저 사용자에게 위 표를 보여주고 명시적 승인을 받아야 함.
@@ -130,5 +132,6 @@
 - [`계산식_명세서.md`](계산식_명세서.md) — 계산식 + 명부 카운트 관리 설명 (한국어 상세본)
 - [`PERMISSIONS.md`](PERMISSIONS.md) — 권한별 가능/불가 기능 정리
 - [`CHANGES.md`](CHANGES.md) — 버전별 변경 이력
+- [`CODE_REVIEW.md`](CODE_REVIEW.md) — **매 작업 시작 전 필독**: v1.6.201 검증 결과, 재수정 금지 항목 상세, 승인된 백로그(사용자 명시 요청 시에만 착수)
 
 현재 버전: **v1.6.201** (`sw.js` `APP_VERSION`)
