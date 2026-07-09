@@ -1197,6 +1197,14 @@
             });
         });
 
+        // SW controller가 교체되면 자동 리로드 (skipWaiting 후 activate 시 발동)
+        let refreshing = false;
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+            if (refreshing) return;
+            refreshing = true;
+            window.location.reload();
+        });
+
         // 서비스 워커에서 SW_UPDATED 메시지 수신 (activate 직후)
         navigator.serviceWorker.addEventListener('message', event => {
             if (event.data?.type === 'SW_UPDATED') {

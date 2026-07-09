@@ -24,9 +24,9 @@ const ASSETS = [
 ];
 
 // ── 설치: 필요한 파일을 캐시에 저장 ──────────────────────────────
-// skipWaiting()을 여기서 호출하지 않음 — 사용자가 "지금 업데이트" 버튼을
-// 눌렀을 때 message 이벤트로 skipWaiting을 실행해야 배너 흐름이 정상 동작함
+// skipWaiting()을 설치 시 즉시 호출 — 새 버전 배포 시 대기 없이 바로 활성화
 self.addEventListener('install', event => {
+  self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then(cache => cache.addAll(ASSETS))
