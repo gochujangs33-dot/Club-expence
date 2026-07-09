@@ -4335,7 +4335,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     await Promise.all(keys.map(k => caches.delete(k)));
                 }
             } catch (e) { /* ignore */ }
-            location.reload(true);
+            // cache-busting 쿼리로 브라우저 HTTP 캐시까지 우회하여 최신 버전 강제 로드
+            const url = new URL(window.location.href);
+            url.searchParams.set('_cb', Date.now());
+            window.location.replace(url.href);
         });
     }
 

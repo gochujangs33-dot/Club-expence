@@ -1177,7 +1177,7 @@
             document.getElementById('update-banner').classList.remove('hidden');
         }
 
-        navigator.serviceWorker.register('./sw.js').then(reg => {
+        navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' }).then(reg => {
             // 접속 즉시 새 버전이 있는지 확인
             reg.update();
 
