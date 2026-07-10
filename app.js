@@ -4709,6 +4709,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const clubListContainer = document.getElementById('club-list-container');
 
     function renderClubManagement() {
+        // "올해 기존 사용" 칸 입력 중에는 재렌더 스킵 — Firebase 스냅샷 등 외부 재렌더가
+        // 입력값을 지우는 것 방지 (blur 시 change 핸들러가 저장 후 직접 재렌더함)
+        if (document.activeElement && document.activeElement.classList &&
+            document.activeElement.classList.contains('club-prior-used-input')) return;
         if (clubTotalBudgetInput) {
             clubTotalBudgetInput.value = formatAmount(AppState.clubTotalBudget || 0);
         }
@@ -4778,7 +4782,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 <div style="flex:1.2; min-width:100px; text-align:center;">
                     <div style="font-size:0.7rem; color:var(--text-secondary);">${t('club.assigned_budget')}</div>
                     <div style="font-size:0.85rem; font-weight:600;">${SettlementCalculator.formatCurrency(budget)}</div>
-                    ${priorUsed > 0 ? `<div style="font-size:0.7rem; color:var(--text-muted);">(${t('club.prior_used')} ${SettlementCalculator.formatCurrency(priorUsed)})</div>` : ''}
+                </div>
+                <div style="flex:1.1; min-width:110px; text-align:center;">
+                    <div style="font-size:0.7rem; color:var(--text-secondary);">✏️ 올해 기존 사용</div>
+                    <input type="text" inputmode="numeric" class="club-prior-used-input" data-id="${AppState.escapeHtml(clubId)}"
+                        value="${priorUsed ? formatAmount(priorUsed) : ''}" placeholder="0"
+                        title="앱 사용 전 올해 이미 지출한 금액 — 입력하면 잔여 예산에서 자동 차감됩니다"
+                        style="width:100px; padding:0.25rem 0.4rem; font-size:0.82rem; text-align:center; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.18); border-radius:6px; color:inherit;">
                 </div>
                 <div style="flex:1.1; min-width:90px; text-align:center;">
                     <div style="font-size:0.7rem; color:var(--text-secondary);">🎁 상품비 사용</div>
@@ -4834,6 +4844,24 @@ document.addEventListener('DOMContentLoaded', () => {
                     AppState.deleteClub(clubId);
                     renderClubManagement();
                 });
+            });
+        });
+        // "올해 기존 사용" 인라인 입력 — Enter 또는 포커스 아웃 시 저장, 잔여 예산 즉시 재계산
+        clubListContainer.querySelectorAll('.club-prior-used-input').forEach(inp => {
+            inp.addEventListener('keydown', e => {
+                if (e.key === 'Enter') { e.preventDefault(); inp.blur(); }
+            });
+            inp.addEventListener('change', () => {
+                const clubId = inp.getAttribute('data-id');
+                const club = AppState.clubRegistry[clubId];
+                if (!club) return;
+                const val = Math.max(0, parseAmount(inp.value));
+                if (val === (club.priorUsed || 0)) {
+                    inp.value = val ? formatAmount(val) : '';
+                    return;
+                }
+                AppState.addOrUpdateClub(clubId, club.name, club.budget || 0, val);
+                renderClubManagement();
             });
         });
     }
