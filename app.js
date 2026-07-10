@@ -432,6 +432,24 @@ const AppState = {
         return results;
     },
 
+    // 동명이인 사번 선택 시 참고용 — 현재 선택된 클럽(clubHistory)에서 해당 사번의
+    // 가장 최근 참석 이력 날짜를 반환 (없으면 null)
+    getRecentClubAttendance(employeeId) {
+        const id = String(employeeId);
+        let latest = null;
+        (this.clubHistory || []).forEach(entry => {
+            const matched = (entry.attendees || []).some(a => a.employeeId != null && String(a.employeeId) === id);
+            if (!matched) return;
+            const time = entry.settlementDate
+                ? new Date(entry.settlementDate + 'T00:00:00').getTime()
+                : (entry.date ? new Date(entry.date).getTime() : (entry.id || 0));
+            if (!latest || time > latest.time) {
+                latest = { time, dateStr: entry.settlementDate || (entry.date ? new Date(entry.date).toISOString().slice(0, 10) : '') };
+            }
+        });
+        return latest;
+    },
+
     // 관리자 전용: globalHistory 전체 기준으로 명부 카운트 재계산 (모든 사용자 정산 반영)
     // ── 사번 기준 카운트 공통 헬퍼 ───────────────────────────────────────
     // 무조건 사번(employeeId) 기준 귀속 — 사번 없는 참석자는 스킵 (v1.6.198)
@@ -2952,11 +2970,19 @@ document.addEventListener('DOMContentLoaded', () => {
         box.appendChild(title);
 
         entries.forEach(entry => {
+            // 이 클럽에서 해당 사번의 최근 참석 이력이 있으면 강조 표시 — 동명이인 중 어느 쪽이
+            // 이 클럽 소속일 가능성이 높은지 직관적으로 구분하기 위함
+            const recent = AppState.getRecentClubAttendance(entry.id);
             const btn = document.createElement('button');
-            btn.style.cssText = 'display:block;width:100%;margin-bottom:0.5rem;padding:0.65rem 0.9rem;background:var(--bg-input,#2a2a3e);border:1px solid var(--border,#444);border-radius:8px;color:var(--text-primary,#eee);font-size:0.88rem;text-align:left;cursor:pointer;transition:background 0.15s;';
-            btn.innerHTML = `<span style="font-weight:600;">${AppState.escapeHtml(entry.name)}</span><span style="color:var(--text-secondary,#888);margin-left:0.5rem;">EMP ID: ${AppState.escapeHtml(entry.id)}</span>`;
+            btn.style.cssText = recent
+                ? 'display:block;width:100%;margin-bottom:0.5rem;padding:0.65rem 0.9rem;background:rgba(52,211,153,0.12);border:1px solid rgba(52,211,153,0.55);border-radius:8px;color:var(--text-primary,#eee);font-size:0.88rem;text-align:left;cursor:pointer;transition:background 0.15s;'
+                : 'display:block;width:100%;margin-bottom:0.5rem;padding:0.65rem 0.9rem;background:var(--bg-input,#2a2a3e);border:1px solid var(--border,#444);border-radius:8px;color:var(--text-primary,#eee);font-size:0.88rem;text-align:left;cursor:pointer;transition:background 0.15s;';
+            const recentBadge = recent
+                ? `<span style="display:block;margin-top:0.3rem;font-size:0.72rem;color:rgb(52,211,153);">✅ 이 클럽 최근 참석 (${AppState.escapeHtml(recent.dateStr)})</span>`
+                : '';
+            btn.innerHTML = `<span style="font-weight:600;">${AppState.escapeHtml(entry.name)}</span><span style="color:var(--text-secondary,#888);margin-left:0.5rem;">EMP ID: ${AppState.escapeHtml(entry.id)}</span>${recentBadge}`;
             btn.addEventListener('mouseenter', () => btn.style.background = 'var(--color-secondary-light,rgba(168,85,247,0.18))');
-            btn.addEventListener('mouseleave', () => btn.style.background = 'var(--bg-input,#2a2a3e)');
+            btn.addEventListener('mouseleave', () => btn.style.background = recent ? 'rgba(52,211,153,0.12)' : 'var(--bg-input,#2a2a3e)');
             btn.addEventListener('click', () => { onSelect(entry); overlay.remove(); });
             box.appendChild(btn);
         });
@@ -2979,7 +3005,18 @@ document.addEventListener('DOMContentLoaded', () => {
             const item = document.createElement('div');
             item.className = 'attendee-dropdown-item';
             const hasDupe = entries.filter(e => e.name === entry.name).length > 1;
-            item.textContent = hasDupe ? `${entry.name} (사번: ${entry.id})` : entry.name;
+            if (hasDupe) {
+                // 동명이인 항목 중 이 클럽 최근 참석 이력이 있는 사번을 강조
+                const recent = AppState.getRecentClubAttendance(entry.id);
+                item.textContent = `${entry.name} (사번: ${entry.id})`;
+                if (recent) {
+                    item.style.background = 'rgba(52,211,153,0.12)';
+                    item.style.borderLeft = '3px solid rgb(52,211,153)';
+                    item.title = `이 클럽 최근 참석: ${recent.dateStr}`;
+                }
+            } else {
+                item.textContent = entry.name;
+            }
             item.addEventListener('mousedown', (e) => {
                 e.preventDefault();
                 attendeeNameInput.value = entry.name;
