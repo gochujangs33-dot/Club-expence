@@ -4704,6 +4704,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const clubForm = document.getElementById('club-form');
     const clubNameFormInput = document.getElementById('club-name-form-input');
     const clubBudgetFormInput = document.getElementById('club-budget-form-input');
+    const clubPriorUsedFormInput = document.getElementById('club-prior-used-form-input');
     const cancelEditClubBtn = document.getElementById('cancel-edit-club-btn');
     const clubListContainer = document.getElementById('club-list-container');
 
@@ -4805,6 +4806,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 editingClubId = clubId;
                 clubNameFormInput.value = club.name;
                 clubBudgetFormInput.value = formatAmount(club.budget || 0);
+                if (clubPriorUsedFormInput) clubPriorUsedFormInput.value = club.priorUsed ? formatAmount(club.priorUsed) : '';
                 document.getElementById('add-club-btn').innerHTML = t('btn.edit_done');
                 cancelEditClubBtn.classList.remove('hidden');
                 clubNameFormInput.focus();
@@ -4840,6 +4842,7 @@ document.addEventListener('DOMContentLoaded', () => {
         editingClubId = null;
         clubNameFormInput.value = '';
         clubBudgetFormInput.value = '';
+        if (clubPriorUsedFormInput) clubPriorUsedFormInput.value = '';
         document.getElementById('add-club-btn').innerHTML = t('btn.add_club_active');
         cancelEditClubBtn.classList.add('hidden');
     }
@@ -4918,7 +4921,11 @@ document.addEventListener('DOMContentLoaded', () => {
             e.preventDefault();
             const name = clubNameFormInput.value.trim();
             const budget = parseAmount(clubBudgetFormInput.value);
-            const priorUsed = (editingClubId && AppState.clubRegistry[editingClubId]) ? (AppState.clubRegistry[editingClubId].priorUsed || 0) : 0;
+            // 올해 기존 사용 금액: 입력값이 있으면 그 값 사용(0 입력 시 초기화), 비워두면 기존 값 유지
+            const priorUsedRaw = clubPriorUsedFormInput ? clubPriorUsedFormInput.value.trim() : '';
+            const priorUsed = priorUsedRaw !== ''
+                ? Math.max(0, parseAmount(priorUsedRaw))
+                : ((editingClubId && AppState.clubRegistry[editingClubId]) ? (AppState.clubRegistry[editingClubId].priorUsed || 0) : 0);
             if (!name) return;
 
             // 이름 중복 체크 (신규: 전체 / 수정: 자신 제외)
