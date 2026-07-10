@@ -606,7 +606,7 @@ const AppState = {
                             : '최근 접속: 첫 번째 로그인';
                     }
                 }).catch(() => {});
-                fetch('./lib/employee_directory.json', { cache: 'no-cache' })
+                fetch('./lib/employee_directory.json?_=' + Date.now(), { cache: 'no-store' })
                     .then(res => res.json())
                     .then(list => this.bulkImportDirectory(list))
                     .catch(err => console.error("전사원 명부 자동 등록 실패:", err))
@@ -678,7 +678,7 @@ const AppState = {
                             this.currentPin = pin;
 
                             // 번들된 전사원 데이터 중 누락된 사람을 클라우드 명부에도 병합
-                            fetch('./lib/employee_directory.json', { cache: 'no-cache' })
+                            fetch('./lib/employee_directory.json?_=' + Date.now(), { cache: 'no-store' })
                                 .then(res => res.json())
                                 .then(list => this.bulkImportDirectory(list))
                                 .catch(err => console.error("전사원 명부 자동 등록 실패:", err))
@@ -2657,7 +2657,7 @@ document.addEventListener('DOMContentLoaded', () => {
     AppState.load();
 
     // 번들된 전사원 데이터 중 아직 명부에 없는 사람을 자동 등록
-    fetch('./lib/employee_directory.json', { cache: 'no-cache' })
+    fetch('./lib/employee_directory.json?_=' + Date.now(), { cache: 'no-store' })
         .then(res => res.json())
         .then(list => AppState.bulkImportDirectory(list))
         .catch(err => console.error("전사원 명부 자동 등록 실패:", err));

@@ -6,7 +6,7 @@
  *   예) '1.0.0' → '1.1.0'
  *   그러면 앱에 자동으로 "업데이트 있음" 알림이 표시됩니다.
  */
-const APP_VERSION = '1.6.204';
+const APP_VERSION = '1.6.205';
 const CACHE_NAME  = `club-expense-v${APP_VERSION}`;
 
 const ASSETS = [
@@ -29,7 +29,9 @@ self.addEventListener('install', event => {
   self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME)
-      .then(cache => cache.addAll(ASSETS))
+      // cache: 'reload' — 브라우저 HTTP 캐시(GitHub Pages max-age 600초)를 우회하고
+      // 항상 서버에서 최신 파일을 받아 캐시 (구버전 app.js가 새 캐시에 들어가는 것 방지)
+      .then(cache => cache.addAll(ASSETS.map(u => new Request(u, { cache: 'reload' }))))
   );
 });
 
