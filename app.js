@@ -5072,6 +5072,89 @@ document.addEventListener('DOMContentLoaded', () => {
         if (countEl) countEl.textContent = `${filtered.length}건`;
     }
 
+    // 조각 채움색의 밝기에 따라 흰 글씨/잉크 글씨 중 대비가 되는 쪽을 선택
+    function pickTextColorForBg(bgColor) {
+        const m = /rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)/.exec(bgColor || '');
+        if (!m) return '#ffffff';
+        const [r, g, b] = [m[1], m[2], m[3]].map(Number);
+        const luminance = 0.299 * r + 0.587 * g + 0.114 * b;
+        return luminance > 165 ? '#0f172a' : '#ffffff';
+    }
+
+    // 차트 위에 값을 직접 그리는 공용 플러그인 — 막대는 끝(tip)에, 도넛은 조각 위/옆에 표시
+    // (호버 툴팁 없이도 바로 확인 가능하도록. 개별 차트는 plugins.chartValueLabel 옵션으로 활성화)
+    const chartValueLabelPlugin = {
+        id: 'chartValueLabel',
+        afterDatasetsDraw(chart, _args, opts) {
+            if (!opts || !opts.getLabel) return;
+            const { ctx } = chart;
+            ctx.save();
+            ctx.font = "600 11px -apple-system, 'Malgun Gothic', sans-serif";
+            ctx.textBaseline = 'middle';
+
+            if (chart.config.type === 'doughnut') {
+                const meta = chart.getDatasetMeta(0);
+                const bgColors = chart.data.datasets[0].backgroundColor;
+                meta.data.forEach((arc, i) => {
+                    const text = opts.getLabel(i);
+                    if (!text) return;
+                    const angle = (arc.startAngle + arc.endAngle) / 2;
+                    const bigEnough = (arc.endAngle - arc.startAngle) > 0.35;
+                    if (bigEnough) {
+                        const r = (arc.innerRadius + arc.outerRadius) / 2;
+                        ctx.textAlign = 'center';
+                        ctx.fillStyle = pickTextColorForBg(bgColors[i]);
+                        ctx.fillText(text, arc.x + Math.cos(angle) * r, arc.y + Math.sin(angle) * r);
+                    } else {
+                        const x1 = arc.x + Math.cos(angle) * arc.outerRadius;
+                        const y1 = arc.y + Math.sin(angle) * arc.outerRadius;
+                        const x2 = arc.x + Math.cos(angle) * (arc.outerRadius + 14);
+                        const y2 = arc.y + Math.sin(angle) * (arc.outerRadius + 14);
+                        ctx.beginPath();
+                        ctx.moveTo(x1, y1);
+                        ctx.lineTo(x2, y2);
+                        ctx.strokeStyle = 'rgba(148,163,184,0.6)';
+                        ctx.lineWidth = 1;
+                        ctx.stroke();
+                        ctx.textAlign = x2 >= arc.x ? 'left' : 'right';
+                        ctx.fillStyle = opts.color || '#e2e8f0';
+                        ctx.fillText(text, x2 + (x2 >= arc.x ? 4 : -4), y2);
+                    }
+                });
+            } else if (chart.options.indexAxis === 'y') {
+                // 가로 막대: 막대 끝(tip)에 표시
+                const meta = chart.getDatasetMeta(0);
+                meta.data.forEach((bar, i) => {
+                    const text = opts.getLabel(i);
+                    if (!text) return;
+                    ctx.textAlign = 'left';
+                    ctx.fillStyle = opts.color || '#e2e8f0';
+                    ctx.fillText(text, bar.x + 8, bar.y);
+                });
+            } else {
+                // 세로 막대(단일/스택): 스택 합계를 맨 위 캡에 표시
+                const n = chart.data.labels.length;
+                const metas = chart.data.datasets.map((_, di) => chart.getDatasetMeta(di));
+                for (let idx = 0; idx < n; idx++) {
+                    let topEl = null, total = 0;
+                    metas.forEach((meta, di) => {
+                        const val = chart.data.datasets[di].data[idx] || 0;
+                        total += val;
+                        if (val > 0 && !meta.hidden) topEl = meta.data[idx];
+                    });
+                    if (!topEl || total <= 0) continue;
+                    const text = opts.getLabel(idx, total);
+                    if (!text) continue;
+                    ctx.textAlign = 'center';
+                    ctx.fillStyle = opts.color || '#e2e8f0';
+                    ctx.fillText(text, topEl.x, topEl.y - 10);
+                }
+            }
+            ctx.restore();
+        }
+    };
+    if (typeof Chart !== 'undefined') Chart.register(chartValueLabelPlugin);
+
     let overallMonthlyChartInstance = null;
 
     // ── 월별 클럽 지출 현황 (막대 그래프) ────────────────────────────────
@@ -5127,6 +5210,10 @@ document.addEventListener('DOMContentLoaded', () => {
         }));
 
         const stacked = sortedClubs.length > 1;
+        const compactWon = v => v >= 1000000 ? (v/1000000).toFixed(1)+'M' : v >= 1000 ? (v/1000).toFixed(0)+'K' : String(v);
+        // 스택 합계 라벨이 막대 위쪽에 잘리지 않도록 y축 최대치에 여유 확보
+        const monthTotals = labels.map(month => sortedClubs.reduce((s, c) => s + ((spendByMonthClub[month] && spendByMonthClub[month][c]) || 0), 0));
+        const maxTotal = Math.max(0, ...monthTotals);
 
         if (overallMonthlyChartInstance) overallMonthlyChartInstance.destroy();
         overallMonthlyChartInstance = new Chart(canvas.getContext('2d'), {
@@ -5135,17 +5222,22 @@ document.addEventListener('DOMContentLoaded', () => {
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
+                layout: { padding: { top: 22 } },
                 plugins: {
                     legend: { labels: { color: '#cbd5e1', boxWidth: 12, boxHeight: 12, borderRadius: 4, padding: 12 } },
                     tooltip: {
                         callbacks: {
                             label: ctx => `${ctx.dataset.label}: ${SettlementCalculator.formatCurrency(ctx.parsed.y)}`
                         }
+                    },
+                    chartValueLabel: {
+                        color: '#e2e8f0',
+                        getLabel: (_idx, total) => compactWon(total)
                     }
                 },
                 scales: {
                     x: { stacked, ticks: { color: '#94a3b8', font: { size: 11 } }, grid: { color: 'rgba(255,255,255,0.04)' } },
-                    y: { stacked, ticks: { color: '#94a3b8', callback: v => v >= 1000000 ? (v/1000000).toFixed(1)+'M' : v >= 1000 ? (v/1000).toFixed(0)+'K' : v }, grid: { color: 'rgba(255,255,255,0.05)' }, beginAtZero: true }
+                    y: { stacked, suggestedMax: maxTotal * 1.15 || undefined, ticks: { color: '#94a3b8', callback: compactWon }, grid: { color: 'rgba(255,255,255,0.05)' }, beginAtZero: true }
                 }
             }
         });
@@ -5209,6 +5301,10 @@ document.addEventListener('DOMContentLoaded', () => {
                                 return [`소진율: ${ctx.parsed.x}%`, `사용: ${SettlementCalculator.formatCurrency(d.usedTotal)}`, `예산: ${SettlementCalculator.formatCurrency(d.budget)}`];
                             }
                         }
+                    },
+                    chartValueLabel: {
+                        color: '#e2e8f0',
+                        getLabel: (i) => `${usageRatio[i]}%`
                     }
                 },
                 scales: {
@@ -5276,6 +5372,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                         text: `${label}  ${SettlementCalculator.formatCurrency(value)} (${pct}%)`,
                                         fillStyle: ds.backgroundColor[i],
                                         strokeStyle: ds.backgroundColor[i],
+                                        fontColor: '#cbd5e1', // Chart.js v4 범례는 항목별 fontColor로 텍스트색을 그림 — 누락 시 글씨가 안 보임
                                         lineWidth: 0,
                                         index: i
                                     };
@@ -5289,6 +5386,14 @@ document.addEventListener('DOMContentLoaded', () => {
                                 const pct = total > 0 ? Math.round(ctx.parsed / total * 1000) / 10 : 0;
                                 return `${ctx.label}: ${SettlementCalculator.formatCurrency(ctx.parsed)} (${pct}%)`;
                             }
+                        }
+                    },
+                    chartValueLabel: {
+                        // 도넛 조각 위/옆에 비율을 직접 표시 — 범례(하단)와 별개로 차트 자체에서 바로 확인 가능
+                        getLabel: (i) => {
+                            const value = [eventCost, facilityCost, prizeCost][i] || 0;
+                            const pct = total > 0 ? Math.round(value / total * 1000) / 10 : 0;
+                            return pct > 0 ? `${pct}%` : '';
                         }
                     }
                 }
@@ -5439,10 +5544,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 maintainAspectRatio: false,
                 plugins: {
                     legend: { display: false },
-                    tooltip: { callbacks: { label: ctx => `정산 ${ctx.parsed.x}건` } }
+                    tooltip: { callbacks: { label: ctx => `정산 ${ctx.parsed.x}건` } },
+                    chartValueLabel: {
+                        color: '#e2e8f0',
+                        getLabel: (i) => `${counts[i]}건`
+                    }
                 },
                 scales: {
-                    x: { ticks: { color: '#94a3b8', stepSize: 1 }, grid: { color: 'rgba(255,255,255,0.04)' }, beginAtZero: true },
+                    // 끝(tip) 라벨이 잘리지 않도록 최대치에 여유 확보
+                    x: { ticks: { color: '#94a3b8', stepSize: 1 }, grid: { color: 'rgba(255,255,255,0.04)' }, beginAtZero: true, suggestedMax: Math.max(...counts, 1) + 1 },
                     y: { ticks: { color: '#cbd5e1', font: { size: 11 } }, grid: { display: false } }
                 }
             }
