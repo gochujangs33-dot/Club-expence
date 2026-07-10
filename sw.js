@@ -6,7 +6,7 @@
  *   예) '1.0.0' → '1.1.0'
  *   그러면 앱에 자동으로 "업데이트 있음" 알림이 표시됩니다.
  */
-const APP_VERSION = '1.6.202';
+const APP_VERSION = '1.6.203';
 const CACHE_NAME  = `club-expense-v${APP_VERSION}`;
 
 const ASSETS = [
@@ -68,9 +68,14 @@ self.addEventListener('fetch', event => {
   );
 });
 
-// ── 페이지에서 skipWaiting 요청 수신 ─────────────────────────────
+// ── 페이지에서 skipWaiting / 버전 질의 요청 수신 ─────────────────
 self.addEventListener('message', event => {
   if (event.data?.action === 'skipWaiting') {
     self.skipWaiting();
+  }
+  // 페이지 로드 시 버전 질의 — activate 시점 SW_UPDATED 메시지가
+  // controllerchange 자동 리로드와 경쟁해 유실돼도 라벨이 항상 동기화되도록 함
+  if (event.data?.action === 'getVersion' && event.source) {
+    event.source.postMessage({ type: 'SW_VERSION', version: APP_VERSION });
   }
 });

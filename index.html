@@ -1205,24 +1205,46 @@
             window.location.reload();
         });
 
-        // 서비스 워커에서 SW_UPDATED 메시지 수신 (activate 직후)
+        // 버전 정보 저장·표시 (SW_UPDATED / SW_VERSION 공용)
+        function applyVersionInfo(version) {
+            if (!version) return;
+            const today = new Date().toLocaleDateString('ko-KR', {year:'numeric', month:'2-digit', day:'2-digit'})
+                .replace(/\. /g, '.').replace(/\.$/, '');
+            const isNew = localStorage.getItem('app_current_version') !== version;
+            localStorage.setItem('app_current_version', version);
+            if (isNew) localStorage.setItem('app_current_version_date', today);
+            updateVersionDisplay(version, localStorage.getItem('app_current_version_date'));
+        }
+
+        // 서비스 워커에서 메시지 수신
         navigator.serviceWorker.addEventListener('message', event => {
+            // SW_VERSION: 페이지 로드 시 버전 질의 응답 — 라벨 동기화만, 배너 없음
+            if (event.data?.type === 'SW_VERSION') {
+                applyVersionInfo(event.data.version);
+                return;
+            }
+            // SW_UPDATED: 새 SW activate 직후
             if (event.data?.type === 'SW_UPDATED') {
                 const version = event.data.version;
-                // 버전 정보 항상 저장·표시 (배너 억제와 무관)
-                if (version) {
-                    const today = new Date().toLocaleDateString('ko-KR', {year:'numeric', month:'2-digit', day:'2-digit'})
-                        .replace(/\. /g, '.').replace(/\.$/, '');
-                    const isNew = localStorage.getItem('app_current_version') !== version;
-                    localStorage.setItem('app_current_version', version);
-                    if (isNew) localStorage.setItem('app_current_version_date', today);
-                    updateVersionDisplay(version, localStorage.getItem('app_current_version_date'));
-                }
+                applyVersionInfo(version);
                 if (wasCacheJustCleared()) return; // 캐시 초기화 후 배너 억제
                 document.getElementById('update-banner').dataset.version = version || '';
                 document.getElementById('update-banner').classList.remove('hidden');
             }
         });
+
+        // 페이지 로드 시 현재 활성 SW에 버전 질의 — activate 시점 SW_UPDATED가
+        // controllerchange 자동 리로드와 경쟁해 유실되면 라벨이 구버전에 고정되는 문제 해결
+        if (navigator.serviceWorker.controller) {
+            navigator.serviceWorker.controller.postMessage({ action: 'getVersion' });
+        } else {
+            // 첫 방문/캐시 초기화 직후: 컨트롤러 장악 후 질의
+            navigator.serviceWorker.ready.then(() => {
+                if (navigator.serviceWorker.controller) {
+                    navigator.serviceWorker.controller.postMessage({ action: 'getVersion' });
+                }
+            });
+        }
 
         function markUpdateSeen() {
             const version = document.getElementById('update-banner').dataset.version;
