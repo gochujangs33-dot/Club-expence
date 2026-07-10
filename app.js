@@ -1505,7 +1505,14 @@ const AppState = {
         if (listCount) listCount.textContent = this.attendees.length;
 
         const dirBadgeCount = document.getElementById('directory-badge-count');
-        if (dirBadgeCount) dirBadgeCount.textContent = Object.keys(this.directory).length;
+        if (dirBadgeCount) {
+            // 사번 기준 인원수 — 명부 탭 내부 카운트(dirRows.length)와 동일 기준 (동명이인은 사번마다 1명)
+            let dirIdTotal = 0;
+            Object.values(this.directory).forEach(v => {
+                dirIdTotal += (typeof v === 'object' && Array.isArray(v.ids) && v.ids.length > 0) ? v.ids.length : 1;
+            });
+            dirBadgeCount.textContent = dirIdTotal;
+        }
 
         // Update Warnings UI
         const warningsCard = document.getElementById('warnings-card');
