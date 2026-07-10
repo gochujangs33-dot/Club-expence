@@ -1246,6 +1246,17 @@
             });
         }
 
+        // 최종 안전망: 서버의 sw.js에서 배포 버전을 직접 읽어 라벨 표시
+        // — 활성 SW가 구버전이거나(getVersion 미지원), SW 설치가 실패해 멈춰있거나,
+        //   프록시가 구버전을 캐시하는 환경에서도 라벨은 항상 실제 배포 버전을 표시
+        fetch('./sw.js?_=' + Date.now(), { cache: 'no-store' })
+            .then(r => r.ok ? r.text() : '')
+            .then(txt => {
+                const m = txt.match(/APP_VERSION\s*=\s*'([^']+)'/);
+                if (m) applyVersionInfo(m[1]);
+            })
+            .catch(() => {});
+
         function markUpdateSeen() {
             const version = document.getElementById('update-banner').dataset.version;
             if (version) localStorage.setItem('app_update_seen_version', version);
