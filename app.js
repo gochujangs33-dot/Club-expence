@@ -5261,7 +5261,28 @@ document.addEventListener('DOMContentLoaded', () => {
                 maintainAspectRatio: false,
                 cutout: '62%',
                 plugins: {
-                    legend: { position: 'bottom', labels: { color: '#cbd5e1', padding: 16, font: { size: 12 } } },
+                    legend: {
+                        position: 'bottom',
+                        labels: {
+                            color: '#cbd5e1', padding: 16, font: { size: 12 },
+                            // 범례에 금액·비율을 직접 표기 — 호버 없이 바로 확인 가능
+                            generateLabels: (chart) => {
+                                const data = chart.data;
+                                const ds = data.datasets[0];
+                                return data.labels.map((label, i) => {
+                                    const value = ds.data[i] || 0;
+                                    const pct = total > 0 ? Math.round(value / total * 1000) / 10 : 0;
+                                    return {
+                                        text: `${label}  ${SettlementCalculator.formatCurrency(value)} (${pct}%)`,
+                                        fillStyle: ds.backgroundColor[i],
+                                        strokeStyle: ds.backgroundColor[i],
+                                        lineWidth: 0,
+                                        index: i
+                                    };
+                                });
+                            }
+                        }
+                    },
                     tooltip: {
                         callbacks: {
                             label: (ctx) => {
