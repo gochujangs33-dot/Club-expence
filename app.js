@@ -6304,10 +6304,10 @@ function _calcCorpForItem(amount, category) {
 
     if (memberCount <= 0) return amount; // 인원 미설정 시 전액 법인
 
-    // 클럽 잔여 예산 (이번 세션 이전까지 남은 예산)
+    // 클럽 잔여 예산 (이번 세션 이전까지 남은 예산 — 저장된 이력 기준)
     const clubBudget = AppState.getClubBudget ? AppState.getClubBudget() : 0;
     const clubUsed = AppState.getClubUsedBudget ? AppState.getClubUsedBudget() : 0;
-    const availableBudget = clubBudget > 0 ? Math.max(0, clubBudget - clubUsed) : Infinity;
+    const availableBudgetTotal = clubBudget > 0 ? Math.max(0, clubBudget - clubUsed) : Infinity;
 
     // 현재 편집 중인 항목은 기존 항목에서 제외
     const editingId = AppState.editingItemId || null;
@@ -6321,11 +6321,18 @@ function _calcCorpForItem(amount, category) {
         ? SettlementCalculator.calculate(memberCount, existingItems, 0, rules)
         : { finalSupportAmount: 0 };
 
-    // 클럽 예산 한도 적용
-    const corpAllCapped = Math.min(resultAll.finalSupportAmount, availableBudget);
-    const corpExistingCapped = Math.min(resultExisting.finalSupportAmount, availableBudget);
+    // 이 항목만의 정책상 적정 법인부담 추정치 (구간표 기반 한계기여분 — 예산과 무관한 "정책 제안치")
+    const policyDelta = Math.max(0, resultAll.finalSupportAmount - resultExisting.finalSupportAmount);
 
-    const corp = corpAllCapped - corpExistingCapped;
+    // 이번 세션에서 다른 항목에 이미 실제로 배정된 법인카드 금액(수동 조정분 포함, v1.6.215+ 실제 값 기준)
+    // — 이걸 반영하지 않으면 관리자가 앞선 항목의 법인카드 금액을 정책 제안치보다 더 많이 수동 조정한 경우
+    // (예: 예산 전액 소진) 뒤에 추가하는 항목에도 여전히 법인카드를 제안하는 오류가 생김
+    const alreadyCorpAssigned = existingItems.reduce((s, it) => s + (it.corporateAmount || 0), 0);
+    const realRemaining = availableBudgetTotal === Infinity
+        ? Infinity
+        : Math.max(0, availableBudgetTotal - alreadyCorpAssigned);
+
+    const corp = Math.min(policyDelta, realRemaining);
     return Math.max(0, Math.min(corp, amount));
 }
 
