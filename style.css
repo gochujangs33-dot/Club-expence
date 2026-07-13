@@ -917,19 +917,11 @@ select {
     font-size: 0.88rem;
 }
 
-/* 마우스 오버 시 즉시 나타나는 커스텀 툴팁 (네이티브 title 속성보다 빠르고 눈에 잘 띔) */
-.info-tooltip-wrap {
-    position: relative;
-    display: inline-flex;
-}
-
-.info-tooltip-wrap .info-tooltip-text {
-    visibility: hidden;
-    opacity: 0;
-    position: absolute;
-    bottom: calc(100% + 8px);
-    left: 50%;
-    transform: translateX(-50%);
+/* 전역 커스텀 툴팁 — [data-tooltip] 요소 위에 마우스를 올리면 JS가 이 요소를 document.body 기준
+   position:fixed 로 띄운다. 스크롤되는 부모(overflow:auto 등)에 잘리지 않도록 CSS :hover 방식 대신
+   JS로 뷰포트 좌표를 계산해 항상 완전히 보이게 한다. */
+#global-tooltip {
+    position: fixed;
     background: rgba(15, 23, 42, 0.97);
     color: #e2e8f0;
     padding: 0.55rem 0.75rem;
@@ -938,18 +930,20 @@ select {
     line-height: 1.45;
     white-space: normal;
     width: max-content;
-    max-width: 220px;
+    max-width: 240px;
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
     border: 1px solid rgba(255, 255, 255, 0.12);
+    opacity: 0;
+    visibility: hidden;
     transition: opacity 0.12s;
-    z-index: 60;
+    z-index: 99999;
     pointer-events: none;
     text-align: left;
 }
 
-.info-tooltip-wrap:hover .info-tooltip-text {
-    visibility: visible;
+#global-tooltip.visible {
     opacity: 1;
+    visibility: visible;
 }
 
 /* Results Display Card */

@@ -4984,7 +4984,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     <div style="font-size:0.7rem; color:var(--text-secondary);">✏️ 올해 기존 사용</div>
                     <input type="text" inputmode="numeric" class="club-prior-used-input" data-id="${AppState.escapeHtml(clubId)}"
                         value="${priorUsed ? formatAmount(priorUsed) : ''}" placeholder="0"
-                        title="앱 사용 전 올해 이미 지출한 금액 — 입력하면 잔여 예산에서 자동 차감됩니다"
+                        data-tooltip="앱 사용 전 올해 이미 지출한 금액 — 입력하면 잔여 예산에서 자동 차감됩니다"
                         style="width:100px; padding:0.25rem 0.4rem; font-size:0.82rem; text-align:center; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.18); border-radius:6px; color:inherit;">
                 </div>
                 <div style="flex:1.1; min-width:90px; text-align:center;">
@@ -4997,14 +4997,14 @@ document.addEventListener('DOMContentLoaded', () => {
                     <div style="font-size:0.85rem; font-weight:600; color:${remaining < 0 ? 'var(--warning-text, #ff6b6b)' : 'var(--color-secondary)'};">${SettlementCalculator.formatCurrency(remaining)}</div>
                 </div>
                 <div class="expense-row-right" style="gap:0.4rem; flex:0 0 auto;">
-                    <button class="btn-add-club-budget btn-secondary" data-id="${AppState.escapeHtml(clubId)}" style="padding:0.3rem 0.6rem; font-size:0.78rem;">${t('btn.add_budget')}</button>
-                    <span class="info-tooltip-wrap">
-                        <button class="btn-toggle-overlimit" data-id="${AppState.escapeHtml(clubId)}" data-current="${overLimitApproved ? '1' : '0'}"
-                            style="padding:0.15rem 0.35rem; font-size:0.64rem; border-radius:5px; cursor:pointer; white-space:nowrap; ${overLimitApproved
-                                ? 'background:rgba(239,68,68,0.18); border:1px solid rgba(239,68,68,0.55); color:#fca5a5;'
-                                : 'background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.18); color:var(--text-secondary);'}">${overLimitApproved ? '🔓 85K 승인됨' : '🔒 85K 미승인'}</button>
-                        <span class="info-tooltip-text">이사진 승인 시 이 클럽의 <b>다음 정산 1건에 한해</b> 인당 85,000원 초과 지원을 허용합니다 (클럽 잔여 예산은 여전히 초과 불가). 정산이 확정되면 사용 여부와 관계없이 자동으로 미승인 상태로 되돌아갑니다.</span>
-                    </span>
+                    <button class="btn-add-club-budget btn-secondary" data-id="${AppState.escapeHtml(clubId)}"
+                        data-tooltip="이 클럽의 배정 예산에 금액을 더합니다 (기존 배정 예산 + 입력한 금액)"
+                        style="padding:0.3rem 0.6rem; font-size:0.78rem;">${t('btn.add_budget')}</button>
+                    <button class="btn-toggle-overlimit" data-id="${AppState.escapeHtml(clubId)}" data-current="${overLimitApproved ? '1' : '0'}"
+                        data-tooltip="이사진 승인 시 이 클럽의 다음 정산 1건에 한해 인당 85,000원 초과 지원을 허용합니다 (클럽 잔여 예산은 여전히 초과 불가). 정산이 확정되면 사용 여부와 관계없이 자동으로 미승인 상태로 되돌아갑니다."
+                        style="padding:0.15rem 0.35rem; font-size:0.64rem; border-radius:5px; cursor:pointer; white-space:nowrap; ${overLimitApproved
+                            ? 'background:rgba(239,68,68,0.18); border:1px solid rgba(239,68,68,0.55); color:#fca5a5;'
+                            : 'background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.18); color:var(--text-secondary);'}">${overLimitApproved ? '🔓 85K 승인됨' : '🔒 85K 미승인'}</button>
                     <button class="btn-edit-club btn-secondary" data-id="${AppState.escapeHtml(clubId)}" style="padding:0.3rem 0.6rem; font-size:0.78rem;">${t('btn.edit')}</button>
                     <button class="btn-delete-club btn-text-danger" data-id="${AppState.escapeHtml(clubId)}" style="padding:0.3rem 0.6rem; font-size:0.78rem;">${t('btn.delete')}</button>
                 </div>
@@ -6399,6 +6399,55 @@ function showFacilityApprovalModal(onApproved, onNoApproval) {
     approvedBtn.addEventListener('click', onApprovedClick);
     noBtn.addEventListener('click', onNoClick);
 }
+
+// 전역 커스텀 툴팁 — [data-tooltip] 요소는 어디에 있든(스크롤 컨테이너 내부 포함) 이 위치를 통해
+// document.body 기준 position:fixed 로 뜬다. 이벤트 위임 방식이라 나중에 동적으로 그려지는
+// 요소(예: innerHTML로 다시 그려지는 클럽 목록 행)에도 별도 등록 없이 자동으로 동작한다.
+(function initGlobalTooltip() {
+    let tipEl = null;
+    function ensureTip() {
+        if (!tipEl) {
+            tipEl = document.createElement('div');
+            tipEl.id = 'global-tooltip';
+            document.body.appendChild(tipEl);
+        }
+        return tipEl;
+    }
+    function showTip(target) {
+        const text = target.getAttribute('data-tooltip');
+        if (!text) return;
+        const tip = ensureTip();
+        tip.textContent = text;
+        tip.classList.remove('visible');
+        // 실제 크기를 재려면 먼저 그려야 하므로 visibility만 우선 hidden 유지한 채 배치 계산
+        const rect = target.getBoundingClientRect();
+        const tipRect = tip.getBoundingClientRect();
+        let left = rect.left + rect.width / 2 - tipRect.width / 2;
+        left = Math.max(8, Math.min(left, window.innerWidth - tipRect.width - 8));
+        let top = rect.top - tipRect.height - 8;
+        if (top < 4) top = rect.bottom + 8; // 위쪽 공간이 부족하면 아래로 표시
+        tip.style.left = left + 'px';
+        tip.style.top = top + 'px';
+        tip.classList.add('visible');
+    }
+    function hideTip() {
+        if (tipEl) tipEl.classList.remove('visible');
+    }
+    document.addEventListener('mouseover', (e) => {
+        const target = e.target.closest && e.target.closest('[data-tooltip]');
+        if (target) showTip(target);
+    });
+    document.addEventListener('mouseout', (e) => {
+        const target = e.target.closest && e.target.closest('[data-tooltip]');
+        if (target && (!e.relatedTarget || !target.contains(e.relatedTarget))) hideTip();
+    });
+    document.addEventListener('focusin', (e) => {
+        const target = e.target.closest && e.target.closest('[data-tooltip]');
+        if (target) showTip(target);
+    });
+    document.addEventListener('focusout', hideTip);
+    window.addEventListener('scroll', hideTip, true);
+})();
 
 // 기존 항목 누적 + 클럽 잔여 예산 한도를 고려하여 신규/수정 항목의 법인카드 한도 계산
 function _calcCorpForItem(amount, category) {
