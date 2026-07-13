@@ -68,6 +68,7 @@
    | 자부담 최종값 산출 전체 (`render`/`finalizeSettlement`/`downloadExcelOnly`/`edit-mode-done-btn`/`generateExcelFile`) | `AppState.selfPayManuallyOverridden` **플래그로만** "수동 수정 여부" 판단 — `lastCalculatedSelfPay > 0` truthy 체크 금지 | v1.6.215 | 전액 법인카드(itemSelfPay=0원) 항목이 구간표 참고값으로 잘못 새는 회귀 |
    | `_calcCorpForItem` | 법인카드 제안액 = `min(정책상 한계기여분, 클럽잔여예산 - 이번 세션 기배정 corporateAmount 실제합)` — 두 캡을 하나로 합쳐서 계산 금지 | v1.6.216 | 앞 항목 법인카드를 수동으로 예산 전액까지 올려도 뒤 항목에 계속 법인카드 제안됨 |
    | 비용 항목 추가 폼의 예산 초과 검증(① 클럽별, ② 전체 총 예산) | 검증 기준은 **"이 항목에 실제로 배정하려는 법인카드 금액"(`_requestedCorp`)** — 항목 전체 금액의 구간표 추정치(`_newSupport`)로 비교 금지 | v1.6.217 | 법인카드 0원(전액 자부담)으로 두어도 예산 소진 시 항목 추가 자체가 차단됨 |
+   | `finalizeSettlement` | `clubRegistry.{id}.allowOverLimitSupport`(85,000원 초과 승인)는 **정산 확정 시 무조건 `false`로 리셋** — "사용했을 때만" 조건부 리셋 금지 | v1.6.221 | 1회성 승인이 영구 설정처럼 계속 켜진 채로 남음 |
 
    - 위 항목 중 하나라도 되돌리거나 "리팩토링"하면 대응하는 버그가 즉시 재발함.
    - 구조 변경이 꼭 필요한 경우 먼저 사용자에게 위 표를 보여주고 명시적 승인을 받아야 함.
@@ -79,7 +80,7 @@
 ```
 1. 파일 수정 (app.js / index.html / style.css 등)
 2. node --check app.js   ← 문법 오류 확인
-3. sw.js 의 APP_VERSION 1 증가 (현재 1.6.220) — **코드 변경 시 bump 누락 절대 금지** (v1.6.202에서 누락 사고: 배포는 됐는데 전 유저가 구버전으로 인식)
+3. sw.js 의 APP_VERSION 1 증가 (현재 1.6.221) — **코드 변경 시 bump 누락 절대 금지** (v1.6.202에서 누락 사고: 배포는 됐는데 전 유저가 구버전으로 인식)
 4. git add -A && git commit -q -m "..." && git push -q
 ```
 
@@ -102,13 +103,14 @@
   사용자가 "총 자부담 금액" 직접 수정 가능 (`lastCalculatedSelfPay` + `selfPayManuallyOverridden` 플래그),
   수정 시 그 값이 `finalSelfPay`로 우선 적용됨.
 - 엑셀(`lib/template.xlsx`) 수식 캐시 문제로 K4~K30 등 핵심 셀은 앱이 직접 값 계산해 덮어씀.
-- **행사비 인당 지원 한도 초과 확인(v1.6.220)**: (기존 법인카드 합계 + 이번 항목 법인카드) ÷ 인원이
+- **행사비 인당 지원 한도 초과 확인(v1.6.221)**: (기존 법인카드 합계 + 이번 항목 법인카드) ÷ 인원이
   **정책 계산값**(구간표로 실제 행사비 계산한 인당 지원액)을 초과~85,000원 이내면 그 자리에서 이사진
   승인 팝업(`showCorpOverLimitModal`, 네=진행·아니요=정책값 원복). **85,000원 자체를 초과**하면 팝업 없이
   클럽별 사전승인 설정(`clubRegistry.{id}.allowOverLimitSupport`, 관리자가 "클럽 관리"에서 토글)만 확인 —
   승인된 클럽은 잔여예산 내 최대치로 자동 진행, 미승인이면 정책값으로 자동 원복. 두 경우 모두 클럽 잔여
-  예산 자체는 초과 불가(하드캡). 시설·장비의 자체 사전승인 흐름(`showFacilityApprovalModal`, v1.6.142)과는
-  별개.
+  예산 자체는 초과 불가(하드캡). **이 승인은 1회성** — `finalizeSettlement()`에서 정산이 확정되면 실제
+  사용 여부와 무관하게 자동으로 미승인 상태로 되돌아감(재사용 시 매번 재승인 필요). 시설·장비의 자체
+  사전승인 흐름(`showFacilityApprovalModal`, v1.6.142)과는 별개.
 
 ---
 
@@ -149,4 +151,4 @@
 - [`CHANGES.md`](CHANGES.md) — 버전별 변경 이력
 - [`CODE_REVIEW.md`](CODE_REVIEW.md) — **매 작업 시작 전 필독**: v1.6.201 검증 결과, 재수정 금지 항목 상세, 승인된 백로그(사용자 명시 요청 시에만 착수)
 
-현재 버전: **v1.6.220** (`sw.js` `APP_VERSION`)
+현재 버전: **v1.6.221** (`sw.js` `APP_VERSION`)

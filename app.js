@@ -2671,11 +2671,16 @@ const AppState = {
             if (prizeThisSession > 0) {
                 club.prizeUsed = (club.prizeUsed || 0) + prizeThisSession;
             }
+            // "85,000원 초과 승인"은 1회성 — 정산 1건이 확정되면 사용 여부와 무관하게 자동으로 미승인 상태로 되돌림
+            const _overLimitWasOn = !!club.allowOverLimitSupport;
+            if (_overLimitWasOn) club.allowOverLimitSupport = false;
             if (this.firebaseDb) {
-                this.firebaseDb.ref(`clubRegistry/${this.clubId}`).update({
+                const _clubUpdate = {
                     usedBudget: club.usedBudget,
                     prizeUsed: club.prizeUsed || 0
-                }).catch(() => {});
+                };
+                if (_overLimitWasOn) _clubUpdate.allowOverLimitSupport = false;
+                this.firebaseDb.ref(`clubRegistry/${this.clubId}`).update(_clubUpdate).catch(() => {});
             }
         }
 
@@ -4993,11 +4998,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 </div>
                 <div class="expense-row-right" style="gap:0.4rem; flex:0 0 auto;">
                     <button class="btn-add-club-budget btn-secondary" data-id="${AppState.escapeHtml(clubId)}" style="padding:0.3rem 0.6rem; font-size:0.78rem;">${t('btn.add_budget')}</button>
-                    <button class="btn-toggle-overlimit" data-id="${AppState.escapeHtml(clubId)}" data-current="${overLimitApproved ? '1' : '0'}"
-                        title="관리자 전용 — 이 클럽에 한해 인당 85,000원 초과 지원을 허용합니다 (여전히 클럽 잔여 예산은 초과할 수 없음)"
-                        style="padding:0.3rem 0.6rem; font-size:0.78rem; border-radius:6px; cursor:pointer; ${overLimitApproved
-                            ? 'background:rgba(239,68,68,0.18); border:1px solid rgba(239,68,68,0.55); color:#fca5a5;'
-                            : 'background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.18); color:var(--text-secondary);'}">${overLimitApproved ? '🔓 85,000원 초과 승인됨' : '🔒 85,000원 초과 미승인'}</button>
+                    <span class="info-tooltip-wrap">
+                        <button class="btn-toggle-overlimit" data-id="${AppState.escapeHtml(clubId)}" data-current="${overLimitApproved ? '1' : '0'}"
+                            style="padding:0.15rem 0.35rem; font-size:0.64rem; border-radius:5px; cursor:pointer; white-space:nowrap; ${overLimitApproved
+                                ? 'background:rgba(239,68,68,0.18); border:1px solid rgba(239,68,68,0.55); color:#fca5a5;'
+                                : 'background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.18); color:var(--text-secondary);'}">${overLimitApproved ? '🔓 85K 승인됨' : '🔒 85K 미승인'}</button>
+                        <span class="info-tooltip-text">이사진 승인 시 이 클럽의 <b>다음 정산 1건에 한해</b> 인당 85,000원 초과 지원을 허용합니다 (클럽 잔여 예산은 여전히 초과 불가). 정산이 확정되면 사용 여부와 관계없이 자동으로 미승인 상태로 되돌아갑니다.</span>
+                    </span>
                     <button class="btn-edit-club btn-secondary" data-id="${AppState.escapeHtml(clubId)}" style="padding:0.3rem 0.6rem; font-size:0.78rem;">${t('btn.edit')}</button>
                     <button class="btn-delete-club btn-text-danger" data-id="${AppState.escapeHtml(clubId)}" style="padding:0.3rem 0.6rem; font-size:0.78rem;">${t('btn.delete')}</button>
                 </div>
@@ -5026,7 +5033,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (!club) return;
                 const willAllow = btn.getAttribute('data-current') !== '1';
                 const msg = willAllow
-                    ? `'${club.name}' 클럽에 한해 인당 85,000원 초과 지원을 승인하시겠습니까?\n(클럽 잔여 예산 자체는 여전히 초과할 수 없습니다)`
+                    ? `'${club.name}' 클럽의 다음 정산 1건에 한해 인당 85,000원 초과 지원을 승인하시겠습니까?\n(클럽 잔여 예산 자체는 여전히 초과할 수 없으며, 정산이 확정되면 자동으로 미승인 상태로 돌아갑니다)`
                     : `'${club.name}' 클럽의 인당 85,000원 초과 지원 승인을 취소하시겠습니까?`;
                 showConfirmModal(msg, () => {
                     AppState.setClubOverLimitApproval(clubId, willAllow);
