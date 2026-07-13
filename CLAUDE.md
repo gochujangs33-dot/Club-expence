@@ -64,6 +64,7 @@
    | `renderClubManagement` | Firebase 동기화 쓰기는 `historyLoaded === true`일 때만 (`needsUpdate && firebaseDb && historyLoaded`) | v1.6.201 | 이력 로드 전 0원이 공유 clubRegistry를 덮어씀 → 전 접속자 잔여예산 오표시 |
    | `renderAdminDashboard` globalHistory `.then()` | `historyLoaded = true` 세팅 + `renderClubManagement()`·`updateChartsBudgetStats()` 호출 유지 | v1.6.199~201 | 잔여예산·차트 통계 타일 0원 표시 |
    | `updateHistoryEntry` | 이력 금액 수정 시 `clubRegistry.usedBudget`/`.prizeUsed`를 **차액(delta)만큼만** 보정 (전체 재계산 아님, 새 값 통째로 더하기 아님) | v1.6.213 | 이력 수정 시 예산이 새 금액만큼 추가된 것처럼 잘못 반영 |
+   | `getClubUsedBudget` | `editingHistoryId`가 설정된 동안 이 이력 자신의 기존 지원금(`_editingOriginalSupport`)을 "이미 사용한 금액"에서 반드시 제외 | v1.6.214 | 이력 수정 화면에서 자기 자신과 비교돼 잔여 예산 초과 오탐 |
 
    - 위 항목 중 하나라도 되돌리거나 "리팩토링"하면 대응하는 버그가 즉시 재발함.
    - 구조 변경이 꼭 필요한 경우 먼저 사용자에게 위 표를 보여주고 명시적 승인을 받아야 함.
@@ -75,7 +76,7 @@
 ```
 1. 파일 수정 (app.js / index.html / style.css 등)
 2. node --check app.js   ← 문법 오류 확인
-3. sw.js 의 APP_VERSION 1 증가 (현재 1.6.213) — **코드 변경 시 bump 누락 절대 금지** (v1.6.202에서 누락 사고: 배포는 됐는데 전 유저가 구버전으로 인식)
+3. sw.js 의 APP_VERSION 1 증가 (현재 1.6.214) — **코드 변경 시 bump 누락 절대 금지** (v1.6.202에서 누락 사고: 배포는 됐는데 전 유저가 구버전으로 인식)
 4. git add -A && git commit -q -m "..." && git push -q
 ```
 
@@ -135,4 +136,4 @@
 - [`CHANGES.md`](CHANGES.md) — 버전별 변경 이력
 - [`CODE_REVIEW.md`](CODE_REVIEW.md) — **매 작업 시작 전 필독**: v1.6.201 검증 결과, 재수정 금지 항목 상세, 승인된 백로그(사용자 명시 요청 시에만 착수)
 
-현재 버전: **v1.6.213** (`sw.js` `APP_VERSION`)
+현재 버전: **v1.6.214** (`sw.js` `APP_VERSION`)

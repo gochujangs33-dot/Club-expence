@@ -952,7 +952,15 @@ const AppState = {
         // Firebase 동기화값 (관리자 대시보드에서 갱신된 값 — 추가 보완용)
         const firebaseUsed = (regEntry && regEntry.usedBudget) ? regEntry.usedBudget : 0;
 
-        return priorUsed + Math.max(fromHistory, firebaseUsed);
+        let used = priorUsed + Math.max(fromHistory, firebaseUsed);
+
+        // 이력 수정 모드: 지금 수정 중인 이 이력 자신이 원래 기여했던 지원금은 "이미 사용한 금액"에서 제외
+        // — 그래야 잔여예산이 "이 이력을 뺀 나머지 + 지금 새로 입력 중인 금액" 기준으로 정확히 계산됨
+        // (제외하지 않으면 이 이력 자신과 비교되어 잔여예산이 실제보다 작게 표시/차단됨)
+        if (this.editingHistoryId) {
+            used = Math.max(0, used - (this._editingOriginalSupport || 0));
+        }
+        return used;
     },
 
     // globalHistory에서 현재 클럽의 전체 이력 로드 (모든 사용자 포함)
@@ -2392,6 +2400,12 @@ const AppState = {
             return;
         }
         this.editingHistoryId = entry.id;
+        // 이 이력이 원래 기여했던 지원금·상품비 — 예산 한도 검사 시 "이미 사용한 금액"에서
+        // 이 항목 자신의 몫을 빼줘야 수정 중 재검증이 자기 자신과 충돌해 잔여예산 초과로 막히지 않음
+        this._editingOriginalSupport = entry.finalSupportAmount || 0;
+        this._editingOriginalPrize = (entry.expenseItems || [])
+            .filter(i => i.category === 'PRIZE')
+            .reduce((s, i) => s + (i.amount || 0), 0);
         this.expenseItems = JSON.parse(JSON.stringify(entry.expenseItems || []));
         this.attendees = JSON.parse(JSON.stringify(entry.attendees || []));
         // memberCount가 없으면 attendees 수로 보완 (구버전 데이터 호환)
@@ -2494,6 +2508,8 @@ const AppState = {
     // 수정 모드 해제
     cancelEditMode() {
         this.editingHistoryId = null;
+        this._editingOriginalSupport = 0;
+        this._editingOriginalPrize = 0;
         const banner = document.getElementById('edit-mode-banner');
         if (banner) banner.classList.add('hidden');
         // 숨겼던 버튼 복원
@@ -3352,10 +3368,10 @@ document.addEventListener('DOMContentLoaded', () => {
             );
             const _newSupport = _simResult.finalSupportAmount;
 
-            // ① 클럽 배정 예산 초과 확인
+            // ① 클럽 배정 예산 초과 확인 (getClubUsedBudget()이 수정 모드일 때 이 이력 자신의 몫을 이미 제외함)
             const _clubBudget = AppState.getClubBudget ? AppState.getClubBudget() : 0;
             if (_clubBudget > 0) {
-                const _clubUsed   = AppState.getClubUsedBudget ? AppState.getClubUsedBudget() : 0;
+                const _clubUsed = AppState.getClubUsedBudget ? AppState.getClubUsedBudget() : 0;
                 const _budgetLeft = Math.max(0, _clubBudget - _clubUsed);
 
                 if (_budgetLeft <= 0) {
@@ -3383,8 +3399,12 @@ document.addEventListener('DOMContentLoaded', () => {
             // ② 전체 총 예산 초과 확인
             const _totalBudget = AppState.clubTotalBudget || 0;
             if (_totalBudget > 0) {
-                const _allUsed = Object.values(AppState.clubRegistry || {})
+                let _allUsed = Object.values(AppState.clubRegistry || {})
                     .reduce((sum, c) => sum + (c.usedBudget || 0), 0);
+                // 이력 수정 모드: 이 이력이 원래 기여했던 지원금은 전체 사용액에서도 동일하게 제외
+                if (AppState.editingHistoryId) {
+                    _allUsed = Math.max(0, _allUsed - (AppState._editingOriginalSupport || 0));
+                }
                 const _allPriorUsed = Object.values(AppState.clubRegistry || {})
                     .reduce((sum, c) => sum + (c.priorUsed || 0), 0);
                 const _totalUsed = _allPriorUsed + _allUsed;
@@ -3489,7 +3509,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 .filter(i => i.category === ExpenseCategory.PRIZE && i.id !== editingId)
                 .reduce((s, i) => s + (i.amount || 0), 0);
             const prizeLimit = AppState.rules.prizeLimit || 500000;
-            const remaining = prizeLimit - existingPrize - (AppState.previousPrizeTotal || 0);
+            // 이력 수정 모드: 이 이력이 원래 기여했던 상품비는 "이미 사용한 상품비"에서 제외
+            let _priorPrizeForCheck = AppState.previousPrizeTotal || 0;
+            if (AppState.editingHistoryId) {
+                _priorPrizeForCheck = Math.max(0, _priorPrizeForCheck - (AppState._editingOriginalPrize || 0));
+            }
+            const remaining = prizeLimit - existingPrize - _priorPrizeForCheck;
 
             if (memberCount < 10) {
                 showPrizeModal('10명 이상일 경우에만 사용 가능합니다.', () => {
@@ -3505,7 +3530,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }, 'block');
                 return;
             }
-            const priorSettled = AppState.previousPrizeTotal || 0;
+            const priorSettled = _priorPrizeForCheck;
             const infoMsg = (existingPrize === 0 && priorSettled === 0)
                 ? `참석자가 10명 이상일 때만 상품비를 사용할 수 있습니다.\n상품비는 한 해에 최대 ${prizeLimit.toLocaleString()}원까지 사용 가능합니다.`
                 : `참석자가 10명 이상일 때만 상품비를 사용할 수 있습니다.\n올해 남은 상품비 한도는 ${remaining.toLocaleString()}원입니다.`;
@@ -4005,9 +4030,13 @@ document.addEventListener('DOMContentLoaded', () => {
         const finalSupport = totalCost - newValue;
         document.getElementById('result-final-support').textContent = SettlementCalculator.formatCurrency(finalSupport);
 
-        // 이번 최종 지원금 / 이후 잔여 예산 갱신 (이전 잔여 예산은 현재 정산과 무관하므로 그대로 유지)
-        if (AppState.annualBudget > 0) {
-            const prevRemaining = AppState.annualBudget - AppState.usedBudget;
+        // 이번 최종 지원금 / 이후 잔여 예산 갱신
+        // getClubBudget()/getClubUsedBudget() 기준 — 이력 수정 모드에서는 이 이력 자신의 기존 기여분이
+        // 자동으로 제외되므로(getClubUsedBudget 참조) 자동계산 표시(render())와 항상 일치함
+        const _clubBudgetForSelfPay = AppState.getClubBudget ? AppState.getClubBudget() : (AppState.annualBudget || 0);
+        if (_clubBudgetForSelfPay > 0) {
+            const clubUsedForSelfPay = AppState.getClubUsedBudget ? AppState.getClubUsedBudget() : AppState.usedBudget;
+            const prevRemaining = _clubBudgetForSelfPay - clubUsedForSelfPay;
             const afterRemaining = prevRemaining - finalSupport;
             const supportSubEl = document.getElementById('result-this-support-sub');
             const afterRemainingEl = document.getElementById('result-after-remaining');
