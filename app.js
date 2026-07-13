@@ -2435,26 +2435,59 @@ const AppState = {
         this.render();
     },
 
-    // 수정된 항목으로 이력 엔트리 업데이트 (Firebase globalHistory + 개인 settlementHistory)
+    // 수정된 항목으로 이력 엔트리 업데이트 (Firebase globalHistory + 개인 settlementHistory + 클럽 예산 보정)
     async updateHistoryEntry(id, updatedFields) {
-        const idx = (this.settlementHistory || []).findIndex(e => String(e.id) === String(id));
-        if (idx < 0) return;
-        const updated = { ...this.settlementHistory[idx], ...updatedFields, isEdited: true, editedAt: new Date().toISOString() };
-        this.settlementHistory[idx] = updated;
-        this.save();
-        if (this.firebaseDb) {
-            try {
-                // globalHistory: 개별 필드 업데이트
-                const globalUpdate = { ...updatedFields, isEdited: true, editedAt: updated.editedAt };
-                await this.firebaseDb.ref(`globalHistory/${id}`).update(globalUpdate);
+        // clubHistory(클럽 전체 이력)에서 우선 조회 — 관리자가 다른 회원이 작성한 이력을 수정하는 경우도 포함
+        const clubIdx = (this.clubHistory || []).findIndex(e => String(e.id) === String(id));
+        const oldEntry = clubIdx >= 0 ? this.clubHistory[clubIdx] : (this.settlementHistory || []).find(e => String(e.id) === String(id));
+        if (!oldEntry) return;
 
-                // 개인 settlementHistory: Firebase는 배열을 객체로 저장하므로
-                // 인덱스 경로 대신 배열 전체를 덮어써야 올바른 위치에 저장됨
+        const editedAt = new Date().toISOString();
+        const merged = { ...oldEntry, ...updatedFields, isEdited: true, editedAt };
+        // 세션 캐시 즉시 갱신 — 저장 직후 화면의 잔여예산 계산이 수정된 값을 바로 사용하도록
+        if (clubIdx >= 0) this.clubHistory[clubIdx] = merged;
+
+        const ownIdx = (this.settlementHistory || []).findIndex(e => String(e.id) === String(id));
+        if (ownIdx >= 0) {
+            this.settlementHistory[ownIdx] = merged;
+            this.save();
+        }
+
+        if (!this.firebaseDb) return;
+        try {
+            // globalHistory: 개별 필드 업데이트
+            const globalUpdate = { ...updatedFields, isEdited: true, editedAt };
+            await this.firebaseDb.ref(`globalHistory/${id}`).update(globalUpdate);
+
+            // 본인이 작성한 이력일 때만 개인 settlementHistory 배열도 갱신
+            // (다른 회원의 개인 이력 배열은 전체 내용을 알 수 없으므로 건드리지 않음 — v1.6.69~73 계정 간 병합 사고 재발 방지)
+            if (ownIdx >= 0) {
                 await this.firebaseDb.ref(`settlements/${this.currentPin}/settlementHistory`).set(this.settlementHistory);
-            } catch (err) {
-                console.error('이력 수정 저장 실패:', err);
-                alert(t('alert.save_error_network'));
             }
+
+            // 클럽 예산(usedBudget)·상품비 사용(prizeUsed) 보정 — 수정 전/후 차액만큼만 반영
+            // finalizeSettlement()의 신규 생성 시 증분 로직과 대칭. 이 보정이 없으면 이력을 수정해도
+            // clubRegistry가 갱신되지 않아 "수정한 금액이 예산에 반영되지 않는다" 문제가 생김.
+            const sumPrize = items => (items || []).reduce((s, it) => s + (it.category === 'PRIZE' ? (it.amount || 0) : 0), 0);
+            const oldPrize = sumPrize(oldEntry.expenseItems);
+            const newPrize = sumPrize(merged.expenseItems);
+            const clubId = merged.clubId || (Object.entries(this.clubRegistry || {}).find(([, c]) => c.name === merged.clubName) || [])[0];
+            if (clubId && this.clubRegistry[clubId]) {
+                const club = this.clubRegistry[clubId];
+                const deltaSupport = (merged.finalSupportAmount || 0) - (oldEntry.finalSupportAmount || 0);
+                const deltaPrize = newPrize - oldPrize;
+                if (deltaSupport !== 0 || deltaPrize !== 0) {
+                    club.usedBudget = Math.max(0, (club.usedBudget || 0) + deltaSupport);
+                    club.prizeUsed = Math.max(0, (club.prizeUsed || 0) + deltaPrize);
+                    await this.firebaseDb.ref(`clubRegistry/${clubId}`).update({
+                        usedBudget: club.usedBudget,
+                        prizeUsed: club.prizeUsed
+                    });
+                }
+            }
+        } catch (err) {
+            console.error('이력 수정 저장 실패:', err);
+            alert(t('alert.save_error_network'));
         }
     },
 
