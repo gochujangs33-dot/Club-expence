@@ -3389,39 +3389,28 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (description && !isNaN(amount) && amount > 0) {
             // ── 예산 한도 확인: 클럽별 + 전체 총 예산 (EVENT / FACILITY / PRIZE 공통) ──
+            // v1.6.217+: 항목별 법인/개인카드 실제 배분이 자부담 기준이 되므로(v1.6.215),
+            // "이 항목 전체 금액이 지원되면"이라는 정책 추정치(_newSupport)가 아니라
+            // "지금 실제로 법인카드에 배정하려는 금액(_requestedCorp)"만 예산과 비교한다.
+            // 법인카드 0원(전액 개인카드=자부담)으로 두면 예산이 소진돼 있어도 항목 추가는 항상 허용된다.
             const _editingId  = AppState.editingItemId || null;
             const _existItems = (AppState.expenseItems || []).filter(i => i.id !== _editingId);
-            const _simItems   = [..._existItems, { category, amount }];
-            const _simResult  = SettlementCalculator.calculate(
-                AppState.memberCount || 0,
-                _simItems,
-                AppState.previousPrizeTotal || 0,
-                AppState.rules
-            );
-            const _newSupport = _simResult.finalSupportAmount;
+            const _requestedCorp = corpChecked ? Math.min(corporateAmount || 0, amount) : 0;
 
             // ① 클럽 배정 예산 초과 확인 (getClubUsedBudget()이 수정 모드일 때 이 이력 자신의 몫을 이미 제외함)
             const _clubBudget = AppState.getClubBudget ? AppState.getClubBudget() : 0;
-            if (_clubBudget > 0) {
+            if (_clubBudget > 0 && _requestedCorp > 0) {
                 const _clubUsed = AppState.getClubUsedBudget ? AppState.getClubUsedBudget() : 0;
-                const _budgetLeft = Math.max(0, _clubBudget - _clubUsed);
+                // 이번 세션에서 다른 항목에 이미 실제로 배정된 법인카드 금액도 함께 차감
+                const _alreadyCorpAssigned = _existItems.reduce((s, i) => s + (i.corporateAmount || 0), 0);
+                const _budgetLeft = Math.max(0, _clubBudget - _clubUsed - _alreadyCorpAssigned);
 
-                if (_budgetLeft <= 0) {
+                if (_requestedCorp > _budgetLeft) {
                     showPrizeModal(
-                        `클럽 연간 예산이 모두 소진되었습니다.\n` +
-                        `배정 예산: ${_clubBudget.toLocaleString()}원\n` +
-                        `사용 금액: ${_clubUsed.toLocaleString()}원\n` +
-                        `더 이상 비용을 추가할 수 없습니다.`,
-                        null, 'block'
-                    );
-                    return;
-                }
-                if (_newSupport > _budgetLeft) {
-                    showPrizeModal(
-                        `입력 금액이 클럽 잔여 예산을 초과합니다.\n` +
-                        `잔여 예산: ${_budgetLeft.toLocaleString()}원\n` +
-                        `추가 시 지원 예정액: ${_newSupport.toLocaleString()}원\n` +
-                        `금액을 줄이거나 항목을 조정해 주세요.`,
+                        `법인카드로 지정한 금액이 클럽 잔여 예산을 초과합니다.\n` +
+                        `실제 남은 예산: ${_budgetLeft.toLocaleString()}원\n` +
+                        `법인카드 지정액: ${_requestedCorp.toLocaleString()}원\n` +
+                        `법인카드 금액을 줄이세요 (초과분은 개인카드=자부담으로 처리하면 항목 추가가 가능합니다).`,
                         null, 'block'
                     );
                     return;
@@ -3430,7 +3419,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // ② 전체 총 예산 초과 확인
             const _totalBudget = AppState.clubTotalBudget || 0;
-            if (_totalBudget > 0) {
+            if (_totalBudget > 0 && _requestedCorp > 0) {
                 let _allUsed = Object.values(AppState.clubRegistry || {})
                     .reduce((sum, c) => sum + (c.usedBudget || 0), 0);
                 // 이력 수정 모드: 이 이력이 원래 기여했던 지원금은 전체 사용액에서도 동일하게 제외
@@ -3442,22 +3431,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 const _totalUsed = _allPriorUsed + _allUsed;
                 const _totalLeft = Math.max(0, _totalBudget - _totalUsed);
 
-                if (_totalLeft <= 0) {
+                if (_requestedCorp > _totalLeft) {
                     showPrizeModal(
-                        `전체 클럽 총 예산이 모두 소진되었습니다.\n` +
-                        `총 예산: ${_totalBudget.toLocaleString()}원\n` +
-                        `총 사용액: ${_totalUsed.toLocaleString()}원\n` +
-                        `더 이상 비용을 추가할 수 없습니다.`,
-                        null, 'block'
-                    );
-                    return;
-                }
-                if (_newSupport > _totalLeft) {
-                    showPrizeModal(
-                        `입력 금액이 전체 클럽 총 잔여 예산을 초과합니다.\n` +
+                        `법인카드로 지정한 금액이 전체 클럽 총 잔여 예산을 초과합니다.\n` +
                         `총 잔여 예산: ${_totalLeft.toLocaleString()}원\n` +
-                        `추가 시 지원 예정액: ${_newSupport.toLocaleString()}원\n` +
-                        `금액을 줄이거나 항목을 조정해 주세요.`,
+                        `법인카드 지정액: ${_requestedCorp.toLocaleString()}원\n` +
+                        `법인카드 금액을 줄이세요 (초과분은 개인카드=자부담으로 처리하면 항목 추가가 가능합니다).`,
                         null, 'block'
                     );
                     return;
