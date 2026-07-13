@@ -80,11 +80,19 @@
 ```
 1. 파일 수정 (app.js / index.html / style.css 등)
 2. node --check app.js   ← 문법 오류 확인
-3. sw.js 의 APP_VERSION 1 증가 (현재 1.6.223) — **코드 변경 시 bump 누락 절대 금지** (v1.6.202에서 누락 사고: 배포는 됐는데 전 유저가 구버전으로 인식)
-4. git add -A && git commit -q -m "..." && git push -q
+3. 버전 상수 2곳을 함께 1 증가 (현재 1.6.224) — **아래 두 곳 모두 빠짐없이 bump**:
+   - `sw.js` 의 `APP_VERSION`
+   - `app.js` 최상단의 `APP_VERSION`/`APP_VERSION_DATE` (로그인 화면 버전 라벨의 즉시 표시값 +
+     "업데이트 내역" 모달이 이 값을 기준으로 그룹핑함 — v1.6.187~223 구간에서 이 상수만 37개
+     버전 동안 안 올라간 사고가 있었음, v1.6.224에서 재동기화)
+4. `app.js`의 `CHANGELOG` 배열(변경이력 모달용, `initChangelog()` 근처)에 새 버전 항목 1줄 추가
+5. git add -A && git commit -q -m "..." && git push -q
 ```
 
 - `sw.js`는 네트워크 우선 캐시 전략 + 업데이트 배너 트리거용 — 변경 시 버전 bump 누락하면 사용자에게 변경사항이 반영 안 됨.
+- `app.js`의 `APP_VERSION`/`APP_VERSION_DATE`는 로그인 화면 버전 라벨이 서버 재확인 전 "즉시" 표시하는
+  값이자 `CHANGELOG` 모달의 유일한 데이터 소스 — `sw.js`만 올리고 이걸 빠뜨리면 인앱 "업데이트 내역"에
+  새 버전이 누락된다.
 
 ---
 
@@ -151,4 +159,4 @@
 - [`CHANGES.md`](CHANGES.md) — 버전별 변경 이력
 - [`CODE_REVIEW.md`](CODE_REVIEW.md) — **매 작업 시작 전 필독**: v1.6.201 검증 결과, 재수정 금지 항목 상세, 승인된 백로그(사용자 명시 요청 시에만 착수)
 
-현재 버전: **v1.6.223** (`sw.js` `APP_VERSION`)
+현재 버전: **v1.6.224** (`sw.js` `APP_VERSION`)
