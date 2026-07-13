@@ -171,6 +171,11 @@ const SettlementCalculator = Object.freeze({
         const selfPayRatio = totalCost > 0 ? totalSelfPay / totalCost : 0.0;
         const finalSupportAmount = totalCost - totalSelfPay;
 
+        // 항목별 개인/법인카드 배분 합계 (v1.6.215+) — "정책상 최소"인 위 totalSelfPay/finalSupportAmount와
+        // 별개의 "실제" 값. 카테고리 무관하게 전 항목의 personalAmount를 합산한다.
+        const itemSelfPay = expenseItems.reduce((sum, item) => sum + (item.personalAmount || 0), 0);
+        const itemSupportAmount = totalCost - itemSelfPay;
+
         const warnings = [];
 
         if (prizeCost + previousPrizeTotal > (rules.prizeLimit || 500000)) {
@@ -191,6 +196,8 @@ const SettlementCalculator = Object.freeze({
             totalSelfPay,
             selfPayRatio,
             finalSupportAmount,
+            itemSelfPay,
+            itemSupportAmount,
             warnings
         };
 
@@ -241,6 +248,9 @@ const AppState = {
     tempCorpReceiptImage: null,
     tempPersonalReceiptImage: null,
     lastCalculatedSelfPay: 0,
+    // 사용자가 "총 자부담 금액"을 직접 수정해 확정했는지 여부 — true일 때만 lastCalculatedSelfPay를 최종값으로 사용.
+    // (itemSelfPay가 정당하게 0원인 경우와 "아직 수정 안 함"을 구분하기 위해 >0 truthy 체크 대신 별도 플래그 사용)
+    selfPayManuallyOverridden: false,
     annualBudget: 0,
     usedBudget: 0,
     reportEmail: 'finance@club.com',
@@ -1086,6 +1096,8 @@ const AppState = {
             };
             this.expenseItems.push(item);
         }
+        // 항목이 바뀌면 자부담을 다시 항목 합계 기준으로 재계산 — 수동 오버라이드 해제
+        this.selfPayManuallyOverridden = false;
         this.cancelEdit();
         this.save();
         this.render();
@@ -1093,6 +1105,7 @@ const AppState = {
 
     deleteExpense(id) {
         this.expenseItems = this.expenseItems.filter(item => item.id !== id);
+        this.selfPayManuallyOverridden = false;
         if (this.editingItemId === id) {
             this.cancelEdit();
         }
@@ -1419,6 +1432,7 @@ const AppState = {
         this.tempCorpReceiptImage = null;
         this.tempPersonalReceiptImage = null;
         this.lastCalculatedSelfPay = 0;
+        this.selfPayManuallyOverridden = false;
         this.editingItemId = null;
         this.editingAttendeeId = null;
         this.save();
@@ -1452,20 +1466,24 @@ const AppState = {
             }
         }
 
+        // 실제 자부담: 수동 오버라이드 중이면 그 값, 아니면 항목별 개인카드 합계(itemSelfPay) 기준 (v1.6.215+)
+        const finalSelfPay = this.selfPayManuallyOverridden ? this.lastCalculatedSelfPay : Math.round(result.itemSelfPay);
+        const finalSupport = result.totalCost - finalSelfPay;
+
         // Update Results UI
-        document.getElementById('result-final-support').textContent = SettlementCalculator.formatCurrency(result.finalSupportAmount);
-        
+        document.getElementById('result-final-support').textContent = SettlementCalculator.formatCurrency(finalSupport);
+
         const selfPayInput = document.getElementById('result-total-self-pay-input');
         if (selfPayInput) {
             if (document.activeElement !== selfPayInput) {
-                selfPayInput.value = formatAmount(Math.round(result.totalSelfPay));
-                this.lastCalculatedSelfPay = Math.round(result.totalSelfPay);
+                selfPayInput.value = formatAmount(finalSelfPay);
+                if (!this.selfPayManuallyOverridden) this.lastCalculatedSelfPay = finalSelfPay;
             }
         }
-        
+
         document.getElementById('result-per-person-self-pay').textContent = SettlementCalculator.formatCurrency(result.perPersonSelfPay);
         updatePerPersonSelfPayIcon(result.perPersonSelfPay);
-        document.getElementById('result-self-pay-ratio').textContent = `${(result.selfPayRatio * 100).toFixed(1)}%`;
+        document.getElementById('result-self-pay-ratio').textContent = `${(result.totalCost > 0 ? (finalSelfPay / result.totalCost * 100) : 0).toFixed(1)}%`;
         document.getElementById('result-total-cost').textContent = SettlementCalculator.formatCurrency(result.totalCost);
         document.getElementById('result-event-cost').textContent = SettlementCalculator.formatCurrency(result.eventCost);
         document.getElementById('result-facility-cost').textContent = SettlementCalculator.formatCurrency(result.facilityCost);
@@ -1492,10 +1510,10 @@ const AppState = {
         if (budgetSection) {
             if (clubBudget > 0) {
                 const prevRemaining = clubBudget - clubUsed;
-                const afterRemaining = prevRemaining - result.finalSupportAmount;
+                const afterRemaining = prevRemaining - finalSupport;
                 budgetSection.classList.remove('hidden');
                 document.getElementById('result-prev-remaining').textContent = SettlementCalculator.formatCurrency(prevRemaining);
-                document.getElementById('result-this-support-sub').textContent = SettlementCalculator.formatCurrency(result.finalSupportAmount);
+                document.getElementById('result-this-support-sub').textContent = SettlementCalculator.formatCurrency(finalSupport);
                 document.getElementById('result-after-remaining').textContent = SettlementCalculator.formatCurrency(afterRemaining);
                 document.getElementById('result-after-remaining').style.color = afterRemaining >= 0 ? 'var(--color-secondary)' : 'var(--warning-text)';
             } else {
@@ -2004,22 +2022,27 @@ const AppState = {
         );
         
         const emailReceiver = this.reportEmail || 'finance@club.com';
-        
+
+        // 실제 자부담: 수동 오버라이드 중이면 그 값, 아니면 항목별 개인카드 합계 기준 (v1.6.215+)
+        const finalSelfPay = this.selfPayManuallyOverridden ? this.lastCalculatedSelfPay : Math.round(result.itemSelfPay);
+        const finalSupport = result.totalCost - finalSelfPay;
+        const finalRatio = result.totalCost > 0 ? finalSelfPay / result.totalCost : 0;
+
         // Build email subject
         const dateStr = new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' });
         const subject = `[동아리 정산] ${dateStr} 클럽 비용 정산 보고서 (${this.memberCount}명)`;
-        
+
         // Build email body text
         let body = `안녕하세요,\n\n${dateStr} 진행된 클럽 행사 비용 정산 내역을 보고합니다.\n\n`;
         body += `=========================================\n`;
         body += `■ 정산 요약\n`;
         body += `-----------------------------------------\n`;
         body += `- 총 소요 비용: ${SettlementCalculator.formatCurrency(result.totalCost)}\n`;
-        body += `- 최종 지원금: ${SettlementCalculator.formatCurrency(result.finalSupportAmount)}\n`;
-        body += `- 총 자부담 금액: ${SettlementCalculator.formatCurrency(result.totalSelfPay)}\n`;
-        body += `- 인당 자부담 비용: ${SettlementCalculator.formatCurrency(result.perPersonSelfPay)}\n`;
+        body += `- 최종 지원금: ${SettlementCalculator.formatCurrency(finalSupport)}\n`;
+        body += `- 총 자부담 금액: ${SettlementCalculator.formatCurrency(finalSelfPay)}\n`;
+        body += `- 인당 자부담 비용(정책상 최소): ${SettlementCalculator.formatCurrency(result.perPersonSelfPay)}\n`;
         body += `- 참석 정회원 수: ${result.memberCount}명\n`;
-        body += `- 자부담 비율: ${(result.selfPayRatio * 100).toFixed(1)}%\n`;
+        body += `- 자부담 비율: ${(finalRatio * 100).toFixed(1)}%\n`;
         body += `=========================================\n\n`;
         
         body += `■ 세부 비용 내역\n`;
@@ -2172,8 +2195,8 @@ const AppState = {
         });
 
         // K24(실제 자부담 비용): 앱에서 계산/수정된 총 자부담 금액을 그대로 입력
-        // (수정 없으면 자동 계산된 값, 수정했으면 사용자가 직접 수정한 값)
-        const finalSelfPay = this.lastCalculatedSelfPay > 0 ? this.lastCalculatedSelfPay : calcResult.totalSelfPay;
+        // (수정 없으면 항목별 개인카드 합계, 수정했으면 사용자가 직접 수정한 값 — v1.6.215+)
+        const finalSelfPay = this.selfPayManuallyOverridden ? this.lastCalculatedSelfPay : Math.round(calcResult.itemSelfPay);
         sheet2 = setCellValue(sheet2, 'K24', finalSelfPay, false);
 
         // K25(실제 자부담 비율), L25(정산 결과 안내), K30(총 회사 지원금)
@@ -2272,6 +2295,7 @@ const AppState = {
             memberCount: this.memberCount, expenseItems: this.expenseItems,
             attendees: this.attendees, clubName: this.clubName, clubId: this.clubId,
             lastCalculatedSelfPay: this.lastCalculatedSelfPay,
+            selfPayManuallyOverridden: this.selfPayManuallyOverridden,
             previousPrizeTotal: this.previousPrizeTotal,
             editingHistoryId: this.editingHistoryId,
             sdiVal: sdi ? sdi.value : '',
@@ -2282,7 +2306,9 @@ const AppState = {
             this.attendees = JSON.parse(JSON.stringify(entry.attendees || []));
             this.clubName = entry.clubName || '';
             this.clubId = entry.clubId || '';
+            // 이력에 이미 저장된 "실제" 자부담을 그대로 재사용 (항목에서 재계산하지 않음 — 과거 저장값 그대로 재현)
             this.lastCalculatedSelfPay = entry.totalSelfPay || 0;
+            this.selfPayManuallyOverridden = true;
             this.previousPrizeTotal = 0;
             this.editingHistoryId = null;
             if (sdi) sdi.value = entry.settlementDate || new Date().toISOString().slice(0, 10);
@@ -2299,6 +2325,7 @@ const AppState = {
             this.memberCount = prev.memberCount; this.expenseItems = prev.expenseItems;
             this.attendees = prev.attendees; this.clubName = prev.clubName;
             this.clubId = prev.clubId; this.lastCalculatedSelfPay = prev.lastCalculatedSelfPay;
+            this.selfPayManuallyOverridden = prev.selfPayManuallyOverridden;
             this.previousPrizeTotal = prev.previousPrizeTotal;
             this.editingHistoryId = prev.editingHistoryId;
             if (sdi) sdi.value = prev.sdiVal;
@@ -2323,7 +2350,7 @@ const AppState = {
                 const result = SettlementCalculator.calculate(
                     this.memberCount, this.expenseItems, this.previousPrizeTotal, this.rules
                 );
-                const finalTotalSelfPay = this.lastCalculatedSelfPay > 0 ? this.lastCalculatedSelfPay : result.totalSelfPay;
+                const finalTotalSelfPay = this.selfPayManuallyOverridden ? this.lastCalculatedSelfPay : Math.round(result.itemSelfPay);
                 const updatedFields = {
                     memberCount: this.memberCount,
                     totalCost: result.totalCost,
@@ -2418,7 +2445,10 @@ const AppState = {
             const match = Object.entries(this.clubRegistry || {}).find(([, c]) => c.name === entry.clubName);
             this.clubId = match ? match[0] : '';
         }
+        // 이력에 저장된 "실제" 자부담을 그대로 불러옴(오버라이드로 취급) — 항목을 건드리기 전까지는
+        // 항목 합계로 재계산하지 않고 저장된 값을 그대로 유지 (과거에 수동 조정했던 값도 보존됨)
         this.lastCalculatedSelfPay = entry.totalSelfPay || 0;
+        this.selfPayManuallyOverridden = true;
         // 정산 날짜 입력란을 이력 원본 날짜로 복원 (_onSettleDateChange: 특정 날짜 지정)
         if (entry.settlementDate) {
             if (typeof window._onSettleDateChange === 'function') {
@@ -2577,8 +2607,8 @@ const AppState = {
             this.memberCount, this.expenseItems, this.previousPrizeTotal, this.rules
         );
 
-        // Use manually adjusted self-pay if user changed it, otherwise use calculated
-        const finalTotalSelfPay = this.lastCalculatedSelfPay > 0 ? this.lastCalculatedSelfPay : result.totalSelfPay;
+        // Use manually adjusted self-pay if user changed it, otherwise use item-based sum (v1.6.215+)
+        const finalTotalSelfPay = this.selfPayManuallyOverridden ? this.lastCalculatedSelfPay : Math.round(result.itemSelfPay);
         const finalPerPersonSelfPay = this.memberCount > 0 ? finalTotalSelfPay / this.memberCount : result.perPersonSelfPay;
         const finalSelfPayRatio = result.totalCost > 0 ? finalTotalSelfPay / result.totalCost : 0;
 
@@ -2646,6 +2676,7 @@ const AppState = {
             ? (this.clubRegistry[this.clubId].prizeUsed || 0)
             : 0;
         this.lastCalculatedSelfPay = 0;
+        this.selfPayManuallyOverridden = false;
         this.eventPhotos = [];
         this.editingItemId = null;
         this.editingAttendeeId = null;
@@ -2691,6 +2722,7 @@ document.addEventListener('DOMContentLoaded', () => {
             AppState.memberCount = 0;
             AppState.previousPrizeTotal = 0;
             AppState.lastCalculatedSelfPay = 0;
+            AppState.selfPayManuallyOverridden = false;
             AppState.eventPhotos = [];
             document.getElementById('expense-desc-input').value = '';
             document.getElementById('expense-amount-input').value = '';
@@ -2886,8 +2918,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 const result = SettlementCalculator.calculate(
                     AppState.memberCount, AppState.expenseItems, AppState.previousPrizeTotal, AppState.rules
                 );
-                const finalTotalSelfPay = AppState.lastCalculatedSelfPay > 0
-                    ? AppState.lastCalculatedSelfPay : result.totalSelfPay;
+                const finalTotalSelfPay = AppState.selfPayManuallyOverridden
+                    ? AppState.lastCalculatedSelfPay : Math.round(result.itemSelfPay);
                 const _sdi = document.getElementById('settlement-date-input');
                 const settlementDate = (_sdi && _sdi.value)
                     ? _sdi.value : new Date().toISOString().slice(0, 10);
@@ -4011,6 +4043,7 @@ document.addEventListener('DOMContentLoaded', () => {
         showDiffPopup(popupMsg, diff);
 
         AppState.lastCalculatedSelfPay = newValue;
+        AppState.selfPayManuallyOverridden = true;
 
         // 인당 자부담 비용 표시는 항상 자동 계산값 기준 (CALCULATION_SPEC.md 4번 참조)
         const calcResult = SettlementCalculator.calculate(

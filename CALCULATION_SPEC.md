@@ -44,15 +44,26 @@ const DefaultRules = {
 3. **시설 및 장비 이용료 (D)** `facilityCost` = `category === FACILITY` 항목 합계
 4. **상품 (E)** `prizeCost` = `category === PRIZE` 항목 합계
 5. **인당 행사비 (F)** `perPersonEventCost` = `memberCount > 0 ? eventCost / memberCount : 0`
-6. **인당 자부담 비용** `perPersonSelfPay` = `calculateSelfPayPerPerson(perPersonEventCost, rules)` (4단계 구간, 아래 3번 참조)
-7. **총 자부담 금액(자동 계산 최소값)** `totalSelfPay` = `Math.round(perPersonSelfPay * memberCount)`
-8. **자부담 비율(자동 계산)** `selfPayRatio` = `totalCost > 0 ? totalSelfPay / totalCost : 0`
-9. **최종 지원금** `finalSupportAmount` = `totalCost - totalSelfPay`
+6. **인당 자부담 비용(정책상 최소, 참고값)** `perPersonSelfPay` = `calculateSelfPayPerPerson(perPersonEventCost, rules)` (4단계 구간, 아래 3번 참조)
+7. **총 자부담 금액(정책상 최소, 참고값)** `totalSelfPay` = `Math.round(perPersonSelfPay * memberCount)`
+8. **자부담 비율(정책상 최소, 참고값)** `selfPayRatio` = `totalCost > 0 ? totalSelfPay / totalCost : 0`
+9. **최종 지원금(정책상 최소, 참고값)** `finalSupportAmount` = `totalCost - totalSelfPay`
+10. **항목별 실제 자부담(v1.6.215+, 실제 계산 기준)** `itemSelfPay` = 모든 비용 항목의 `personalAmount` 합계
+    (카테고리 무관, `null`/`undefined`는 0으로 처리)
+11. **항목별 실제 지원금(v1.6.215+, 실제 계산 기준)** `itemSupportAmount` = `totalCost - itemSelfPay`
+
+> **6~9번(구간표 기반)과 10~11번(항목 합계 기반)은 서로 다른 목적의 별개 값이다.**
+> - 6~9번은 "정책상 최소 자부담" — 화면의 "인당 자부담 비용" 표시, 엑셀 `K20/K21/K22`에 계속 그대로 쓰인다.
+>   4단계 구간 공식 자체는 **v1.6.215에서도 변경되지 않았다.**
+> - 10~11번은 "실제 자부담/지원금" — 각 비용 항목에서 관리자가 법인카드/개인카드로 나눠 입력한 금액의
+>   합계이며, **최종 지원금·클럽 잔여예산 차감·엑셀 `K24/K25/K30`은 이제 이 값을 기준으로 한다**
+>   (구간표 값이 아님). 아래 4번 항목 참조.
 
 ### 경고 메시지 (warnings)
-- 상품비(`prizeCost`) > 0 인데 `memberCount < 10` → "정회원 10명 이상 참석 시에만 상품비 사용이 가능합니다."
 - `prizeCost + previousPrizeTotal > 500,000` → 초과 금액 경고
 - `facilityCost > 1,000,000` → 별도 협의 필요 경고
+- (참고: "정회원 10명 이상 상품비 사용" 조건은 `calculate()` 내부가 아니라 UI 단(비용 항목 추가 폼)에서
+  별도로 차단한다 — v1.6.187에서 `calculate()`의 중복 경고 문구를 제거함)
 
 ## 3. 인당 자부담 비용 4단계 구간 — `calculateSelfPayPerPerson(cost, rules)`
 
@@ -72,20 +83,57 @@ calculateSelfPayPerPerson(cost, rules) {
 }
 ```
 
-## 4. "총 자부담 금액" 수동 수정(override) 로직
+## 4. "실제 자부담" 결정 규칙 (v1.6.215+)
 
-- 사용자가 정산 화면의 "총 자부담 금액(수정 가능)" 입력란을 직접 수정할 수 있음
-  → `AppState.lastCalculatedSelfPay` 에 사용자가 입력한 값이 저장됨 (`applySelfPayChange()`)
+**기본값(자동)은 이제 항목별 개인카드 금액의 합계(`itemSelfPay`)다.** 4단계 구간표 값이 아니다.
+그 위에 "총 자부담 금액 직접 수정" 입력란으로 최종 조정할 수 있다 (기존과 동일하게 전체 교체 방식 —
+부분 반영이 아니라 사용자가 입력한 값이 그대로 최종값이 됨).
+
+- `AppState.selfPayManuallyOverridden`(boolean): 사용자가 "총 자부담 금액" 입력란을 직접
+  blur/Enter로 확정한 적이 있으면 `true`. 항목 추가/삭제, 클럽 전환, 정산 확정, 이력 수정모드 진입/취소
+  등 "자동값으로 되돌아가야 하는" 시점마다 `false`로 리셋된다.
+  - **주의**: `AppState.lastCalculatedSelfPay > 0` 같은 truthy 체크를 기준으로 쓰면 안 된다.
+    `itemSelfPay`가 정당하게 0원(전액 법인카드 처리)인 경우와 "아직 수정 안 함"을 구분할 수 없어서
+    0원이어야 할 자부담이 구간표 참고값으로 잘못 새는 회귀가 생긴다 — 반드시 명시적 플래그로 구분한다.
 - **최종 자부담 금액(`finalSelfPay`)** 결정 규칙:
   ```js
-  finalSelfPay = (AppState.lastCalculatedSelfPay > 0)
+  finalSelfPay = AppState.selfPayManuallyOverridden
       ? AppState.lastCalculatedSelfPay   // 사용자가 직접 수정한 값
-      : calcResult.totalSelfPay;         // 수정 안 했으면 자동 계산된 최소값
+      : calcResult.itemSelfPay;          // 수정 안 했으면 항목별 개인카드 합계
   ```
 - 화면 표시:
-  - 인당 자부담 비용(강조 표시) = `calcResult.perPersonSelfPay` (자동 계산값 기준, 4-(6))
+  - 인당 자부담 비용(강조 표시) = `calcResult.perPersonSelfPay` (**변경 없음** — 계속 구간표 기반
+    "정책상 최소" 참고값)
   - 자부담 비율 = `finalSelfPay / totalCost`
   - 최종 지원금 = `totalCost - finalSelfPay`
+  - "총 자부담 금액" 입력란에 뜨는 초과/부족 안내 팝업(diff popup)은 **변경 없음** — 계속 구간표 기반
+    `calcResult.totalSelfPay`(정책상 최소)와 비교해서 보여준다.
+
+### 검증 예시 (v1.6.215 도입 시 대조용)
+
+**예시 A — 항목별 배분이 구간표 최소값과 다른 경우**
+- `memberCount=6`, EVENT 항목 1건 금액 360,000원 (인당 60,000원)
+- 구간표 기준(정책 최소): `perPersonSelfPay=12,000원`(나 구간 20%) → `totalSelfPay=72,000원`,
+  `finalSupportAmount(정책최소)=288,000원`
+- 관리자가 항목에서 직접 배분: `corporateAmount=300,000 / personalAmount=60,000`
+  → `itemSelfPay=60,000원`, `itemSupportAmount=300,000원` ← **이 값이 실제 지원금·예산차감·K24/K30에 쓰임**
+  (정책최소 288,000원과는 다른 값이며, 이게 정상 동작)
+
+**예시 B — 시설비 85,000원 초과분이 실제 자부담에 포함**
+- `memberCount=5`, FACILITY 항목 1건 150,000원 (사전승인 완료, `facilityLimit=85,000`)
+- 구간표 기준(정책 최소): EVENT 항목이 없으므로 `perPersonSelfPay=0`, `totalSelfPay=0`,
+  `finalSupportAmount(정책최소)=150,000원` (시설비는 구간표 공식에 애초에 포함 안 됨 — 변경 없음)
+- 항목 배분: `corporateAmount=85,000 / personalAmount=65,000`(자동 제안값 그대로 사용)
+  → `itemSelfPay=65,000원`, `itemSupportAmount=85,000원` ← 실제 지원금은 85,000원
+
+**예시 C — 전액 법인카드(자부담 0원) 회귀 방지 확인용**
+- `memberCount=10`, EVENT 항목 1건 800,000원 (인당 80,000원)
+- 구간표 기준(정책 최소): `perPersonSelfPay=20,000원`(다 구간) → `totalSelfPay=200,000원`
+- 관리자가 전액 법인카드 처리: `corporateAmount=800,000 / personalAmount=null`
+  → `itemSelfPay=0원`, `itemSupportAmount=800,000원`
+  → **반드시 0원으로 표시되어야 함** — `> 0` truthy 체크로 구현하면 `lastCalculatedSelfPay`가 0이라
+    "수정 안 함"으로 오판해 구간표 값(200,000원)으로 새는 회귀가 생기므로, 위 `selfPayManuallyOverridden`
+    플래그로만 판단한다.
 
 ---
 
@@ -119,9 +167,9 @@ calculateSelfPayPerPerson(cost, rules) {
 | `K20` | 인당 최소 자부담 비용 | `L15+L16+L17+L18` (= `calcResult.perPersonSelfPay`와 동일 값) |
 | `K21` | 총 최소 자부담 비용 | `K20 × memberCount` (= `calcResult.totalSelfPay`와 동일 값) |
 | `K22` | 총 최소 자부담 비율 | `K21 / K6` (totalCost=0이면 빈 문자열) |
-| `K24` | **실제 자부담 비용** | `finalSelfPay` (수동 수정값 우선, 없으면 `calcResult.totalSelfPay`) |
+| `K24` | **실제 자부담 비용** | `finalSelfPay` (수동 수정값 우선, 없으면 `calcResult.itemSelfPay` — v1.6.215+, 예전엔 `totalSelfPay`) |
 | `K25` | 실제 자부담 비율 | `finalSelfPay / K6` (totalCost=0이면 빈 문자열) |
-| `L25` | 정산 결과 안내 문구 | `finalSelfPay - K21 ≥ 0` → `"정산 문제 없음. 최소 자부담 비용보다 {diff}원 추가 부담함"` / 미만이면 → `"최소 자부담 비용 미달. {-diff}원 추가 자부담 필요."` |
+| `L25` | 정산 결과 안내 문구 | `finalSelfPay - K21 ≥ 0` → `"정산 문제 없음. 최소 자부담 비용보다 {diff}원 추가 부담함"` / 미만이면 → `"최소 자부담 비용 미달. {-diff}원 추가 자부담 필요."` (비교 기준 `K21`은 변경 없음 — 계속 정책상 최소) |
 | `K30` | 총 회사 지원금 | `K6 - K24` = `calcResult.totalCost - finalSelfPay` |
 
 ### 5-1. 빈 셀 처리 규칙
@@ -142,7 +190,12 @@ calculateSelfPayPerPerson(cost, rules) {
 ## 6. 변경 시 주의사항
 
 - 위 계산식(2~4번)은 엑셀 템플릿의 정산 시트와 **수학적으로 동치**가 되도록 맞춰져 있음
-  (단, K20/K21/K22의 "최소 자부담"은 항상 자동 계산값이고, K24/K25/K30은 사용자가
-  직접 수정한 `finalSelfPay`를 반영한 "실제" 값 — 이 둘의 차이를 절대 혼동하지 말 것).
-- `node --check app.js`로 문법 검증 후, `sw.js`의 `APP_VERSION`을 올리고
-  `app/src/main/assets/`에 변경 파일을 동기화한 뒤 커밋/푸시한다.
+  (단, K20/K21/K22의 "최소 자부담"은 항상 구간표 자동 계산값이고, K24/K25/K30은 항목별 개인카드
+  합계(`itemSelfPay`) 또는 사용자가 직접 수정한 `finalSelfPay`를 반영한 "실제" 값 — 이 둘의 차이를
+  절대 혼동하지 말 것. v1.6.215부터 "실제" 값의 자동 기준이 구간표 → 항목 합계로 바뀌었을 뿐,
+  "최소 vs 실제"라는 구조 자체는 동일하다).
+- **알려진 한계 (v1.6.215)**: 2026-06-10 `corporateAmount`/`personalAmount` 필드 도입 이전에 저장된
+  정산 이력을 다시 열어 수정하면, 그 이력의 항목들은 `personalAmount`가 없어 `itemSelfPay` 계산 시
+  0으로 처리된다. 아주 오래된 이력을 수정하는 드문 경우에만 해당하며 별도 마이그레이션은 하지 않았다.
+- `node --check app.js`로 문법 검증 후, `sw.js`의 `APP_VERSION`을 올리고 커밋/푸시한다
+  (APK 자산 동기화는 현재 하지 않음 — CLAUDE.md §1-3 참조).
