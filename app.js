@@ -1785,42 +1785,40 @@ const AppState = {
         const directoryContainer = document.getElementById('directory-container');
         
         if (directoryCount && directoryContainer) {
-            const dirKeys = Object.keys(this.directory).sort((a, b) => {
-                const countA = typeof this.directory[a] === 'object' ? (this.directory[a].count || 0) : 0;
-                const countB = typeof this.directory[b] === 'object' ? (this.directory[b].count || 0) : 0;
-                if (countB !== countA) return countB - countA;
-                return a.localeCompare(b, 'ko');
-            });
-            directoryCount.textContent = dirKeys.length;
-            
+            const dirNames = Object.keys(this.directory);
             directoryContainer.innerHTML = '';
-            
-            if (dirKeys.length === 0) {
+
+            if (dirNames.length === 0) {
+                directoryCount.textContent = 0;
                 directoryContainer.innerHTML = `
                     <div class="empty-state" style="padding: 1rem 0;">
                         <p style="font-size: 0.8rem;">${t('empty.directory')}</p>
                     </div>
                 `;
             } else {
-                // ids[]가 여러 개면 사번마다 별도 행으로 렌더링
+                // ids[]가 여러 개면 사번마다 별도 행으로 만들고, 각 행 자신의 사번별 카운트를 기록
+                // (동명이인이어도 함께 묶어 정렬하지 않고 각자 실제 참석 횟수로만 순위를 매김)
                 const dirRows = [];
-                dirKeys.forEach(name => {
+                dirNames.forEach(name => {
                     const entry = this.directory[name];
                     const ids = (typeof entry === 'object' && Array.isArray(entry.ids) && entry.ids.length > 0)
                         ? entry.ids.map(String)
                         : [String(typeof entry === 'object' ? entry.id : entry)];
-                    ids.forEach(id => dirRows.push({ name, id }));
+                    ids.forEach(id => {
+                        const countValue = (typeof entry === 'object' && entry.counts) ? (entry.counts[id] || 0) : 0;
+                        dirRows.push({ name, id, count: countValue });
+                    });
+                });
+                // 사번 각자의 참석 횟수 기준 내림차순 — 동명이인이 한 명만 참석해도 다른 사번이 따라 올라오지 않음
+                dirRows.sort((a, b) => {
+                    if (b.count !== a.count) return b.count - a.count;
+                    return a.name.localeCompare(b.name, 'ko') || a.id.localeCompare(b.id);
                 });
                 directoryCount.textContent = dirRows.length;
 
                 const canDeleteDir = (this.userName === '관리자' || this.currentPin === '002531');
 
-                dirRows.forEach(({ name, id }) => {
-                    const entry = this.directory[name];
-                    // 사번 기준 카운트만 사용 — 이름 기준 합산(count)으로 폴백하지 않음
-                    const countValue = (typeof entry === 'object' && entry.counts)
-                        ? (entry.counts[id] || 0)
-                        : 0;
+                dirRows.forEach(({ name, id, count: countValue }) => {
                     const isAdded = this.attendees.some(att => att.name === name && String(att.employeeId) === id);
 
                     const row = document.createElement('div');
