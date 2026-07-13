@@ -3397,20 +3397,40 @@ document.addEventListener('DOMContentLoaded', () => {
             const _existItems = (AppState.expenseItems || []).filter(i => i.id !== _editingId);
             const _requestedCorp = corpChecked ? Math.min(corporateAmount || 0, amount) : 0;
 
-            // ⓪ 행사비: 인당 법인카드 지원액이 정책상 최대(기본 85,000원)를 초과하면 이사진 승인 확인
+            // ⓪ 행사비: 인당 법인카드 지원액이 "인원수 대비 정책 계산값"을 초과하면 이사진 승인 확인
+            // (예산이 충분해도 대상 — 클럽 예산 초과 여부는 별개인 ①/② 에서 확인)
+            // 2단계: ⓐ 정책 계산값 초과~85,000원 이내 = 주의, ⓑ 85,000원 자체 초과 = 심각
             if (category === ExpenseCategory.EVENT && !_corpOverLimitApproved) {
                 const _memberCount = AppState.memberCount || 0;
-                const _perPersonCap = (AppState.rules || DefaultRules).deduction4 || 85000;
+                const _rules = AppState.rules || DefaultRules;
+                const _perPersonCap = _rules.deduction4 || 85000;
                 if (_memberCount > 0 && _requestedCorp > 0) {
-                    const _existingCorpSum = _existItems
-                        .filter(i => i.category === ExpenseCategory.EVENT)
-                        .reduce((s, i) => s + (i.corporateAmount || 0), 0);
-                    const _perPersonCorp = (_existingCorpSum + _requestedCorp) / _memberCount;
-                    if (_perPersonCorp > _perPersonCap) {
+                    const _existingEventItems = _existItems.filter(i => i.category === ExpenseCategory.EVENT);
+                    const _existingCorpSum = _existingEventItems.reduce((s, i) => s + (i.corporateAmount || 0), 0);
+                    const _requestedPerPersonCorp = (_existingCorpSum + _requestedCorp) / _memberCount;
+
+                    // 정책(구간표) 계산상 인원수 대비 지원 가능한 금액 — 실제 행사비 기준
+                    const _eventItemsForCheck = [..._existingEventItems, { category: ExpenseCategory.EVENT, amount }];
+                    const _eventResult = SettlementCalculator.calculate(_memberCount, _eventItemsForCheck, 0, _rules);
+                    const _bracketPerPersonSupport = _eventResult.finalSupportAmount / _memberCount;
+
+                    const _revertToBracket = () => {
+                        const _reverted = Math.max(0, Math.min(amount, Math.round(_bracketPerPersonSupport * _memberCount) - _existingCorpSum));
+                        const _corpInput = document.getElementById('expense-corporate-amount-input');
+                        if (_corpInput) _corpInput.value = formatAmount(_reverted);
+                        if (typeof updateCardTypeUI === 'function') updateCardTypeUI();
+                    };
+
+                    if (_requestedPerPersonCorp > _perPersonCap) {
+                        // ⓑ 심각: 인당 85,000원 정책 최대치 자체를 초과
                         showCorpOverLimitModal(
-                            _perPersonCap,
+                            'critical',
+                            `인당 정책 최대 지원금(<b>${_perPersonCap.toLocaleString()}원</b>)을 초과하는 금액입니다.<br>` +
+                            `이사진 승인 하에 인당 지원금액 <b>${_perPersonCap.toLocaleString()}원보다 많은 금액</b>을 ` +
+                            `사용하기로 결정하셨나요?<br><span style="font-size:0.78rem; font-weight:500; opacity:0.85;">` +
+                            `(단, 클럽에 배정된 잔여 예산은 초과할 수 없습니다)</span>`,
                             () => {
-                                // 네 → 잔여 예산까지 고려한 최대 사용 가능 금액으로 재계산
+                                // 네 → 클럽 잔여 예산 내에서 사용 가능한 최대 금액으로 재계산
                                 _corpOverLimitApproved = true;
                                 const _cb = AppState.getClubBudget ? AppState.getClubBudget() : 0;
                                 const _cu = AppState.getClubUsedBudget ? AppState.getClubUsedBudget() : 0;
@@ -3421,15 +3441,18 @@ document.addEventListener('DOMContentLoaded', () => {
                                 if (_corpInput) _corpInput.value = formatAmount(_maxUsable);
                                 if (typeof updateCardTypeUI === 'function') updateCardTypeUI();
                             },
-                            () => {
-                                // 아니요 → 정책상 인당 지원금액(85,000원) 기준으로 되돌림
-                                _corpOverLimitApproved = false;
-                                const _maxUnderPolicy = Math.max(0, _perPersonCap * _memberCount - _existingCorpSum);
-                                const _reverted = Math.min(amount, _maxUnderPolicy);
-                                const _corpInput = document.getElementById('expense-corporate-amount-input');
-                                if (_corpInput) _corpInput.value = formatAmount(_reverted);
-                                if (typeof updateCardTypeUI === 'function') updateCardTypeUI();
-                            }
+                            () => { _corpOverLimitApproved = false; _revertToBracket(); }
+                        );
+                        return;
+                    }
+                    if (_requestedPerPersonCorp > _bracketPerPersonSupport) {
+                        // ⓐ 주의: 정책 계산값은 넘지만 85,000원 이내
+                        showCorpOverLimitModal(
+                            'warn',
+                            `참석 인원 대비 정책상 지원 가능한 금액(<b>${Math.round(_bracketPerPersonSupport).toLocaleString()}원/인</b>)을 초과합니다.<br>` +
+                            `이사진 승인 하에 인당 최대 <b>${_perPersonCap.toLocaleString()}원</b>까지 지원받기로 하였나요?`,
+                            () => { _corpOverLimitApproved = true; },
+                            () => { _corpOverLimitApproved = false; _revertToBracket(); }
                         );
                         return;
                     }
@@ -3528,10 +3551,11 @@ document.addEventListener('DOMContentLoaded', () => {
     if (corpCheck) corpCheck.addEventListener('change', () => { resetCorpAmount(); updateCardTypeUI(); });
     if (personalCheck) personalCheck.addEventListener('change', updateCardTypeUI);
     if (corporateAmountInput) {
-        corporateAmountInput.addEventListener('input', updateCardTypeUI);
+        // 법인카드 금액을 손으로 다시 바꾸면 이전 이사진 승인은 무효화 — 새 금액 기준으로 재확인
+        corporateAmountInput.addEventListener('input', () => { _corpOverLimitApproved = false; updateCardTypeUI(); });
     }
     // 총액·카테고리 변경 → 토글 자동 설정 + 구간별 법인카드 계산 후 UI 갱신
-    amountInput.addEventListener('input', () => { autoSetTogglesAndCorp(); updateCardTypeUI(); });
+    amountInput.addEventListener('input', () => { _corpOverLimitApproved = false; autoSetTogglesAndCorp(); updateCardTypeUI(); });
     if (catSelect) catSelect.addEventListener('change', () => {
         // 시설·장비 선택 시 사전 승인 여부 확인
         if (catSelect.value === ExpenseCategory.FACILITY) {
@@ -6293,18 +6317,43 @@ function updateCardTypeUI() {
 // 시설·장비 사전 승인 여부 (카테고리 변경 시 초기화)
 let _facilityApproved = false;
 
-// 행사비 인당 지원액이 정책상 최대(85,000원)를 초과할 때 이사진 승인 여부 (항목 추가 1회당 소진)
+// 행사비 인당 지원액이 정책 계산값/85,000원 상한을 초과할 때 이사진 승인 여부
+// (모달에 응답하면 true — 항목 추가 완료 또는 법인카드 금액을 손으로 다시 바꾸면 초기화)
 let _corpOverLimitApproved = false;
 
-// 인당 법인카드 지원액이 정책상 최대(85,000원)를 초과할 때 이사진 승인 확인 모달
-function showCorpOverLimitModal(perPersonCap, onApproved, onNoApproval) {
+// 인당 법인카드 지원액 초과 확인 모달 — severity: 'warn'(주의, 85,000원 이내) | 'critical'(심각, 85,000원 초과)
+function showCorpOverLimitModal(severity, messageHtml, onApproved, onNoApproval) {
     const modal = document.getElementById('corp-overlimit-approval-modal');
     if (!modal) { onNoApproval(); return; }
-    const limitEl = modal.querySelector('#corp-overlimit-modal-limit');
-    if (limitEl) limitEl.textContent = (perPersonCap || 85000).toLocaleString() + '원';
+    const box   = modal.querySelector('.corp-overlimit-box');
+    const iconEl  = document.getElementById('corp-overlimit-modal-icon');
+    const labelEl = document.getElementById('corp-overlimit-modal-label');
+    const msgEl   = document.getElementById('corp-overlimit-modal-msg');
+    const yesBtn  = document.getElementById('corp-overlimit-yes-btn');
+    const noBtn   = document.getElementById('corp-overlimit-no-btn');
+
+    if (severity === 'critical') {
+        if (box) {
+            box.style.borderColor = 'rgba(239,68,68,0.9)';
+            box.style.boxShadow   = '0 0 55px rgba(239,68,68,0.5), 0 12px 48px rgba(0,0,0,0.8)';
+            box.style.background  = 'linear-gradient(160deg,#2a0000,#1f0505)';
+        }
+        if (iconEl)  iconEl.textContent  = '🚨';
+        if (labelEl) { labelEl.textContent = '매우 중요 — 정책 최대 한도 초과'; labelEl.style.color = 'rgba(239,68,68,0.95)'; }
+        if (yesBtn)  yesBtn.style.background = 'linear-gradient(135deg,rgba(239,68,68,0.95),rgba(170,15,15,0.95))';
+    } else {
+        if (box) {
+            box.style.borderColor = 'rgba(251,113,10,0.7)';
+            box.style.boxShadow   = '0 0 40px rgba(251,113,10,0.35), 0 12px 48px rgba(0,0,0,0.7)';
+            box.style.background  = 'linear-gradient(160deg,#1a0a00,#1f1206)';
+        }
+        if (iconEl)  iconEl.textContent  = '⚠️';
+        if (labelEl) { labelEl.textContent = '인당 지원 한도 초과 주의'; labelEl.style.color = 'rgba(251,113,10,0.7)'; }
+        if (yesBtn)  yesBtn.style.background = 'linear-gradient(135deg,rgba(251,113,10,0.9),rgba(220,80,0,0.9))';
+    }
+    if (msgEl) msgEl.innerHTML = messageHtml;
+
     modal.style.display = 'flex';
-    const yesBtn = document.getElementById('corp-overlimit-yes-btn');
-    const noBtn = document.getElementById('corp-overlimit-no-btn');
     const close = () => { modal.style.display = 'none'; };
     const onYesClick = () => { close(); yesBtn.removeEventListener('click', onYesClick); noBtn.removeEventListener('click', onNoClick); onApproved(); };
     const onNoClick  = () => { close(); yesBtn.removeEventListener('click', onYesClick); noBtn.removeEventListener('click', onNoClick); onNoApproval(); };

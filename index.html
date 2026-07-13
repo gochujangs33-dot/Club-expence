@@ -1142,12 +1142,12 @@
         </div>
     </div>
 
-    <!-- 행사비 인당 지원액 한도 초과 확인 모달 -->
+    <!-- 행사비 인당 지원액 한도 초과 확인 모달 (경고/심각 2단계 — JS에서 스타일·문구 동적 설정) -->
     <div id="corp-overlimit-approval-modal" style="display:none; position:fixed; inset:0; z-index:10100; background:rgba(0,0,0,0.75); backdrop-filter:blur(6px); align-items:center; justify-content:center;">
-        <div style="background:linear-gradient(160deg,#1a0a00,#1f1206); border:2px solid rgba(251,113,10,0.7); border-radius:20px; padding:1.6rem 1.4rem 1.3rem; max-width:340px; width:calc(100% - 2.4rem); box-shadow:0 0 40px rgba(251,113,10,0.35), 0 12px 48px rgba(0,0,0,0.7); text-align:center;">
-            <div style="font-size:2.6rem; margin-bottom:0.6rem;">🔥</div>
-            <div style="font-size:0.72rem; color:rgba(251,113,10,0.7); font-weight:700; letter-spacing:0.1em; text-transform:uppercase; margin-bottom:0.5rem;">인당 지원 한도 초과</div>
-            <p style="font-size:1.0rem; font-weight:800; color:#fff; line-height:1.6; margin:0 0 1.3rem;">이사진 동의하에<br>인당 최대지원금 <span id="corp-overlimit-modal-limit" style="color:#fb710a; font-size:1.15rem;">85,000원</span>을<br>초과하여 지원받기로 하였나요?</p>
+        <div class="corp-overlimit-box" style="background:linear-gradient(160deg,#1a0a00,#1f1206); border:2px solid rgba(251,113,10,0.7); border-radius:20px; padding:1.6rem 1.4rem 1.3rem; max-width:340px; width:calc(100% - 2.4rem); box-shadow:0 0 40px rgba(251,113,10,0.35), 0 12px 48px rgba(0,0,0,0.7); text-align:center; transition:border-color 0.15s, box-shadow 0.15s, background 0.15s;">
+            <div id="corp-overlimit-modal-icon" style="font-size:2.6rem; margin-bottom:0.6rem;">⚠️</div>
+            <div id="corp-overlimit-modal-label" style="font-size:0.72rem; color:rgba(251,113,10,0.7); font-weight:700; letter-spacing:0.1em; text-transform:uppercase; margin-bottom:0.5rem;">인당 지원 한도 초과 주의</div>
+            <p id="corp-overlimit-modal-msg" style="font-size:1.0rem; font-weight:800; color:#fff; line-height:1.6; margin:0 0 1.3rem;"></p>
             <div style="display:flex; gap:0.7rem;">
                 <button id="corp-overlimit-no-btn" style="flex:1; padding:0.65rem; background:rgba(255,255,255,0.07); border:1px solid rgba(255,255,255,0.2); color:rgba(255,255,255,0.65); border-radius:10px; font-size:0.9rem; font-weight:700; cursor:pointer;">아니요</button>
                 <button id="corp-overlimit-yes-btn" style="flex:1.2; padding:0.65rem; background:linear-gradient(135deg,rgba(251,113,10,0.9),rgba(220,80,0,0.9)); border:none; color:#fff; border-radius:10px; font-size:0.9rem; font-weight:800; cursor:pointer; box-shadow:0 4px 18px rgba(251,113,10,0.4);">✅ 네</button>
