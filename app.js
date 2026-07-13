@@ -831,10 +831,21 @@ const AppState = {
             budget: Math.max(0, budget || 0),
             priorUsed: Math.max(0, priorUsed || 0),
             prizeUsed: prizeUsed !== undefined ? Math.max(0, prizeUsed) : (existing.prizeUsed || 0),
-            usedBudget: existing.usedBudget || 0
+            usedBudget: existing.usedBudget || 0,
+            // 인당 85,000원 초과 지원 승인 여부(관리자 전용 토글) — 이름/예산 수정 시 유실되지 않도록 보존
+            allowOverLimitSupport: existing.allowOverLimitSupport || false
         };
         if (this.firebaseDb) {
             this.firebaseDb.ref(`clubRegistry/${clubId}`).set(this.clubRegistry[clubId]).catch(err => console.error("클럽 저장 실패:", err));
+        }
+    },
+
+    // 관리자 전용: 이 클럽의 인당 85,000원 초과 지원 승인 여부 토글 (다른 필드는 건드리지 않음)
+    setClubOverLimitApproval(clubId, allowed) {
+        if (!this.clubRegistry[clubId]) return;
+        this.clubRegistry[clubId].allowOverLimitSupport = !!allowed;
+        if (this.firebaseDb) {
+            this.firebaseDb.ref(`clubRegistry/${clubId}`).update({ allowOverLimitSupport: !!allowed }).catch(err => console.error("승인 설정 저장 실패:", err));
         }
     },
 
@@ -3397,9 +3408,11 @@ document.addEventListener('DOMContentLoaded', () => {
             const _existItems = (AppState.expenseItems || []).filter(i => i.id !== _editingId);
             const _requestedCorp = corpChecked ? Math.min(corporateAmount || 0, amount) : 0;
 
-            // ⓪ 행사비: 인당 법인카드 지원액이 "인원수 대비 정책 계산값"을 초과하면 이사진 승인 확인
+            // ⓪ 행사비: 인당 법인카드 지원액이 "인원수 대비 정책 계산값"을 초과하면 확인
             // (예산이 충분해도 대상 — 클럽 예산 초과 여부는 별개인 ①/② 에서 확인)
-            // 2단계: ⓐ 정책 계산값 초과~85,000원 이내 = 주의, ⓑ 85,000원 자체 초과 = 심각
+            // ⓐ 정책 계산값 초과~85,000원 이내 = 이 자리에서 이사진 승인 여부 팝업(사용자가 답변)
+            // ⓑ 85,000원 자체 초과 = 극히 예외적인 케이스라 사용자가 팝업으로 결정하지 않고,
+            //    관리자가 "클럽 관리" 탭에서 그 클럽에 한해 미리 승인해둔 경우에만 자동 허용(v1.6.220)
             if (category === ExpenseCategory.EVENT && !_corpOverLimitApproved) {
                 const _memberCount = AppState.memberCount || 0;
                 const _rules = AppState.rules || DefaultRules;
@@ -3422,33 +3435,35 @@ document.addEventListener('DOMContentLoaded', () => {
                     };
 
                     if (_requestedPerPersonCorp > _perPersonCap) {
-                        // ⓑ 심각: 인당 85,000원 정책 최대치 자체를 초과
-                        showCorpOverLimitModal(
-                            'critical',
-                            `인당 정책 최대 지원금(<b>${_perPersonCap.toLocaleString()}원</b>)을 초과하는 금액입니다.<br>` +
-                            `이사진 승인 하에 인당 지원금액 <b>${_perPersonCap.toLocaleString()}원보다 많은 금액</b>을 ` +
-                            `사용하기로 결정하셨나요?<br><span style="font-size:0.78rem; font-weight:500; opacity:0.85;">` +
-                            `(단, 클럽에 배정된 잔여 예산은 초과할 수 없습니다)</span>`,
-                            () => {
-                                // 네 → 클럽 잔여 예산 내에서 사용 가능한 최대 금액으로 재계산
-                                _corpOverLimitApproved = true;
-                                const _cb = AppState.getClubBudget ? AppState.getClubBudget() : 0;
-                                const _cu = AppState.getClubUsedBudget ? AppState.getClubUsedBudget() : 0;
-                                const _already = _existItems.reduce((s, i) => s + (i.corporateAmount || 0), 0);
-                                const _realRemaining = _cb > 0 ? Math.max(0, _cb - _cu - _already) : Infinity;
-                                const _maxUsable = Math.min(amount, _realRemaining === Infinity ? amount : _realRemaining);
-                                const _corpInput = document.getElementById('expense-corporate-amount-input');
-                                if (_corpInput) _corpInput.value = formatAmount(_maxUsable);
-                                if (typeof updateCardTypeUI === 'function') updateCardTypeUI();
-                            },
-                            () => { _corpOverLimitApproved = false; _revertToBracket(); }
-                        );
-                        return;
-                    }
-                    if (_requestedPerPersonCorp > _bracketPerPersonSupport) {
+                        // ⓑ 인당 85,000원 정책 최대치 자체를 초과 — 극히 예외적인 경우라 사용자가 그 자리에서
+                        // 팝업으로 직접 승인하지 않고, 관리자가 클럽 관리에서 미리 승인해둔 클럽만 허용한다.
+                        const _clubEntry = (AppState.clubId && AppState.clubRegistry[AppState.clubId])
+                            ? AppState.clubRegistry[AppState.clubId]
+                            : (AppState.clubName ? Object.values(AppState.clubRegistry || {}).find(c => c.name === AppState.clubName) : null);
+                        if (_clubEntry && _clubEntry.allowOverLimitSupport) {
+                            // 관리자 승인된 클럽 → 클럽 잔여 예산 내에서 사용 가능한 최대 금액으로 재계산 후 진행
+                            const _cb = AppState.getClubBudget ? AppState.getClubBudget() : 0;
+                            const _cu = AppState.getClubUsedBudget ? AppState.getClubUsedBudget() : 0;
+                            const _already = _existItems.reduce((s, i) => s + (i.corporateAmount || 0), 0);
+                            const _realRemaining = _cb > 0 ? Math.max(0, _cb - _cu - _already) : Infinity;
+                            const _maxUsable = Math.min(amount, _realRemaining === Infinity ? amount : _realRemaining);
+                            const _corpInput = document.getElementById('expense-corporate-amount-input');
+                            if (_corpInput) _corpInput.value = formatAmount(_maxUsable);
+                            if (typeof updateCardTypeUI === 'function') updateCardTypeUI();
+                            // 계속 진행 (재확인 없이 아래 예산 검증으로 이어짐)
+                        } else {
+                            showPrizeModal(
+                                `인당 정책 최대 지원금(${_perPersonCap.toLocaleString()}원)을 초과하는 금액입니다.\n` +
+                                `이 클럽은 관리자로부터 "85,000원 초과 지원" 승인을 받지 않았습니다.\n` +
+                                `필요하면 관리자에게 클럽 관리 탭에서 승인해 달라고 요청해 주세요.`,
+                                () => _revertToBracket(),
+                                'block'
+                            );
+                            return;
+                        }
+                    } else if (_requestedPerPersonCorp > _bracketPerPersonSupport) {
                         // ⓐ 주의: 정책 계산값은 넘지만 85,000원 이내
                         showCorpOverLimitModal(
-                            'warn',
                             `참석 인원 대비 정책상 지원 가능한 금액(<b>${Math.round(_bracketPerPersonSupport).toLocaleString()}원/인</b>)을 초과합니다.<br>` +
                             `이사진 승인 하에 인당 최대 <b>${_perPersonCap.toLocaleString()}원</b>까지 지원받기로 하였나요?`,
                             () => { _corpOverLimitApproved = true; },
@@ -4948,6 +4963,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const priorUsed = club.priorUsed || 0;
             const prizeLimit = AppState.rules.prizeLimit || 500000;
             const remaining = budget - priorUsed - usedBudget;
+            const overLimitApproved = !!club.allowOverLimitSupport;
             const row = document.createElement('div');
             row.className = 'expense-row';
             row.style.cssText = 'padding:0.6rem 0.75rem; height:auto; align-items:center; flex-wrap:wrap;';
@@ -4977,6 +4993,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 </div>
                 <div class="expense-row-right" style="gap:0.4rem; flex:0 0 auto;">
                     <button class="btn-add-club-budget btn-secondary" data-id="${AppState.escapeHtml(clubId)}" style="padding:0.3rem 0.6rem; font-size:0.78rem;">${t('btn.add_budget')}</button>
+                    <button class="btn-toggle-overlimit" data-id="${AppState.escapeHtml(clubId)}" data-current="${overLimitApproved ? '1' : '0'}"
+                        title="관리자 전용 — 이 클럽에 한해 인당 85,000원 초과 지원을 허용합니다 (여전히 클럽 잔여 예산은 초과할 수 없음)"
+                        style="padding:0.3rem 0.6rem; font-size:0.78rem; border-radius:6px; cursor:pointer; ${overLimitApproved
+                            ? 'background:rgba(239,68,68,0.18); border:1px solid rgba(239,68,68,0.55); color:#fca5a5;'
+                            : 'background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.18); color:var(--text-secondary);'}">${overLimitApproved ? '🔓 85,000원 초과 승인됨' : '🔒 85,000원 초과 미승인'}</button>
                     <button class="btn-edit-club btn-secondary" data-id="${AppState.escapeHtml(clubId)}" style="padding:0.3rem 0.6rem; font-size:0.78rem;">${t('btn.edit')}</button>
                     <button class="btn-delete-club btn-text-danger" data-id="${AppState.escapeHtml(clubId)}" style="padding:0.3rem 0.6rem; font-size:0.78rem;">${t('btn.delete')}</button>
                 </div>
@@ -4996,6 +5017,21 @@ document.addEventListener('DOMContentLoaded', () => {
                 document.getElementById('add-club-btn').innerHTML = t('btn.edit_done');
                 cancelEditClubBtn.classList.remove('hidden');
                 clubNameFormInput.focus();
+            });
+        });
+        clubListContainer.querySelectorAll('.btn-toggle-overlimit').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const clubId = btn.getAttribute('data-id');
+                const club = AppState.clubRegistry[clubId];
+                if (!club) return;
+                const willAllow = btn.getAttribute('data-current') !== '1';
+                const msg = willAllow
+                    ? `'${club.name}' 클럽에 한해 인당 85,000원 초과 지원을 승인하시겠습니까?\n(클럽 잔여 예산 자체는 여전히 초과할 수 없습니다)`
+                    : `'${club.name}' 클럽의 인당 85,000원 초과 지원 승인을 취소하시겠습니까?`;
+                showConfirmModal(msg, () => {
+                    AppState.setClubOverLimitApproval(clubId, willAllow);
+                    renderClubManagement();
+                }, willAllow ? '승인' : '승인 취소');
             });
         });
         clubListContainer.querySelectorAll('.btn-add-club-budget').forEach(btn => {
@@ -6317,40 +6353,18 @@ function updateCardTypeUI() {
 // 시설·장비 사전 승인 여부 (카테고리 변경 시 초기화)
 let _facilityApproved = false;
 
-// 행사비 인당 지원액이 정책 계산값/85,000원 상한을 초과할 때 이사진 승인 여부
+// 행사비 인당 지원액이 정책 계산값(85,000원 이내 구간)을 초과할 때 이사진 승인 여부
 // (모달에 응답하면 true — 항목 추가 완료 또는 법인카드 금액을 손으로 다시 바꾸면 초기화)
+// 85,000원 자체를 초과하는 경우는 관리자가 클럽별로 사전 승인한 경우에만 자동 허용(v1.6.220) — 팝업 없음.
 let _corpOverLimitApproved = false;
 
-// 인당 법인카드 지원액 초과 확인 모달 — severity: 'warn'(주의, 85,000원 이내) | 'critical'(심각, 85,000원 초과)
-function showCorpOverLimitModal(severity, messageHtml, onApproved, onNoApproval) {
+// 인당 법인카드 지원액이 정책 계산값을 초과할 때 이사진 승인 확인 모달 (주의 단계)
+function showCorpOverLimitModal(messageHtml, onApproved, onNoApproval) {
     const modal = document.getElementById('corp-overlimit-approval-modal');
     if (!modal) { onNoApproval(); return; }
-    const box   = modal.querySelector('.corp-overlimit-box');
-    const iconEl  = document.getElementById('corp-overlimit-modal-icon');
-    const labelEl = document.getElementById('corp-overlimit-modal-label');
     const msgEl   = document.getElementById('corp-overlimit-modal-msg');
     const yesBtn  = document.getElementById('corp-overlimit-yes-btn');
     const noBtn   = document.getElementById('corp-overlimit-no-btn');
-
-    if (severity === 'critical') {
-        if (box) {
-            box.style.borderColor = 'rgba(239,68,68,0.9)';
-            box.style.boxShadow   = '0 0 55px rgba(239,68,68,0.5), 0 12px 48px rgba(0,0,0,0.8)';
-            box.style.background  = 'linear-gradient(160deg,#2a0000,#1f0505)';
-        }
-        if (iconEl)  iconEl.textContent  = '🚨';
-        if (labelEl) { labelEl.textContent = '매우 중요 — 정책 최대 한도 초과'; labelEl.style.color = 'rgba(239,68,68,0.95)'; }
-        if (yesBtn)  yesBtn.style.background = 'linear-gradient(135deg,rgba(239,68,68,0.95),rgba(170,15,15,0.95))';
-    } else {
-        if (box) {
-            box.style.borderColor = 'rgba(251,113,10,0.7)';
-            box.style.boxShadow   = '0 0 40px rgba(251,113,10,0.35), 0 12px 48px rgba(0,0,0,0.7)';
-            box.style.background  = 'linear-gradient(160deg,#1a0a00,#1f1206)';
-        }
-        if (iconEl)  iconEl.textContent  = '⚠️';
-        if (labelEl) { labelEl.textContent = '인당 지원 한도 초과 주의'; labelEl.style.color = 'rgba(251,113,10,0.7)'; }
-        if (yesBtn)  yesBtn.style.background = 'linear-gradient(135deg,rgba(251,113,10,0.9),rgba(220,80,0,0.9))';
-    }
     if (msgEl) msgEl.innerHTML = messageHtml;
 
     modal.style.display = 'flex';
