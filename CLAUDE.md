@@ -81,7 +81,7 @@
 ```
 1. 파일 수정 (app.js / index.html / style.css 등)
 2. node --check app.js   ← 문법 오류 확인
-3. 버전 상수 2곳을 함께 1 증가 (현재 1.6.224) — **아래 두 곳 모두 빠짐없이 bump**:
+3. 버전 상수 2곳을 함께 1 증가 (현재 1.6.225) — **아래 두 곳 모두 빠짐없이 bump**:
    - `sw.js` 의 `APP_VERSION`
    - `app.js` 최상단의 `APP_VERSION`/`APP_VERSION_DATE` (로그인 화면 버전 라벨의 즉시 표시값 +
      "업데이트 내역" 모달이 이 값을 기준으로 그룹핑함 — v1.6.187~223 구간에서 이 상수만 37개
@@ -160,4 +160,4 @@
 - [`CHANGES.md`](CHANGES.md) — 버전별 변경 이력
 - [`CODE_REVIEW.md`](CODE_REVIEW.md) — **매 작업 시작 전 필독**: v1.6.201 검증 결과, 재수정 금지 항목 상세, 승인된 백로그(사용자 명시 요청 시에만 착수)
 
-현재 버전: **v1.6.224** (`sw.js` `APP_VERSION`)
+현재 버전: **v1.6.225** (`sw.js` `APP_VERSION`)

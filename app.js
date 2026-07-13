@@ -1,8 +1,8 @@
 /**
  * Club Expense Settlement App - Main JavaScript Logic
  */
-const APP_VERSION      = '1.6.224';
-const APP_VERSION_DATE = '2026.07.13';
+const APP_VERSION      = '1.6.225';
+const APP_VERSION_DATE = '2026.07.14';
 
 // 인당 자부담 비용에 따라 강조 박스의 아이콘/색상을 전환 (100원 이상이면 🔥, 0이면 😊)
 function updatePerPersonSelfPayIcon(perPersonSelfPay) {
@@ -4420,6 +4420,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 변경이력 모달
     const CHANGELOG = [
+        { ver: '1.6.225', date: '2026.07.14', items: ['클럽별 예산 소진율 차트 호버 시 표시 순서를 소진율·예산·사용·잔여 순으로 정리 (잔여 금액 추가)'] },
         { ver: '1.6.224', date: '2026.07.13', items: ['업데이트 내역 목록에 그동안 누락됐던 v1.6.184~223 일괄 추가'] },
         { ver: '1.6.223', date: '2026.07.13', items: ['전사원 명부 정렬 기준을 이름→사번 단위로 변경 — 동명이인 중 미참석자가 참석자 옆에 딸려오던 문제 수정'] },
         { ver: '1.6.222', date: '2026.07.13', items: ['호버 툴팁을 전역 방식으로 교체 — 스크롤 영역에 잘리지 않도록 수정', '클럽 관리 "추가 배정"·"올해 기존 사용"에도 설명 툴팁 추가'] },
@@ -5555,7 +5556,13 @@ document.addEventListener('DOMContentLoaded', () => {
                         callbacks: {
                             label: (ctx) => {
                                 const d = clubData[ctx.dataIndex];
-                                return [`소진율: ${ctx.parsed.x}%`, `사용: ${SettlementCalculator.formatCurrency(d.usedTotal)}`, `예산: ${SettlementCalculator.formatCurrency(d.budget)}`];
+                                const remaining = d.budget - d.usedTotal;
+                                return [
+                                    `소진율: ${ctx.parsed.x}%`,
+                                    `예산: ${SettlementCalculator.formatCurrency(d.budget)}`,
+                                    `사용: ${SettlementCalculator.formatCurrency(d.usedTotal)}`,
+                                    `잔여: ${SettlementCalculator.formatCurrency(remaining)}`
+                                ];
                             }
                         }
                     },
