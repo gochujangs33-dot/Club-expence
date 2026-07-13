@@ -1,7 +1,7 @@
 /**
  * Club Expense Settlement App - Main JavaScript Logic
  */
-const APP_VERSION      = '1.6.225';
+const APP_VERSION      = '1.6.226';
 const APP_VERSION_DATE = '2026.07.14';
 
 // 인당 자부담 비용에 따라 강조 박스의 아이콘/색상을 전환 (100원 이상이면 🔥, 0이면 😊)
@@ -4420,6 +4420,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 변경이력 모달
     const CHANGELOG = [
+        { ver: '1.6.226', date: '2026.07.14', items: ['대시보드 차트(월별 지출 현황·예산 소진율·클럽별 정산 횟수) 전체에서 같은 클럽은 항상 같은 색으로 통일', '예산 소진율 차트는 막대색 대신 소진율 % 숫자 글씨색으로 위험도(안전/주의/초과) 표시'] },
         { ver: '1.6.225', date: '2026.07.14', items: ['클럽별 예산 소진율 차트 호버 시 표시 순서를 소진율·예산·사용·잔여 순으로 정리 (잔여 금액 추가)'] },
         { ver: '1.6.224', date: '2026.07.13', items: ['업데이트 내역 목록에 그동안 누락됐던 v1.6.184~223 일괄 추가'] },
         { ver: '1.6.223', date: '2026.07.13', items: ['전사원 명부 정렬 기준을 이름→사번 단위로 변경 — 동명이인 중 미참석자가 참석자 옆에 딸려오던 문제 수정'] },
@@ -5380,13 +5381,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 });
             } else if (chart.options.indexAxis === 'y') {
-                // 가로 막대: 막대 끝(tip)에 표시
+                // 가로 막대: 막대 끝(tip)에 표시. getColor(i)가 있으면 항목별 색상(예: 위험도) 우선 적용
                 const meta = chart.getDatasetMeta(0);
                 meta.data.forEach((bar, i) => {
                     const text = opts.getLabel(i);
                     if (!text) return;
                     ctx.textAlign = 'left';
-                    ctx.fillStyle = opts.color || '#e2e8f0';
+                    ctx.fillStyle = (opts.getColor ? opts.getColor(i) : opts.color) || '#e2e8f0';
                     ctx.fillText(text, bar.x + 8, bar.y);
                 });
             } else {
@@ -5413,6 +5414,34 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     if (typeof Chart !== 'undefined') Chart.register(chartValueLabelPlugin);
 
+    // 클럽 고유 색상 — 전체 클럽 레지스트리를 이름순으로 고정 정렬해 인덱스를 매기므로,
+    // 특정 차트의 정렬 순서나 필터 선택 상태와 무관하게 같은 클럽은 모든 차트에서 항상 같은 색을 씀
+    const CLUB_COLOR_PALETTE = [
+        'rgba(139, 92, 246, 0.85)', 'rgba(56, 189, 248, 0.85)', 'rgba(52, 211, 153, 0.85)',
+        'rgba(251, 191, 36, 0.85)', 'rgba(248, 113, 113, 0.85)', 'rgba(236, 72, 153, 0.85)',
+        'rgba(129, 140, 248, 0.85)', 'rgba(45, 212, 191, 0.85)', 'rgba(251, 146, 60, 0.85)',
+        'rgba(167, 139, 250, 0.85)'
+    ];
+    function getClubColorMap() {
+        const names = Object.values(AppState.clubRegistry || {})
+            .map(c => c.name)
+            .sort((a, b) => a.localeCompare(b, 'ko'));
+        const map = {};
+        names.forEach((name, idx) => { map[name] = CLUB_COLOR_PALETTE[idx % CLUB_COLOR_PALETTE.length]; });
+        return map;
+    }
+    // 클럽 레지스트리에 없는 이름(삭제된 클럽, "기본 클럽" 폴백 등)은 이름 해시로 그나마 고정된 색 배정
+    function clubColorFor(name, colorMap) {
+        if (colorMap[name]) return colorMap[name];
+        let hash = 0;
+        for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) >>> 0;
+        return CLUB_COLOR_PALETTE[hash % CLUB_COLOR_PALETTE.length];
+    }
+    // 예산 소진율 위험도 색상 (안전/주의/초과) — 소진율 % 라벨 글씨색에만 사용
+    function getUsageRiskColor(ratio) {
+        return ratio >= 100 ? 'rgb(248, 113, 113)' : ratio >= 80 ? 'rgb(251, 191, 36)' : 'rgb(52, 211, 153)';
+    }
+
     let overallMonthlyChartInstance = null;
 
     // ── 월별 클럽 지출 현황 (막대 그래프) ────────────────────────────────
@@ -5422,15 +5451,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const canvas = document.getElementById('overall-monthly-chart');
         if (!canvas || typeof Chart === 'undefined') return;
 
-        const palette = [
-            'rgba(139, 92, 246, 0.6)',
-            'rgba(56, 189, 248, 0.6)',
-            'rgba(248, 113, 113, 0.6)',
-            'rgba(52, 211, 153, 0.6)',
-            'rgba(251, 191, 36, 0.6)',
-            'rgba(236, 72, 153, 0.6)',
-            'rgba(129, 140, 248, 0.6)'
-        ];
+        const clubColorMap = getClubColorMap();
 
         // 월별 x축 + 선택된 클럽별 막대 (중복 선택 가능)
         const monthSet = new Set();
@@ -5457,11 +5478,11 @@ document.addEventListener('DOMContentLoaded', () => {
             .filter(name => !selectedOverallClubs || selectedOverallClubs.has(name))
             .sort((a, b) => a.localeCompare(b));
 
-        const datasets = sortedClubs.map((club, idx) => ({
+        const datasets = sortedClubs.map((club) => ({
             label: club,
             data: labels.map(month => (spendByMonthClub[month] && spendByMonthClub[month][club]) || 0),
-            backgroundColor: palette[idx % palette.length].replace('0.6', '0.82'),
-            borderColor: palette[idx % palette.length].replace('0.6', '1'),
+            backgroundColor: clubColorFor(club, clubColorMap),
+            borderColor: clubColorFor(club, clubColorMap).replace('0.85', '1'),
             borderWidth: 0,
             borderRadius: 6,
             borderSkipped: false
@@ -5522,13 +5543,10 @@ document.addEventListener('DOMContentLoaded', () => {
             return { name: club.name, ratio: Math.round(ratio * 10) / 10, usedTotal, budget };
         }).sort((a, b) => b.ratio - a.ratio);
 
+        const clubColorMap = getClubColorMap();
         const labels = clubData.map(d => d.name);
         const usageRatio = clubData.map(d => d.ratio);
-        const usageColors = clubData.map(d =>
-            d.ratio >= 100 ? 'rgba(248, 113, 113, 0.85)' :
-            d.ratio >= 80  ? 'rgba(251, 191, 36, 0.85)' :
-                             'rgba(52, 211, 153, 0.85)'
-        );
+        const usageColors = clubData.map(d => clubColorFor(d.name, clubColorMap));
 
         if (clubUsageChartInstance) clubUsageChartInstance.destroy();
         if (labels.length === 0) return;
@@ -5568,7 +5586,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     },
                     chartValueLabel: {
                         color: '#e2e8f0',
-                        getLabel: (i) => `${usageRatio[i]}%`
+                        getLabel: (i) => `${usageRatio[i]}%`,
+                        getColor: (i) => getUsageRiskColor(usageRatio[i])
                     }
                 },
                 scales: {
@@ -5780,12 +5799,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const labels = sorted.map(([name]) => name);
         const counts = sorted.map(([, cnt]) => cnt);
-
-        const palette = [
-            'rgba(139,92,246,0.85)', 'rgba(56,189,248,0.85)', 'rgba(52,211,153,0.85)',
-            'rgba(251,191,36,0.85)', 'rgba(248,113,113,0.85)', 'rgba(236,72,153,0.85)',
-            'rgba(129,140,248,0.85)'
-        ];
+        const clubColorMap = getClubColorMap();
 
         if (clubActivityChartInstance) clubActivityChartInstance.destroy();
         if (labels.length === 0) return;
@@ -5797,7 +5811,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 datasets: [{
                     label: '정산 횟수',
                     data: counts,
-                    backgroundColor: labels.map((_, i) => palette[i % palette.length]),
+                    backgroundColor: labels.map(name => clubColorFor(name, clubColorMap)),
                     borderWidth: 0,
                     borderRadius: 8
                 }]
