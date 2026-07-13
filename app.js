@@ -3397,6 +3397,45 @@ document.addEventListener('DOMContentLoaded', () => {
             const _existItems = (AppState.expenseItems || []).filter(i => i.id !== _editingId);
             const _requestedCorp = corpChecked ? Math.min(corporateAmount || 0, amount) : 0;
 
+            // ⓪ 행사비: 인당 법인카드 지원액이 정책상 최대(기본 85,000원)를 초과하면 이사진 승인 확인
+            if (category === ExpenseCategory.EVENT && !_corpOverLimitApproved) {
+                const _memberCount = AppState.memberCount || 0;
+                const _perPersonCap = (AppState.rules || DefaultRules).deduction4 || 85000;
+                if (_memberCount > 0 && _requestedCorp > 0) {
+                    const _existingCorpSum = _existItems
+                        .filter(i => i.category === ExpenseCategory.EVENT)
+                        .reduce((s, i) => s + (i.corporateAmount || 0), 0);
+                    const _perPersonCorp = (_existingCorpSum + _requestedCorp) / _memberCount;
+                    if (_perPersonCorp > _perPersonCap) {
+                        showCorpOverLimitModal(
+                            _perPersonCap,
+                            () => {
+                                // 네 → 잔여 예산까지 고려한 최대 사용 가능 금액으로 재계산
+                                _corpOverLimitApproved = true;
+                                const _cb = AppState.getClubBudget ? AppState.getClubBudget() : 0;
+                                const _cu = AppState.getClubUsedBudget ? AppState.getClubUsedBudget() : 0;
+                                const _already = _existItems.reduce((s, i) => s + (i.corporateAmount || 0), 0);
+                                const _realRemaining = _cb > 0 ? Math.max(0, _cb - _cu - _already) : Infinity;
+                                const _maxUsable = Math.min(amount, _realRemaining === Infinity ? amount : _realRemaining);
+                                const _corpInput = document.getElementById('expense-corporate-amount-input');
+                                if (_corpInput) _corpInput.value = formatAmount(_maxUsable);
+                                if (typeof updateCardTypeUI === 'function') updateCardTypeUI();
+                            },
+                            () => {
+                                // 아니요 → 정책상 인당 지원금액(85,000원) 기준으로 되돌림
+                                _corpOverLimitApproved = false;
+                                const _maxUnderPolicy = Math.max(0, _perPersonCap * _memberCount - _existingCorpSum);
+                                const _reverted = Math.min(amount, _maxUnderPolicy);
+                                const _corpInput = document.getElementById('expense-corporate-amount-input');
+                                if (_corpInput) _corpInput.value = formatAmount(_reverted);
+                                if (typeof updateCardTypeUI === 'function') updateCardTypeUI();
+                            }
+                        );
+                        return;
+                    }
+                }
+            }
+
             // ① 클럽 배정 예산 초과 확인 (getClubUsedBudget()이 수정 모드일 때 이 이력 자신의 몫을 이미 제외함)
             const _clubBudget = AppState.getClubBudget ? AppState.getClubBudget() : 0;
             if (_clubBudget > 0 && _requestedCorp > 0) {
@@ -3475,6 +3514,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
             AppState.addExpense(description, amount, category, corpChecked, personalChecked, corporateAmount);
+            _corpOverLimitApproved = false; // 승인 플래그는 항목 하나당 1회만 유효 — 추가 완료 후 소진
             syncPrizeTotalFromItems();
             descInput.focus();
         }
@@ -3513,6 +3553,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         // 다른 카테고리로 변경 시 승인 플래그 초기화
         _facilityApproved = false;
+        _corpOverLimitApproved = false;
         if (catSelect.value === ExpenseCategory.PRIZE) {
             const memberCount = AppState.memberCount || 0;
             const editingId = AppState.editingItemId || null;
@@ -6251,6 +6292,25 @@ function updateCardTypeUI() {
 
 // 시설·장비 사전 승인 여부 (카테고리 변경 시 초기화)
 let _facilityApproved = false;
+
+// 행사비 인당 지원액이 정책상 최대(85,000원)를 초과할 때 이사진 승인 여부 (항목 추가 1회당 소진)
+let _corpOverLimitApproved = false;
+
+// 인당 법인카드 지원액이 정책상 최대(85,000원)를 초과할 때 이사진 승인 확인 모달
+function showCorpOverLimitModal(perPersonCap, onApproved, onNoApproval) {
+    const modal = document.getElementById('corp-overlimit-approval-modal');
+    if (!modal) { onNoApproval(); return; }
+    const limitEl = modal.querySelector('#corp-overlimit-modal-limit');
+    if (limitEl) limitEl.textContent = (perPersonCap || 85000).toLocaleString() + '원';
+    modal.style.display = 'flex';
+    const yesBtn = document.getElementById('corp-overlimit-yes-btn');
+    const noBtn = document.getElementById('corp-overlimit-no-btn');
+    const close = () => { modal.style.display = 'none'; };
+    const onYesClick = () => { close(); yesBtn.removeEventListener('click', onYesClick); noBtn.removeEventListener('click', onNoClick); onApproved(); };
+    const onNoClick  = () => { close(); yesBtn.removeEventListener('click', onYesClick); noBtn.removeEventListener('click', onNoClick); onNoApproval(); };
+    yesBtn.addEventListener('click', onYesClick);
+    noBtn.addEventListener('click', onNoClick);
+}
 
 // 시설·장비 승인 모달 표시 후 콜백 실행
 function showFacilityApprovalModal(onApproved, onNoApproval) {
