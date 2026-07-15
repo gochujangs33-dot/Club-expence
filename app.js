@@ -1,7 +1,7 @@
 /**
  * Club Expense Settlement App - Main JavaScript Logic
  */
-const APP_VERSION      = '1.6.228';
+const APP_VERSION      = '1.6.229';
 const APP_VERSION_DATE = '2026.07.16';
 
 // 인당 자부담 비용에 따라 강조 박스의 아이콘/색상을 전환 (100원 이상이면 🔥, 0이면 😊)
@@ -2719,6 +2719,36 @@ const AppState = {
 };
 
 // --- 4. Event Listeners & Initialization ---
+
+// 현재 정산 세션(비용 항목/참석자/인원/상품비 누적 등)을 전부 초기화 — "정산 초기화" 버튼과
+// 정산 이력 수정 완료 후 공통으로 사용 (v1.6.229)
+function resetSettlementSession() {
+    AppState.expenseItems = [];
+    AppState.attendees = [];
+    AppState.memberCount = 0;
+    AppState.previousPrizeTotal = 0;
+    AppState.lastCalculatedSelfPay = 0;
+    AppState.selfPayManuallyOverridden = false;
+    AppState.eventPhotos = [];
+    _facilityApproved = false;
+    const facilityBoostCheckOnReset = document.getElementById('facility-boost-check');
+    if (facilityBoostCheckOnReset) facilityBoostCheckOnReset.checked = false;
+    document.getElementById('expense-desc-input').value = '';
+    document.getElementById('expense-amount-input').value = '';
+    document.getElementById('expense-category-select').selectedIndex = 0;
+    document.getElementById('expense-corp-check').checked = true;
+    document.getElementById('expense-personal-check').checked = false;
+    document.getElementById('expense-corporate-amount-input').value = '';
+    document.getElementById('expense-personal-amount-input').value = '';
+    document.getElementById('prev-prize-input').value = 0;
+    if (typeof updateCardTypeUI === 'function') updateCardTypeUI();
+    const settleDateEl = document.getElementById('settlement-date-input');
+    if (settleDateEl) settleDateEl.value = new Date().toISOString().slice(0, 10);
+    if (typeof window._onSettleDateReset === 'function') window._onSettleDateReset();
+    AppState.save();
+    AppState.render();
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     // 언어 설정 초기 적용
     if (typeof applyTranslations === 'function') applyTranslations();
@@ -2737,27 +2767,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         resetSessionConfirmBtn.addEventListener('click', () => {
             resetSessionModal.classList.add('hidden');
-            AppState.expenseItems = [];
-            AppState.attendees = [];
-            AppState.memberCount = 0;
-            AppState.previousPrizeTotal = 0;
-            AppState.lastCalculatedSelfPay = 0;
-            AppState.selfPayManuallyOverridden = false;
-            AppState.eventPhotos = [];
-            document.getElementById('expense-desc-input').value = '';
-            document.getElementById('expense-amount-input').value = '';
-            document.getElementById('expense-category-select').selectedIndex = 0;
-            document.getElementById('expense-corp-check').checked = true;
-            document.getElementById('expense-personal-check').checked = false;
-            document.getElementById('expense-corporate-amount-input').value = '';
-            document.getElementById('expense-personal-amount-input').value = '';
-            document.getElementById('prev-prize-input').value = 0;
-            if (typeof updateCardTypeUI === 'function') updateCardTypeUI();
-            const settleDateEl = document.getElementById('settlement-date-input');
-            if (settleDateEl) settleDateEl.value = new Date().toISOString().slice(0, 10);
-            if (typeof window._onSettleDateReset === 'function') window._onSettleDateReset();
-            AppState.save();
-            AppState.render();
+            resetSettlementSession();
         });
     }
 
@@ -2960,7 +2970,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 };
                 await AppState.updateHistoryEntry(AppState.editingHistoryId, updatedFields);
                 AppState.cancelEditMode();
-                AppState.render();
+                resetSettlementSession();
                 alert('수정 내용이 저장되었습니다.\n엑셀 파일이 필요하면 정산 이력에서 수정 후 다운로드하세요.');
             } catch (err) {
                 console.error(err);
@@ -4434,6 +4444,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 변경이력 모달
     const CHANGELOG = [
+        { ver: '1.6.229', date: '2026.07.16', items: ['정산 이력 수정 완료 후 비용 정산 화면이 자동으로 "정산 초기화"되도록 수정 (이전엔 수정한 내용이 그대로 남아있었음)', '시설·장비 기본(미승인) 법인카드 제안액을 행사비와 같은 "인당 지원 한도 풀"에 합산해서 계산하도록 수정 — 이미 다른 행사비가 있어도 새 시설비마다 100% 법인카드로 잘못 제안되던 문제 수정'] },
         { ver: '1.6.228', date: '2026.07.16', items: ['시설·장비 이용료 선택 즉시 뜨던 승인 팝업 제거 — 기본값은 행사비와 동일한 인당 지원 한도 자동 적용', '"이사진 승인 한도 증액" 체크박스 추가 — 체크 시 확인 팝업 후 인당 최대 85,000원까지 법인카드 한도 증액'] },
         { ver: '1.6.227', date: '2026.07.16', items: ['시설·장비 이용료가 100만원을 초과하면 뜨던 "별도 협의가 필요합니다" 경고 문구 삭제 (근거 불명확 — 사용자 요청)'] },
         { ver: '1.6.226', date: '2026.07.14', items: ['대시보드 차트(월별 지출 현황·예산 소진율·클럽별 정산 횟수) 전체에서 같은 클럽은 항상 같은 색으로 통일', '예산 소진율 차트는 막대색 대신 소진율 % 숫자 글씨색으로 위험도(안전/주의/초과) 표시'] },
@@ -6559,22 +6570,25 @@ function _calcCorpForItem(amount, category) {
         return Math.max(0, Math.min(amount, perPersonCap, realRemaining));
     }
 
-    // 시설·장비 기본(미승인) 상태: 행사비와 동일한 "인당 지원 한도" 방식을 그대로 적용 — 이 항목 하나만
-    // 놓고 인당 자부담 4구간 공식을 적용한다 (실제 calculate()의 eventCost 집계에는 포함하지 않음 —
-    // 시설비 카테고리 자체는 그대로 유지되고, 이 값은 법인카드 한도 제안에만 쓰인다. v1.6.228)
-    if (category === ExpenseCategory.FACILITY) {
-        const perPersonCost = amount / memberCount;
-        const selfPayPerPerson = SettlementCalculator.calculateSelfPayPerPerson(perPersonCost, rules);
-        const policySupport = Math.max(0, amount - Math.round(selfPayPerPerson * memberCount));
-        return Math.max(0, Math.min(policySupport, realRemaining, amount));
-    }
-
-    const newItem = { amount, category };
-    const allItems = [...existingItems, newItem];
+    // 행사비(EVENT) + 시설·장비 기본(미승인) 상태는 "같은 인당 지원 한도 풀"로 합산해서 계산한다 —
+    // 시설비를 항목 하나만 놓고 독립적으로 계산하면, 이미 다른 행사비로 자부담 구간이 올라간 상태에서도
+    // 새 시설비 항목이 매번 100% 법인카드로 제안되는 문제가 생김 (v1.6.229에서 실사용 중 발견·수정).
+    // 계산용으로만 미승인 시설비의 카테고리를 EVENT로 취급 — 실제 저장 카테고리·calculate()의
+    // facilityCost 집계·엑셀 매핑은 변경 없음. 승인된 시설비/상품비는 풀에서 제외(각자 별도 규칙 유지).
+    const isPoolCategory = category === ExpenseCategory.EVENT || category === ExpenseCategory.FACILITY;
+    const toPoolItem = (it) => {
+        const isDefaultFacility = it.category === ExpenseCategory.FACILITY && !it.facilityApproved;
+        return (it.category === ExpenseCategory.EVENT || isDefaultFacility)
+            ? { amount: it.amount, category: ExpenseCategory.EVENT }
+            : it;
+    };
+    const existingForCalc = isPoolCategory ? existingItems.map(toPoolItem) : existingItems;
+    const newItem = isPoolCategory ? { amount, category: ExpenseCategory.EVENT } : { amount, category };
+    const allItems = [...existingForCalc, newItem];
 
     const resultAll = SettlementCalculator.calculate(memberCount, allItems, 0, rules);
-    const resultExisting = existingItems.length > 0
-        ? SettlementCalculator.calculate(memberCount, existingItems, 0, rules)
+    const resultExisting = existingForCalc.length > 0
+        ? SettlementCalculator.calculate(memberCount, existingForCalc, 0, rules)
         : { finalSupportAmount: 0 };
 
     // 이 항목만의 정책상 적정 법인부담 추정치 (구간표 기반 한계기여분 — 예산과 무관한 "정책 제안치")
