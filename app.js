@@ -1,8 +1,8 @@
 /**
  * Club Expense Settlement App - Main JavaScript Logic
  */
-const APP_VERSION      = '1.6.226';
-const APP_VERSION_DATE = '2026.07.14';
+const APP_VERSION      = '1.6.227';
+const APP_VERSION_DATE = '2026.07.16';
 
 // 인당 자부담 비용에 따라 강조 박스의 아이콘/색상을 전환 (100원 이상이면 🔥, 0이면 😊)
 function updatePerPersonSelfPayIcon(perPersonSelfPay) {
@@ -180,9 +180,6 @@ const SettlementCalculator = Object.freeze({
 
         if (prizeCost + previousPrizeTotal > (rules.prizeLimit || 500000)) {
             warnings.push("상품비 연 한도 50만원을 초과할 수 없습니다.");
-        }
-        if (facilityCost > 1000000) {
-            warnings.push("시설 및 장비 이용료가 1,000,000원을 초과하여 별도 협의가 필요합니다.");
         }
 
         const result = {
@@ -4420,6 +4417,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 변경이력 모달
     const CHANGELOG = [
+        { ver: '1.6.227', date: '2026.07.16', items: ['시설·장비 이용료가 100만원을 초과하면 뜨던 "별도 협의가 필요합니다" 경고 문구 삭제 (근거 불명확 — 사용자 요청)'] },
         { ver: '1.6.226', date: '2026.07.14', items: ['대시보드 차트(월별 지출 현황·예산 소진율·클럽별 정산 횟수) 전체에서 같은 클럽은 항상 같은 색으로 통일', '예산 소진율 차트는 막대색 대신 소진율 % 숫자 글씨색으로 위험도(안전/주의/초과) 표시'] },
         { ver: '1.6.225', date: '2026.07.14', items: ['클럽별 예산 소진율 차트 호버 시 표시 순서를 소진율·예산·사용·잔여 순으로 정리 (잔여 금액 추가)'] },
         { ver: '1.6.224', date: '2026.07.13', items: ['업데이트 내역 목록에 그동안 누락됐던 v1.6.184~223 일괄 추가'] },

@@ -61,9 +61,10 @@ const DefaultRules = {
 
 ### 경고 메시지 (warnings)
 - `prizeCost + previousPrizeTotal > 500,000` → 초과 금액 경고
-- `facilityCost > 1,000,000` → 별도 협의 필요 경고
 - (참고: "정회원 10명 이상 상품비 사용" 조건은 `calculate()` 내부가 아니라 UI 단(비용 항목 추가 폼)에서
   별도로 차단한다 — v1.6.187에서 `calculate()`의 중복 경고 문구를 제거함)
+- (v1.6.227에서 `facilityCost > 1,000,000` 경고를 제거함 — 근거 문서·요구사항을 찾을 수 없어 사용자
+  요청으로 삭제. 시설·장비 비용 자체 계산/한도(사전승인 `facilityLimit` 등)는 변경 없음)
 
 ## 3. 인당 자부담 비용 4단계 구간 — `calculateSelfPayPerPerson(cost, rules)`
 
