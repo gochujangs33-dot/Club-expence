@@ -1,7 +1,7 @@
 /**
  * Club Expense Settlement App - Main JavaScript Logic
  */
-const APP_VERSION      = '1.6.227';
+const APP_VERSION      = '1.6.228';
 const APP_VERSION_DATE = '2026.07.16';
 
 // 인당 자부담 비용에 따라 강조 박스의 아이콘/색상을 전환 (100원 이상이면 🔥, 0이면 😊)
@@ -1040,8 +1040,10 @@ const AppState = {
         }
     },
 
-    addExpense(description, amount, category, corpChecked, personalChecked, corporateAmountInput) {
+    addExpense(description, amount, category, corpChecked, personalChecked, corporateAmountInput, facilityApproved) {
         let cardType, corpAmount, personalAmount, receiptImage, corporateReceiptImage, personalReceiptImage;
+        // 시설·장비 항목이 "이사진 승인 한도 증액" 상태로 추가/수정됐는지 저장 — 수정 시 복원 기준 (v1.6.228)
+        const isFacilityApproved = (category === ExpenseCategory.FACILITY) && !!facilityApproved;
 
         if (corpChecked) {
             corpAmount = Math.min(Math.max(corporateAmountInput || 0, 0), amount);
@@ -1088,6 +1090,7 @@ const AppState = {
                 item.receiptImage = receiptImage;
                 item.corporateReceiptImage = corporateReceiptImage;
                 item.personalReceiptImage = personalReceiptImage;
+                item.facilityApproved = isFacilityApproved;
             }
         } else {
             const item = {
@@ -1100,7 +1103,8 @@ const AppState = {
                 personalAmount: personalAmount,
                 receiptImage,
                 corporateReceiptImage,
-                personalReceiptImage
+                personalReceiptImage,
+                facilityApproved: isFacilityApproved
             };
             this.expenseItems.push(item);
         }
@@ -1137,8 +1141,10 @@ const AppState = {
             document.getElementById('expense-desc-input').value = item.description;
             document.getElementById('expense-amount-input').value = formatAmount(item.amount);
             document.getElementById('expense-category-select').value = item.category;
-            // 시설·장비 항목 수정 시 승인 완료 상태 복원 (기존 항목은 이미 승인된 것으로 간주)
-            _facilityApproved = (item.category === ExpenseCategory.FACILITY);
+            // 시설·장비 항목 수정 시 저장된 승인 상태 그대로 복원 (v1.6.228 — 기본값과 승인 상태를 구분 저장)
+            _facilityApproved = (item.category === ExpenseCategory.FACILITY) && !!item.facilityApproved;
+            const facilityBoostCheckForEdit = document.getElementById('facility-boost-check');
+            if (facilityBoostCheckForEdit) facilityBoostCheckForEdit.checked = _facilityApproved;
 
             // Card type / split payment
             const cardType = item.cardType || 'corporate';
@@ -1198,6 +1204,9 @@ const AppState = {
         document.getElementById('expense-personal-check').checked = false;
         document.getElementById('expense-corporate-amount-input').value = '';
         document.getElementById('expense-personal-amount-input').value = '';
+        _facilityApproved = false;
+        const facilityBoostCheckOnCancel = document.getElementById('facility-boost-check');
+        if (facilityBoostCheckOnCancel) facilityBoostCheckOnCancel.checked = false;
 
         document.getElementById('expense-receipt-corp-input').value = '';
         this.tempCorpReceiptImage = null;
@@ -3551,7 +3560,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     return;
                 }
             }
-            AppState.addExpense(description, amount, category, corpChecked, personalChecked, corporateAmount);
+            AppState.addExpense(description, amount, category, corpChecked, personalChecked, corporateAmount, _facilityApproved);
             _corpOverLimitApproved = false; // 승인 플래그는 항목 하나당 1회만 유효 — 추가 완료 후 소진
             syncPrizeTotalFromItems();
             descInput.focus();
@@ -3572,27 +3581,12 @@ document.addEventListener('DOMContentLoaded', () => {
     // 총액·카테고리 변경 → 토글 자동 설정 + 구간별 법인카드 계산 후 UI 갱신
     amountInput.addEventListener('input', () => { _corpOverLimitApproved = false; autoSetTogglesAndCorp(); updateCardTypeUI(); });
     if (catSelect) catSelect.addEventListener('change', () => {
-        // 시설·장비 선택 시 사전 승인 여부 확인
-        if (catSelect.value === ExpenseCategory.FACILITY) {
-            _facilityApproved = false;
-            showFacilityApprovalModal(
-                () => {
-                    // 승인 완료 → FACILITY 유지, 법인카드 최대 85,000원
-                    _facilityApproved = true;
-                    autoSetTogglesAndCorp(); updateCardTypeUI();
-                },
-                () => {
-                    // 승인 없음 → 행사비(EVENT)로 변경
-                    _facilityApproved = false;
-                    catSelect.value = ExpenseCategory.EVENT;
-                    autoSetTogglesAndCorp(); updateCardTypeUI();
-                }
-            );
-            return;
-        }
-        // 다른 카테고리로 변경 시 승인 플래그 초기화
+        // 카테고리 변경 시 승인 플래그·체크박스 초기화 — 시설·장비는 기본값(인당 지원 한도)으로
+        // 시작하고, 한도 증액이 필요하면 별도 체크박스에서 이사진 승인 여부를 확인한다 (v1.6.228)
         _facilityApproved = false;
         _corpOverLimitApproved = false;
+        const facilityBoostCheck = document.getElementById('facility-boost-check');
+        if (facilityBoostCheck) facilityBoostCheck.checked = false;
         if (catSelect.value === ExpenseCategory.PRIZE) {
             const memberCount = AppState.memberCount || 0;
             const editingId = AppState.editingItemId || null;
@@ -3631,6 +3625,29 @@ document.addEventListener('DOMContentLoaded', () => {
         autoSetTogglesAndCorp(); updateCardTypeUI();
     });
     updateCardTypeUI();
+
+    // 시설·장비 "이사진 승인 한도 증액" 체크박스 — 체크할 때만 확인 팝업, 해제는 즉시 반영(재확인 불필요)
+    const facilityBoostCheck = document.getElementById('facility-boost-check');
+    if (facilityBoostCheck) {
+        facilityBoostCheck.addEventListener('change', () => {
+            if (facilityBoostCheck.checked) {
+                showFacilityApprovalModal(
+                    () => {
+                        _facilityApproved = true;
+                        autoSetTogglesAndCorp(); updateCardTypeUI();
+                    },
+                    () => {
+                        facilityBoostCheck.checked = false;
+                        _facilityApproved = false;
+                        autoSetTogglesAndCorp(); updateCardTypeUI();
+                    }
+                );
+            } else {
+                _facilityApproved = false;
+                autoSetTogglesAndCorp(); updateCardTypeUI();
+            }
+        });
+    }
 
     // Cancel edit listener
     document.getElementById('cancel-edit-btn').addEventListener('click', () => {
@@ -4417,6 +4434,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 변경이력 모달
     const CHANGELOG = [
+        { ver: '1.6.228', date: '2026.07.16', items: ['시설·장비 이용료 선택 즉시 뜨던 승인 팝업 제거 — 기본값은 행사비와 동일한 인당 지원 한도 자동 적용', '"이사진 승인 한도 증액" 체크박스 추가 — 체크 시 확인 팝업 후 인당 최대 85,000원까지 법인카드 한도 증액'] },
         { ver: '1.6.227', date: '2026.07.16', items: ['시설·장비 이용료가 100만원을 초과하면 뜨던 "별도 협의가 필요합니다" 경고 문구 삭제 (근거 불명확 — 사용자 요청)'] },
         { ver: '1.6.226', date: '2026.07.14', items: ['대시보드 차트(월별 지출 현황·예산 소진율·클럽별 정산 횟수) 전체에서 같은 클럽은 항상 같은 색으로 통일', '예산 소진율 차트는 막대색 대신 소진율 % 숫자 글씨색으로 위험도(안전/주의/초과) 표시'] },
         { ver: '1.6.225', date: '2026.07.14', items: ['클럽별 예산 소진율 차트 호버 시 표시 순서를 소진율·예산·사용·잔여 순으로 정리 (잔여 금액 추가)'] },
@@ -6333,6 +6351,11 @@ function updateCardTypeUI() {
     // 상품비: 반드시 법인카드만, 개인카드 사용 불가
     const category = (document.getElementById('expense-category-select') || {}).value || '';
     const isPrize = category === ExpenseCategory.PRIZE;
+
+    // 시설·장비일 때만 "이사진 승인 한도 증액" 체크박스 노출
+    const facilityBoostWrap = document.getElementById('facility-boost-wrap');
+    if (facilityBoostWrap) facilityBoostWrap.classList.toggle('hidden', category !== ExpenseCategory.FACILITY);
+
     const personalToggleLabel = personalCheck.closest ? personalCheck.closest('label') : null;
     if (isPrize) {
         corpCheck.checked = true;
@@ -6511,12 +6534,6 @@ function _calcCorpForItem(amount, category) {
     const memberCount = AppState.memberCount || 0;
     const rules = AppState.rules || DefaultRules;
     if (amount <= 0) return 0;
-
-    // 시설·장비: 사전 승인 완료 시 facilityLimit(기본 85,000원)까지만 법인카드
-    if (category === ExpenseCategory.FACILITY && _facilityApproved) {
-        return Math.min(amount, rules.facilityLimit || 85000);
-    }
-
     if (memberCount <= 0) return amount; // 인원 미설정 시 전액 법인
 
     // 클럽 잔여 예산 (이번 세션 이전까지 남은 예산 — 저장된 이력 기준)
@@ -6528,6 +6545,30 @@ function _calcCorpForItem(amount, category) {
     const editingId = AppState.editingItemId || null;
     const existingItems = (AppState.expenseItems || []).filter(item => item.id !== editingId);
 
+    // 이번 세션에서 다른 항목에 이미 실제로 배정된 법인카드 금액(수동 조정분 포함, v1.6.215+ 실제 값 기준)
+    // — 이걸 반영하지 않으면 관리자가 앞선 항목의 법인카드 금액을 정책 제안치보다 더 많이 수동 조정한 경우
+    // (예: 예산 전액 소진) 뒤에 추가하는 항목에도 여전히 법인카드를 제안하는 오류가 생김
+    const alreadyCorpAssigned = existingItems.reduce((s, it) => s + (it.corporateAmount || 0), 0);
+    const realRemaining = availableBudgetTotal === Infinity
+        ? Infinity
+        : Math.max(0, availableBudgetTotal - alreadyCorpAssigned);
+
+    // 시설·장비: 이사진 승인(한도 증액 체크) 완료 시 인당 facilityLimit(기본 85,000원)까지 법인카드
+    if (category === ExpenseCategory.FACILITY && _facilityApproved) {
+        const perPersonCap = memberCount * (rules.facilityLimit || 85000);
+        return Math.max(0, Math.min(amount, perPersonCap, realRemaining));
+    }
+
+    // 시설·장비 기본(미승인) 상태: 행사비와 동일한 "인당 지원 한도" 방식을 그대로 적용 — 이 항목 하나만
+    // 놓고 인당 자부담 4구간 공식을 적용한다 (실제 calculate()의 eventCost 집계에는 포함하지 않음 —
+    // 시설비 카테고리 자체는 그대로 유지되고, 이 값은 법인카드 한도 제안에만 쓰인다. v1.6.228)
+    if (category === ExpenseCategory.FACILITY) {
+        const perPersonCost = amount / memberCount;
+        const selfPayPerPerson = SettlementCalculator.calculateSelfPayPerPerson(perPersonCost, rules);
+        const policySupport = Math.max(0, amount - Math.round(selfPayPerPerson * memberCount));
+        return Math.max(0, Math.min(policySupport, realRemaining, amount));
+    }
+
     const newItem = { amount, category };
     const allItems = [...existingItems, newItem];
 
@@ -6538,14 +6579,6 @@ function _calcCorpForItem(amount, category) {
 
     // 이 항목만의 정책상 적정 법인부담 추정치 (구간표 기반 한계기여분 — 예산과 무관한 "정책 제안치")
     const policyDelta = Math.max(0, resultAll.finalSupportAmount - resultExisting.finalSupportAmount);
-
-    // 이번 세션에서 다른 항목에 이미 실제로 배정된 법인카드 금액(수동 조정분 포함, v1.6.215+ 실제 값 기준)
-    // — 이걸 반영하지 않으면 관리자가 앞선 항목의 법인카드 금액을 정책 제안치보다 더 많이 수동 조정한 경우
-    // (예: 예산 전액 소진) 뒤에 추가하는 항목에도 여전히 법인카드를 제안하는 오류가 생김
-    const alreadyCorpAssigned = existingItems.reduce((s, it) => s + (it.corporateAmount || 0), 0);
-    const realRemaining = availableBudgetTotal === Infinity
-        ? Infinity
-        : Math.max(0, availableBudgetTotal - alreadyCorpAssigned);
 
     const corp = Math.min(policyDelta, realRemaining);
     return Math.max(0, Math.min(corp, amount));
