@@ -1,7 +1,7 @@
 /**
  * Club Expense Settlement App - Main JavaScript Logic
  */
-const APP_VERSION      = '1.6.229';
+const APP_VERSION      = '1.6.230';
 const APP_VERSION_DATE = '2026.07.16';
 
 // 인당 자부담 비용에 따라 강조 박스의 아이콘/색상을 전환 (100원 이상이면 🔥, 0이면 😊)
@@ -2987,7 +2987,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (editModeCancelBtn) {
         editModeCancelBtn.addEventListener('click', () => {
             AppState.cancelEditMode();
-            AppState.render();
+            resetSettlementSession();
         });
     }
 
@@ -4444,6 +4444,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 변경이력 모달
     const CHANGELOG = [
+        { ver: '1.6.230', date: '2026.07.16', items: ['정산 이력 수정 중 "수정 취소"를 눌러도 팝업 없이 비용 정산 화면이 바로 정산 초기화되도록 수정'] },
         { ver: '1.6.229', date: '2026.07.16', items: ['정산 이력 수정 완료 후 비용 정산 화면이 자동으로 "정산 초기화"되도록 수정 (이전엔 수정한 내용이 그대로 남아있었음)', '시설·장비 기본(미승인) 법인카드 제안액을 행사비와 같은 "인당 지원 한도 풀"에 합산해서 계산하도록 수정 — 이미 다른 행사비가 있어도 새 시설비마다 100% 법인카드로 잘못 제안되던 문제 수정'] },
         { ver: '1.6.228', date: '2026.07.16', items: ['시설·장비 이용료 선택 즉시 뜨던 승인 팝업 제거 — 기본값은 행사비와 동일한 인당 지원 한도 자동 적용', '"이사진 승인 한도 증액" 체크박스 추가 — 체크 시 확인 팝업 후 인당 최대 85,000원까지 법인카드 한도 증액'] },
         { ver: '1.6.227', date: '2026.07.16', items: ['시설·장비 이용료가 100만원을 초과하면 뜨던 "별도 협의가 필요합니다" 경고 문구 삭제 (근거 불명확 — 사용자 요청)'] },
