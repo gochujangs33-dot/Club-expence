@@ -195,13 +195,6 @@
                                         </select>
                                     </div>
                                 </div>
-                                <div class="input-group hidden" id="facility-boost-wrap">
-                                    <label class="card-toggle" for="facility-boost-check" data-tooltip="체크하면 이사진 승인 여부를 확인하는 팝업이 뜨고, 승인 시 인당 법인카드 한도가 85,000원까지 늘어납니다. 체크하지 않으면 행사비와 동일한 인당 지원 한도가 기본 적용됩니다.">
-                                        <input type="checkbox" id="facility-boost-check">
-                                        <span class="card-toggle-track"><span class="card-toggle-thumb"></span></span>
-                                        <span class="card-toggle-label">이사진 승인 한도 증액 (인당 85,000원)</span>
-                                    </label>
-                                </div>
                                 <div class="input-row">
                                     <div class="input-group flex-1 hidden" id="corp-amount-group" style="display:flex; flex-direction:column;">
                                         <div style="display:flex; align-items:center; gap:0.6rem; flex-wrap:wrap;">
@@ -1135,17 +1128,14 @@
         </div>
     </div>
 
-    <!-- 시설·장비 사전 승인 확인 모달 -->
+    <!-- 시설·장비 이용 안내 팝업 (확인 전용 — 계산 분기 없음, 단순 승인 여부 상기용) -->
     <div id="facility-approval-modal" style="display:none; position:fixed; inset:0; z-index:10100; background:rgba(0,0,0,0.75); backdrop-filter:blur(6px); align-items:center; justify-content:center;">
         <div style="background:linear-gradient(160deg,#1a0a00,#1f1206); border:2px solid rgba(251,113,10,0.7); border-radius:20px; padding:1.6rem 1.4rem 1.3rem; max-width:340px; width:calc(100% - 2.4rem); box-shadow:0 0 40px rgba(251,113,10,0.35), 0 12px 48px rgba(0,0,0,0.7); text-align:center;">
             <div style="font-size:2.6rem; margin-bottom:0.6rem;">⚠️</div>
-            <div style="font-size:0.72rem; color:rgba(251,113,10,0.7); font-weight:700; letter-spacing:0.1em; text-transform:uppercase; margin-bottom:0.5rem;">시설·장비 한도 증액 승인 확인</div>
-            <p style="font-size:1.0rem; font-weight:800; color:#fff; line-height:1.6; margin:0 0 0.3rem;">시설 및 장비 이용료는<br>이사진의 승인이 있어야<br>인당 <span id="facility-modal-limit" style="color:#fb710a; font-size:1.15rem;">85,000원</span>까지<br>사용이 가능합니다.</p>
-            <p style="font-size:0.95rem; font-weight:700; color:rgba(255,200,150,0.9); margin:0 0 1.3rem;">승인 받으셨습니까?</p>
-            <div style="display:flex; gap:0.7rem;">
-                <button id="facility-no-approval-btn" style="flex:1; padding:0.65rem; background:rgba(255,255,255,0.07); border:1px solid rgba(255,255,255,0.2); color:rgba(255,255,255,0.65); border-radius:10px; font-size:0.82rem; font-weight:600; cursor:pointer;">❌ 아니오<br><span style="font-size:0.7rem; font-weight:400; opacity:0.75;">(행사비 방식과 동일하게 계산)</span></button>
-                <button id="facility-approved-btn" style="flex:1.2; padding:0.65rem; background:linear-gradient(135deg,rgba(251,113,10,0.9),rgba(220,80,0,0.9)); border:none; color:#fff; border-radius:10px; font-size:0.9rem; font-weight:800; cursor:pointer; box-shadow:0 4px 18px rgba(251,113,10,0.4);">✅ 예<br><span style="font-size:0.7rem; font-weight:400; opacity:0.85;">(인당 최대 85,000원까지 증액)</span></button>
-            </div>
+            <div style="font-size:0.72rem; color:rgba(251,113,10,0.7); font-weight:700; letter-spacing:0.1em; text-transform:uppercase; margin-bottom:0.5rem;">시설·장비 이용 안내</div>
+            <p style="font-size:1.0rem; font-weight:800; color:#fff; line-height:1.6; margin:0 0 0.5rem;">시설 및 장비 이용에 대해<br>임원진의 승인을 받으셨나요?</p>
+            <p style="font-size:0.82rem; color:rgba(255,200,150,0.8); margin:0 0 1.3rem; line-height:1.5;">인당 <span id="facility-modal-limit" style="color:#fb710a; font-weight:700;">85,000원</span>까지 법인카드로 처리되며,<br>초과분은 자동으로 자부담(개인카드) 처리됩니다.</p>
+            <button id="facility-approved-btn" style="width:100%; padding:0.7rem; background:linear-gradient(135deg,rgba(251,113,10,0.9),rgba(220,80,0,0.9)); border:none; color:#fff; border-radius:10px; font-size:0.92rem; font-weight:800; cursor:pointer; box-shadow:0 4px 18px rgba(251,113,10,0.4);">확인</button>
         </div>
     </div>
 
