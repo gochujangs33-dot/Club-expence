@@ -1,7 +1,7 @@
 /**
  * Club Expense Settlement App - Main JavaScript Logic
  */
-const APP_VERSION      = '1.6.232';
+const APP_VERSION      = '1.6.233';
 const APP_VERSION_DATE = '2026.07.16';
 
 // 인당 자부담 비용에 따라 강조 박스의 아이콘/색상을 전환 (100원 이상이면 🔥, 0이면 😊)
@@ -1433,7 +1433,11 @@ const AppState = {
         this.expenseItems = [];
         this.attendees = [];
         this.memberCount = 0;
-        this.previousPrizeTotal = 0;
+        // 상품비 연간 누적은 세션 데이터가 아니라 클럽 단위 확정값 — 0으로 지우면 연 50만원 한도
+        // 검증이 "누적 0원" 기준으로 계산돼 한도 초과 등록이 통과되는 구멍이 생김 (v1.6.233)
+        this.previousPrizeTotal = (this.clubId && this.clubRegistry[this.clubId])
+            ? (this.clubRegistry[this.clubId].prizeUsed || 0)
+            : 0;
         this.eventPhotos = [];
         this.tempCorpReceiptImage = null;
         this.tempPersonalReceiptImage = null;
@@ -1447,7 +1451,7 @@ const AppState = {
         const memberInput = document.getElementById('member-count-input');
         const prizeInput = document.getElementById('prev-prize-input');
         if (memberInput) memberInput.value = 0;
-        if (prizeInput) prizeInput.value = 0;
+        if (prizeInput) prizeInput.value = formatAmount(this.previousPrizeTotal);
 
         this.cancelEdit();
         this.cancelEditAttendee();
@@ -1562,6 +1566,18 @@ const AppState = {
                 dirIdTotal += (typeof v === 'object' && Array.isArray(v.ids) && v.ids.length > 0) ? v.ids.length : 1;
             });
             dirBadgeCount.textContent = dirIdTotal;
+        }
+
+        // 상품비 잔여 한도 표시 (연 한도 - 클럽 확정 누적 - 이번 세션 상품비) — v1.6.233
+        const prizeRemainingHint = document.getElementById('prize-remaining-hint');
+        if (prizeRemainingHint) {
+            const _prizeLimit = (this.rules && this.rules.prizeLimit) || 500000;
+            const _sessionPrize = (this.expenseItems || [])
+                .filter(i => i.category === ExpenseCategory.PRIZE)
+                .reduce((s, i) => s + (i.amount || 0), 0);
+            const _prizeLeft = Math.max(0, _prizeLimit - (this.previousPrizeTotal || 0) - _sessionPrize);
+            prizeRemainingHint.textContent = `🎁 올해 상품비 잔여 한도: ${_prizeLeft.toLocaleString()}원`;
+            prizeRemainingHint.style.color = _prizeLeft <= 0 ? '#f87171' : '#4ade80';
         }
 
         // Update Warnings UI
@@ -2715,7 +2731,10 @@ function resetSettlementSession() {
     AppState.expenseItems = [];
     AppState.attendees = [];
     AppState.memberCount = 0;
-    AppState.previousPrizeTotal = 0;
+    // 상품비 연간 누적은 클럽 단위 확정값 — 0으로 지우지 않고 clubRegistry 기준으로 복원 (v1.6.233)
+    AppState.previousPrizeTotal = (AppState.clubId && AppState.clubRegistry[AppState.clubId])
+        ? (AppState.clubRegistry[AppState.clubId].prizeUsed || 0)
+        : 0;
     AppState.lastCalculatedSelfPay = 0;
     AppState.selfPayManuallyOverridden = false;
     AppState.eventPhotos = [];
@@ -2726,7 +2745,7 @@ function resetSettlementSession() {
     document.getElementById('expense-personal-check').checked = false;
     document.getElementById('expense-corporate-amount-input').value = '';
     document.getElementById('expense-personal-amount-input').value = '';
-    document.getElementById('prev-prize-input').value = 0;
+    document.getElementById('prev-prize-input').value = formatAmount(AppState.previousPrizeTotal);
     if (typeof updateCardTypeUI === 'function') updateCardTypeUI();
     const settleDateEl = document.getElementById('settlement-date-input');
     if (settleDateEl) settleDateEl.value = new Date().toISOString().slice(0, 10);
@@ -3473,6 +3492,36 @@ document.addEventListener('DOMContentLoaded', () => {
                             `이사진 승인 하에 인당 최대 <b>${_perPersonCap.toLocaleString()}원</b>까지 지원받기로 하였나요?`,
                             () => { _corpOverLimitApproved = true; },
                             () => { _corpOverLimitApproved = false; _revertToBracket(); }
+                        );
+                        return;
+                    }
+                }
+            }
+
+            // ⓪-2 시설·장비: 법인카드 지정액이 인당 한도(facilityLimit × 인원수)를 초과하면 차단 (v1.6.233)
+            // 자동 제안값은 _calcCorpForItem이 이미 한도를 지키지만, 수동 입력으로 초과하는 경우를 막는다.
+            // 한도는 정산 1건 전체 기준 — 같은 세션의 다른 시설비 항목 법인카드와 합산해 검사.
+            if (category === ExpenseCategory.FACILITY && _requestedCorp > 0) {
+                const _fMemberCount = AppState.memberCount || 0;
+                if (_fMemberCount > 0) {
+                    const _fLimit = (AppState.rules || DefaultRules).facilityLimit || 85000;
+                    const _fCapTotal = _fMemberCount * _fLimit;
+                    const _fExistingCorp = _existItems
+                        .filter(i => i.category === ExpenseCategory.FACILITY)
+                        .reduce((s, i) => s + (i.corporateAmount || 0), 0);
+                    if (_fExistingCorp + _requestedCorp > _fCapTotal) {
+                        const _fCapLeft = Math.max(0, _fCapTotal - _fExistingCorp);
+                        showPrizeModal(
+                            `시설·장비 이용료의 법인카드 사용은 인당 ${_fLimit.toLocaleString()}원을 초과할 수 없습니다.\n` +
+                            `(인당 ${_fLimit.toLocaleString()}원 × ${_fMemberCount}명 = 최대 ${_fCapTotal.toLocaleString()}원)\n` +
+                            `이 항목에 사용 가능한 법인카드: ${_fCapLeft.toLocaleString()}원\n` +
+                            `확인을 누르면 법인카드 금액이 한도로 조정되고, 초과분은 개인카드(자부담)로 처리됩니다.`,
+                            () => {
+                                const _corpInput = document.getElementById('expense-corporate-amount-input');
+                                if (_corpInput) _corpInput.value = formatAmount(Math.min(amount, _fCapLeft));
+                                if (typeof updateCardTypeUI === 'function') updateCardTypeUI();
+                            },
+                            'block'
                         );
                         return;
                     }
@@ -4406,6 +4455,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 변경이력 모달
     const CHANGELOG = [
+        { ver: '1.6.233', date: '2026.07.16', items: ['클럽 전환·정산 초기화 후 상품비 연간 누적액이 0으로 지워져 연 50만원 한도 검증이 뚫릴 수 있던 문제 수정', '상품비 누적액 아래에 올해 잔여 한도 표시 추가', '시설·장비 법인카드를 수동 입력해도 인당 85,000원 × 인원수 한도를 초과할 수 없도록 차단', '오프라인 상태에서 회원가입 시도 시 안내 문구 표시 (기존엔 무반응)'] },
         { ver: '1.6.232', date: '2026.07.16', items: ['시설·장비 이용료 계산 방식 최종 정리 — 인원수와 무관하게 항상 인당 85,000원(관리자 설정 가능) × 참석 인원수까지만 법인카드, 초과분은 자동 자부담', '카테고리 선택 시 뜨던 승인 체크박스·2버튼 팝업을 단순 안내 팝업(확인 버튼만)으로 교체'] },
         { ver: '1.6.231', date: '2026.07.16', items: ['신규 가입 시 이름·PIN이 모두 기존 가입자와 동일하면 "이미 가입되어 있습니다." 문구로 안내 (PIN만 겹치고 이름이 다른 진짜 충돌은 기존 문구 유지)'] },
         { ver: '1.6.230', date: '2026.07.16', items: ['정산 이력 수정 중 "수정 취소"를 눌러도 팝업 없이 비용 정산 화면이 바로 정산 초기화되도록 수정'] },
@@ -4609,6 +4659,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
         regError.classList.add('hidden');
 
+        // 오프라인(Firebase 미초기화) 상태에서는 안내 후 중단 — 이전엔 TypeError로 버튼이 무반응이었음 (v1.6.233)
+        if (!firebaseDb) {
+            regError.textContent = "인터넷 연결 후 가입할 수 있습니다. 네트워크 상태를 확인해 주세요.";
+            regError.classList.remove('hidden');
+            return;
+        }
+
         // Check if PIN already exists in Firebase
         firebaseDb.ref(`users/${pin}`).once('value').then(snapshot => {
             if (snapshot.exists()) {
@@ -4653,6 +4710,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     regError.classList.remove('hidden');
                 });
             }
+        }).catch(() => {
+            // PIN 중복 확인 자체가 실패한 경우(네트워크 오류 등) — 이전엔 아무 안내 없이 무반응이었음 (v1.6.233)
+            regError.textContent = "네트워크 오류로 가입 확인에 실패했습니다. 잠시 후 다시 시도해 주세요.";
+            regError.classList.remove('hidden');
         });
     });
 
@@ -6531,9 +6592,14 @@ function _calcCorpForItem(amount, category) {
     // 시설·장비: 인원수와 무관하게 "정액성 비용"이라는 성격상 행사비 4구간 공식과는 별개로,
     // 항상 인당 rules.facilityLimit(기본 85,000원) × 참석 인원수까지만 법인카드, 초과분은 자부담
     // (카테고리 선택 시 뜨는 안내 팝업은 단순 알림일 뿐 이 계산 자체에는 영향을 주지 않는다. v1.6.232)
+    // 한도는 정산 1건 전체 기준 — 같은 세션의 다른 시설비 항목에 이미 배정된 법인카드만큼 차감 (v1.6.233)
     if (category === ExpenseCategory.FACILITY) {
-        const perPersonCap = memberCount * (rules.facilityLimit || 85000);
-        return Math.max(0, Math.min(amount, perPersonCap, realRemaining));
+        const facilityCapTotal = memberCount * (rules.facilityLimit || 85000);
+        const existingFacilityCorp = existingItems
+            .filter(it => it.category === ExpenseCategory.FACILITY)
+            .reduce((s, it) => s + (it.corporateAmount || 0), 0);
+        const facilityCapLeft = Math.max(0, facilityCapTotal - existingFacilityCorp);
+        return Math.max(0, Math.min(amount, facilityCapLeft, realRemaining));
     }
 
     const newItem = { amount, category };

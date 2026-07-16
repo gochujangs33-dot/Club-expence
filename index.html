@@ -151,6 +151,7 @@
                             <div class="input-group">
                                 <label for="prev-prize-input" data-i18n="label.prev_prize">상품비 누적액 (원)</label>
                                 <input type="text" id="prev-prize-input" value="0" readonly style="opacity:0.65; cursor:default; background:rgba(15,23,42,0.3);">
+                                <small class="input-hint" id="prize-remaining-hint" style="color:#4ade80; font-weight:500;"></small>
                             </div>
                         </div>
                     </div>
@@ -1134,7 +1135,7 @@
             <div style="font-size:2.6rem; margin-bottom:0.6rem;">⚠️</div>
             <div style="font-size:0.72rem; color:rgba(251,113,10,0.7); font-weight:700; letter-spacing:0.1em; text-transform:uppercase; margin-bottom:0.5rem;">시설·장비 이용 안내</div>
             <p style="font-size:1.0rem; font-weight:800; color:#fff; line-height:1.6; margin:0 0 0.5rem;">시설 및 장비 이용에 대해<br>임원진의 승인을 받으셨나요?</p>
-            <p style="font-size:0.82rem; color:rgba(255,200,150,0.8); margin:0 0 1.3rem; line-height:1.5;">인당 <span id="facility-modal-limit" style="color:#fb710a; font-weight:700;">85,000원</span>까지 법인카드로 처리되며,<br>초과분은 자동으로 자부담(개인카드) 처리됩니다.</p>
+            <p style="font-size:0.82rem; color:rgba(255,200,150,0.8); margin:0 0 1.3rem; line-height:1.5;">법인카드 사용은 인당 <span id="facility-modal-limit" style="color:#fb710a; font-weight:700;">85,000원</span>을<br>초과할 수 없습니다.</p>
             <button id="facility-approved-btn" style="width:100%; padding:0.7rem; background:linear-gradient(135deg,rgba(251,113,10,0.9),rgba(220,80,0,0.9)); border:none; color:#fff; border-radius:10px; font-size:0.92rem; font-weight:800; cursor:pointer; box-shadow:0 4px 18px rgba(251,113,10,0.4);">확인</button>
         </div>
     </div>
