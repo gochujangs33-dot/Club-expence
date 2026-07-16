@@ -1,7 +1,7 @@
 /**
  * Club Expense Settlement App - Main JavaScript Logic
  */
-const APP_VERSION      = '1.6.234';
+const APP_VERSION      = '1.6.235';
 const APP_VERSION_DATE = '2026.07.16';
 
 // 인당 자부담 비용에 따라 강조 박스의 아이콘/색상을 전환 (100원 이상이면 🔥, 0이면 😊)
@@ -4458,6 +4458,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 변경이력 모달
     const CHANGELOG = [
+        { ver: '1.6.235', date: '2026.07.16', items: ['가로 막대 차트에서 막대가 끝까지 차면 값 라벨(예: "28명")이 잘리던 문제 수정 — 공간이 없으면 막대 안쪽에 자동 표시'] },
         { ver: '1.6.234', date: '2026.07.16', items: ['새 차트 2개 추가 — "행사별 참석 인원"(정산 1건마다 참석 인원수, 클럽 고유 색), "클럽별 참석 인원(중복 제외)"(올해 각 클럽에 참석한 서로 다른 인원수, 많은 순)', '관리자 "추가 배정" 팝업에서 금액 입력 후 Enter로 바로 적용 (Escape는 취소)'] },
         { ver: '1.6.233', date: '2026.07.16', items: ['클럽 전환·정산 초기화 후 상품비 연간 누적액이 0으로 지워져 연 50만원 한도 검증이 뚫릴 수 있던 문제 수정', '상품비 누적액 아래에 올해 잔여 한도 표시 추가', '시설·장비 법인카드를 수동 입력해도 인당 85,000원 × 인원수 한도를 초과할 수 없도록 차단', '오프라인 상태에서 회원가입 시도 시 안내 문구 표시 (기존엔 무반응)'] },
         { ver: '1.6.232', date: '2026.07.16', items: ['시설·장비 이용료 계산 방식 최종 정리 — 인원수와 무관하게 항상 인당 85,000원(관리자 설정 가능) × 참석 인원수까지만 법인카드, 초과분은 자동 자부담', '카테고리 선택 시 뜨던 승인 체크박스·2버튼 팝업을 단순 안내 팝업(확인 버튼만)으로 교체'] },
@@ -5446,13 +5447,24 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
             } else if (chart.options.indexAxis === 'y') {
                 // 가로 막대: 막대 끝(tip)에 표시. getColor(i)가 있으면 항목별 색상(예: 위험도) 우선 적용
+                // 막대가 차트 오른쪽 끝까지 차서 바깥에 쓸 공간이 없으면 막대 안쪽에 표시 (라벨 잘림 방지, v1.6.235)
                 const meta = chart.getDatasetMeta(0);
+                const area = chart.chartArea;
                 meta.data.forEach((bar, i) => {
                     const text = opts.getLabel(i);
                     if (!text) return;
-                    ctx.textAlign = 'left';
-                    ctx.fillStyle = (opts.getColor ? opts.getColor(i) : opts.color) || '#e2e8f0';
-                    ctx.fillText(text, bar.x + 8, bar.y);
+                    const textW = ctx.measureText(text).width;
+                    if (area && bar.x + 8 + textW > area.right) {
+                        const dsBg = chart.data.datasets[0].backgroundColor;
+                        const bg = Array.isArray(dsBg) ? dsBg[i] : dsBg;
+                        ctx.textAlign = 'right';
+                        ctx.fillStyle = (opts.getColor ? opts.getColor(i) : null) || pickTextColorForBg(bg);
+                        ctx.fillText(text, bar.x - 8, bar.y);
+                    } else {
+                        ctx.textAlign = 'left';
+                        ctx.fillStyle = (opts.getColor ? opts.getColor(i) : opts.color) || '#e2e8f0';
+                        ctx.fillText(text, bar.x + 8, bar.y);
+                    }
                 });
             } else {
                 // 세로 막대(단일/스택): 스택 합계를 맨 위 캡에 표시
