@@ -648,6 +648,38 @@
                         </div>
                     </div>
                 </div>
+
+                <!-- 행사별 참석 인원 -->
+                <div class="card chart-card-glow">
+                    <div class="card-header">
+                        <span class="card-icon">🙋</span>
+                        <div>
+                            <h2>행사별 참석 인원</h2>
+                            <div class="chart-subtitle">정산(행사) 1건마다 참석한 인원수</div>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div class="chart-canvas-wrap">
+                            <canvas id="event-attendance-chart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 클럽별 참석 인원 (중복 제외) -->
+                <div class="card chart-card-glow">
+                    <div class="card-header">
+                        <span class="card-icon">👥</span>
+                        <div>
+                            <h2>클럽별 참석 인원 (중복 제외)</h2>
+                            <div class="chart-subtitle">올해 각 클럽 행사에 참석한 서로 다른 인원수 — 많은 순</div>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div class="chart-canvas-wrap">
+                            <canvas id="club-unique-attendees-chart"></canvas>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <!-- 전폭: 자부담 vs 회사지원금 추이 -->

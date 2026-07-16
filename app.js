@@ -1,7 +1,7 @@
 /**
  * Club Expense Settlement App - Main JavaScript Logic
  */
-const APP_VERSION      = '1.6.233';
+const APP_VERSION      = '1.6.234';
 const APP_VERSION_DATE = '2026.07.16';
 
 // 인당 자부담 비용에 따라 강조 박스의 아이콘/색상을 전환 (100원 이상이면 🔥, 0이면 😊)
@@ -29,6 +29,9 @@ function parseAmount(val) {
 // 금액 입력란에 입력하는 즉시 1000단위 콤마(,)를 적용
 function setupCurrencyInput(el) {
     if (!el) return;
+    // 같은 입력창에 반복 호출돼도 리스너가 쌓이지 않도록 1회만 등록 (추가 배정 팝업은 열 때마다 호출됨)
+    if (el._currencyBound) return;
+    el._currencyBound = true;
     el.addEventListener('input', () => {
         const cursorFromEnd = el.value.length - el.selectionStart;
         const num = parseAmount(el.value);
@@ -4455,6 +4458,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 변경이력 모달
     const CHANGELOG = [
+        { ver: '1.6.234', date: '2026.07.16', items: ['새 차트 2개 추가 — "행사별 참석 인원"(정산 1건마다 참석 인원수, 클럽 고유 색), "클럽별 참석 인원(중복 제외)"(올해 각 클럽에 참석한 서로 다른 인원수, 많은 순)', '관리자 "추가 배정" 팝업에서 금액 입력 후 Enter로 바로 적용 (Escape는 취소)'] },
         { ver: '1.6.233', date: '2026.07.16', items: ['클럽 전환·정산 초기화 후 상품비 연간 누적액이 0으로 지워져 연 50만원 한도 검증이 뚫릴 수 있던 문제 수정', '상품비 누적액 아래에 올해 잔여 한도 표시 추가', '시설·장비 법인카드를 수동 입력해도 인당 85,000원 × 인원수 한도를 초과할 수 없도록 차단', '오프라인 상태에서 회원가입 시도 시 안내 문구 표시 (기존엔 무반응)'] },
         { ver: '1.6.232', date: '2026.07.16', items: ['시설·장비 이용료 계산 방식 최종 정리 — 인원수와 무관하게 항상 인당 85,000원(관리자 설정 가능) × 참석 인원수까지만 법인카드, 초과분은 자동 자부담', '카테고리 선택 시 뜨던 승인 체크박스·2버튼 팝업을 단순 안내 팝업(확인 버튼만)으로 교체'] },
         { ver: '1.6.231', date: '2026.07.16', items: ['신규 가입 시 이름·PIN이 모두 기존 가입자와 동일하면 "이미 가입되어 있습니다." 문구로 안내 (PIN만 겹치고 이름이 다른 진짜 충돌은 기존 문구 유지)'] },
@@ -5897,12 +5901,152 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    let eventAttendanceChartInstance = null;
+
+    // ── 행사별 참석 인원 (정산 1건 = 막대 1개, 클럽 고유 색) ─────────────────
+    function renderEventAttendanceChart(historyList) {
+        const canvas = document.getElementById('event-attendance-chart');
+        if (!canvas || typeof Chart === 'undefined') return;
+
+        const entries = (historyList || [])
+            .filter(e => e && (!selectedOverallClubs || selectedOverallClubs.has(e.clubName || '기본 클럽')))
+            .map(e => ({
+                club: e.clubName || '기본 클럽',
+                dateKey: e.settlementDate || (e.date ? e.date.slice(0, 10) : ''),
+                members: e.memberCount || (e.attendees ? e.attendees.length : 0)
+            }))
+            .sort((a, b) => a.dateKey.localeCompare(b.dateKey) );
+
+        if (eventAttendanceChartInstance) eventAttendanceChartInstance.destroy();
+        if (entries.length === 0) return;
+
+        const clubColorMap = getClubColorMap();
+        const labels = entries.map(en => {
+            const d = en.dateKey ? new Date(en.dateKey + 'T00:00:00') : null;
+            return d && !isNaN(d) ? `${d.getMonth() + 1}/${d.getDate()}` : '?';
+        });
+        const counts = entries.map(en => en.members);
+
+        eventAttendanceChartInstance = new Chart(canvas.getContext('2d'), {
+            type: 'bar',
+            data: {
+                labels,
+                datasets: [{
+                    label: '참석 인원',
+                    data: counts,
+                    backgroundColor: entries.map(en => clubColorFor(en.club, clubColorMap)),
+                    borderWidth: 0,
+                    borderRadius: 6
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                layout: { padding: { top: 18 } },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            title: (items) => {
+                                const en = entries[items[0].dataIndex];
+                                return `${en.club} · ${en.dateKey}`;
+                            },
+                            label: ctx => `참석 ${ctx.parsed.y}명`
+                        }
+                    },
+                    chartValueLabel: {
+                        color: '#e2e8f0',
+                        getLabel: (_idx, total) => `${total}명`
+                    }
+                },
+                scales: {
+                    x: { ticks: { color: '#94a3b8', font: { size: 10 } }, grid: { color: 'rgba(255,255,255,0.04)' } },
+                    y: { ticks: { color: '#94a3b8', stepSize: 1 }, grid: { color: 'rgba(255,255,255,0.05)' }, beginAtZero: true }
+                }
+            }
+        });
+    }
+
+    let clubUniqueAttendeesChartInstance = null;
+
+    // ── 클럽별 참석 인원(중복 제외) — 올해 각 클럽 행사에 참석한 "서로 다른 사람" 수, 많은 순 ──
+    function renderClubUniqueAttendeesChart(historyList) {
+        const canvas = document.getElementById('club-unique-attendees-chart');
+        if (!canvas || typeof Chart === 'undefined') return;
+
+        const currentYear = new Date().getFullYear();
+        // 클럽명 → Set(사번 기준 고유키; 사번 없는 참석자는 이름으로 폴백 — 동명이인 구분은 사번이 있을 때만 정확)
+        const uniqueMap = {};
+        (historyList || [])
+            .filter(e => {
+                if (!e) return false;
+                if (selectedOverallClubs && !selectedOverallClubs.has(e.clubName || '기본 클럽')) return false;
+                const y = e.settlementDate
+                    ? parseInt(e.settlementDate.slice(0, 4), 10)
+                    : (e.date ? new Date(e.date).getFullYear() : currentYear);
+                return y === currentYear;
+            })
+            .forEach(e => {
+                const club = e.clubName || '기본 클럽';
+                if (!uniqueMap[club]) uniqueMap[club] = new Set();
+                (e.attendees || []).forEach(a => {
+                    if (!a) return;
+                    const key = a.employeeId ? `id:${a.employeeId}` : (a.name ? `name:${a.name}` : null);
+                    if (key) uniqueMap[club].add(key);
+                });
+            });
+
+        const sorted = Object.entries(uniqueMap)
+            .map(([name, set]) => [name, set.size])
+            .sort((a, b) => b[1] - a[1]);
+
+        if (clubUniqueAttendeesChartInstance) clubUniqueAttendeesChartInstance.destroy();
+        if (sorted.length === 0) return;
+
+        const labels = sorted.map(([name]) => name);
+        const counts = sorted.map(([, cnt]) => cnt);
+        const clubColorMap = getClubColorMap();
+
+        clubUniqueAttendeesChartInstance = new Chart(canvas.getContext('2d'), {
+            type: 'bar',
+            data: {
+                labels,
+                datasets: [{
+                    label: '참석 인원 (중복 제외)',
+                    data: counts,
+                    backgroundColor: labels.map(name => clubColorFor(name, clubColorMap)),
+                    borderWidth: 0,
+                    borderRadius: 8
+                }]
+            },
+            options: {
+                indexAxis: 'y',
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: { callbacks: { label: ctx => `서로 다른 참석자 ${ctx.parsed.x}명` } },
+                    chartValueLabel: {
+                        color: '#e2e8f0',
+                        getLabel: (i) => `${counts[i]}명`
+                    }
+                },
+                scales: {
+                    x: { ticks: { color: '#94a3b8', stepSize: 1 }, grid: { color: 'rgba(255,255,255,0.04)' }, beginAtZero: true, suggestedMax: Math.max(...counts, 1) + 1 },
+                    y: { ticks: { color: '#cbd5e1', font: { size: 11 } }, grid: { display: false } }
+                }
+            }
+        });
+    }
+
     // 차트 탭의 모든 그래프를 한 번에 갱신
     function renderAllCharts(historyList) {
         renderOverallMonthlyChart(historyList);
         renderClubUsageChart(historyList);
         renderCategoryPieChart(historyList);
         renderClubActivityChart(historyList);
+        renderEventAttendanceChart(historyList);
+        renderClubUniqueAttendeesChart(historyList);
         renderSelfPayTrendChart(historyList);
     }
 
@@ -6242,6 +6386,11 @@ function openAddClubBudgetModal(clubName, onConfirm) {
     };
     confirmBtn.onclick = onConfirmClick;
     cancelBtn.onclick = close;
+    // Enter = 확인, Escape = 취소 (onclick과 동일하게 속성 할당 방식 — 재오픈 시 리스너 누적 없음)
+    input.onkeydown = (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); onConfirmClick(); }
+        else if (e.key === 'Escape') { e.preventDefault(); close(); }
+    };
 }
 
 function showDiffPopup(formula, diff) {
