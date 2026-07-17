@@ -1,8 +1,8 @@
 /**
  * Club Expense Settlement App - Main JavaScript Logic
  */
-const APP_VERSION      = '1.6.235';
-const APP_VERSION_DATE = '2026.07.16';
+const APP_VERSION      = '1.6.236';
+const APP_VERSION_DATE = '2026.07.17';
 
 // 인당 자부담 비용에 따라 강조 박스의 아이콘/색상을 전환 (100원 이상이면 🔥, 0이면 😊)
 function updatePerPersonSelfPayIcon(perPersonSelfPay) {
@@ -4458,6 +4458,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 변경이력 모달
     const CHANGELOG = [
+        { ver: '1.6.236', date: '2026.07.17', items: ['"행사별 참석 인원" 차트를 가로 목록형으로 개편 — 한 줄에 "클럽명 날짜 → 인원수"가 바로 읽히도록 (최근 15건, 최신순)'] },
         { ver: '1.6.235', date: '2026.07.16', items: ['가로 막대 차트에서 막대가 끝까지 차면 값 라벨(예: "28명")이 잘리던 문제 수정 — 공간이 없으면 막대 안쪽에 자동 표시'] },
         { ver: '1.6.234', date: '2026.07.16', items: ['새 차트 2개 추가 — "행사별 참석 인원"(정산 1건마다 참석 인원수, 클럽 고유 색), "클럽별 참석 인원(중복 제외)"(올해 각 클럽에 참석한 서로 다른 인원수, 많은 순)', '관리자 "추가 배정" 팝업에서 금액 입력 후 Enter로 바로 적용 (Escape는 취소)'] },
         { ver: '1.6.233', date: '2026.07.16', items: ['클럽 전환·정산 초기화 후 상품비 연간 누적액이 0으로 지워져 연 50만원 한도 검증이 뚫릴 수 있던 문제 수정', '상품비 누적액 아래에 올해 잔여 한도 표시 추가', '시설·장비 법인카드를 수동 입력해도 인당 85,000원 × 인원수 한도를 초과할 수 없도록 차단', '오프라인 상태에서 회원가입 시도 시 안내 문구 표시 (기존엔 무반응)'] },
@@ -5915,7 +5916,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     let eventAttendanceChartInstance = null;
 
-    // ── 행사별 참석 인원 (정산 1건 = 막대 1개, 클럽 고유 색) ─────────────────
+    // ── 행사별 참석 인원 (행사 1건 = 1줄 가로 목록형, "클럽명 날짜" 라벨 + 클럽 고유 색) ──
+    // 사용자가 원하는 읽기: "어떤 클럽이 · 며칠 행사에 · 몇 명 참석" — 세 정보가 호버 없이
+    // 한 줄에서 바로 읽히도록 세로 막대 → 가로 목록형으로 변경 (v1.6.236). 최근 행사가 위.
+    const EVENT_ATTENDANCE_MAX_ROWS = 15;
     function renderEventAttendanceChart(historyList) {
         const canvas = document.getElementById('event-attendance-chart');
         if (!canvas || typeof Chart === 'undefined') return;
@@ -5927,7 +5931,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 dateKey: e.settlementDate || (e.date ? e.date.slice(0, 10) : ''),
                 members: e.memberCount || (e.attendees ? e.attendees.length : 0)
             }))
-            .sort((a, b) => a.dateKey.localeCompare(b.dateKey) );
+            .sort((a, b) => b.dateKey.localeCompare(a.dateKey))
+            .slice(0, EVENT_ATTENDANCE_MAX_ROWS);
 
         if (eventAttendanceChartInstance) eventAttendanceChartInstance.destroy();
         if (entries.length === 0) return;
@@ -5935,7 +5940,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const clubColorMap = getClubColorMap();
         const labels = entries.map(en => {
             const d = en.dateKey ? new Date(en.dateKey + 'T00:00:00') : null;
-            return d && !isNaN(d) ? `${d.getMonth() + 1}/${d.getDate()}` : '?';
+            const dateLabel = d && !isNaN(d) ? `${d.getMonth() + 1}/${d.getDate()}` : '?';
+            return `${en.club} ${dateLabel}`;
         });
         const counts = entries.map(en => en.members);
 
@@ -5952,9 +5958,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 }]
             },
             options: {
+                indexAxis: 'y',
                 responsive: true,
                 maintainAspectRatio: false,
-                layout: { padding: { top: 18 } },
                 plugins: {
                     legend: { display: false },
                     tooltip: {
@@ -5963,17 +5969,17 @@ document.addEventListener('DOMContentLoaded', () => {
                                 const en = entries[items[0].dataIndex];
                                 return `${en.club} · ${en.dateKey}`;
                             },
-                            label: ctx => `참석 ${ctx.parsed.y}명`
+                            label: ctx => `참석 ${ctx.parsed.x}명`
                         }
                     },
                     chartValueLabel: {
                         color: '#e2e8f0',
-                        getLabel: (_idx, total) => `${total}명`
+                        getLabel: (i) => `${counts[i]}명`
                     }
                 },
                 scales: {
-                    x: { ticks: { color: '#94a3b8', font: { size: 10 } }, grid: { color: 'rgba(255,255,255,0.04)' } },
-                    y: { ticks: { color: '#94a3b8', stepSize: 1 }, grid: { color: 'rgba(255,255,255,0.05)' }, beginAtZero: true }
+                    x: { ticks: { color: '#94a3b8', stepSize: 1 }, grid: { color: 'rgba(255,255,255,0.04)' }, beginAtZero: true, suggestedMax: Math.max(...counts, 1) + 2 },
+                    y: { ticks: { color: '#cbd5e1', font: { size: 11 } }, grid: { display: false } }
                 }
             }
         });
