@@ -1649,6 +1649,132 @@ body:has(.update-banner:not(.hidden)) {
     background: rgba(255, 255, 255, 0.02);
 }
 
+/* 가입 회원 관리: 좁은 화면에서는 긴 날짜가 세로로 쪼개지지 않도록 회원별 카드 행으로 전환 */
+@media (max-width: 600px) {
+    #users-management-card .card-header {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    #users-management-card .card-header h2 {
+        line-height: 1.35;
+    }
+
+    #users-management-card .card-collapse-btn {
+        margin-left: 0;
+    }
+
+    #users-management-card .card-body {
+        overflow-x: hidden;
+    }
+
+    #users-management-card .admin-users-table {
+        display: block;
+        margin-top: 0.65rem;
+        font-size: 0.82rem;
+    }
+
+    #users-management-card .admin-users-table thead {
+        display: none;
+    }
+
+    #users-management-card .admin-users-table tbody {
+        display: flex;
+        flex-direction: column;
+        gap: 0.65rem;
+        padding: 0 0.1rem 0.1rem;
+    }
+
+    #users-management-card .admin-users-table tr {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        grid-template-areas:
+            "name pin"
+            "joined joined"
+            "login login"
+            "actions actions";
+        gap: 0.55rem 0.75rem;
+        padding: 0.8rem;
+        background: rgba(255, 255, 255, 0.025);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 12px;
+    }
+
+    #users-management-card .admin-users-table td {
+        min-width: 0;
+        padding: 0;
+        border-bottom: 0;
+        background: transparent;
+    }
+
+    #users-management-card .admin-users-table tr:hover td {
+        background: transparent;
+    }
+
+    #users-management-card .admin-users-table td:nth-child(1) {
+        grid-area: name;
+        align-self: center;
+        font-size: 0.9rem;
+    }
+
+    #users-management-card .admin-users-table td:nth-child(2) {
+        grid-area: pin;
+        align-self: center;
+        white-space: nowrap;
+    }
+
+    #users-management-card .admin-users-table td:nth-child(3),
+    #users-management-card .admin-users-table td:nth-child(4) {
+        display: grid;
+        grid-template-columns: 4.5rem minmax(0, 1fr);
+        align-items: center;
+        gap: 0.5rem;
+        padding-top: 0.45rem;
+        border-top: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    #users-management-card .admin-users-table td:nth-child(3) {
+        grid-area: joined;
+    }
+
+    #users-management-card .admin-users-table td:nth-child(4) {
+        grid-area: login;
+        padding-top: 0;
+        border-top: 0;
+    }
+
+    #users-management-card .admin-users-table td:nth-child(3)::before,
+    #users-management-card .admin-users-table td:nth-child(4)::before {
+        color: var(--text-secondary);
+        font-size: 0.72rem;
+        font-weight: 600;
+    }
+
+    #users-management-card .admin-users-table td:nth-child(3)::before {
+        content: "가입일";
+    }
+
+    #users-management-card .admin-users-table td:nth-child(4)::before {
+        content: "최근 접속";
+    }
+
+    #users-management-card .admin-users-table td:nth-child(3) span,
+    #users-management-card .admin-users-table td:nth-child(4) span {
+        text-align: right;
+        white-space: nowrap;
+    }
+
+    #users-management-card .admin-users-table td:nth-child(5) {
+        grid-area: actions;
+        display: flex;
+        justify-content: flex-end;
+        gap: 0.35rem;
+        padding-top: 0.15rem;
+    }
+}
+
 .admin-mode-title {
     font-family: var(--font-heading);
     font-size: 1.3rem;
