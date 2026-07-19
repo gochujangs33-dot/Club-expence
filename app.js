@@ -1,8 +1,8 @@
 /**
  * Club Expense Settlement App - Main JavaScript Logic
  */
-const APP_VERSION      = '1.6.236';
-const APP_VERSION_DATE = '2026.07.17';
+const APP_VERSION      = '1.6.237';
+const APP_VERSION_DATE = '2026.07.20';
 
 // 인당 자부담 비용에 따라 강조 박스의 아이콘/색상을 전환 (100원 이상이면 🔥, 0이면 😊)
 function updatePerPersonSelfPayIcon(perPersonSelfPay) {
@@ -77,6 +77,37 @@ const categoryNameMap = {
     [ExpenseCategory.FACILITY]: '시설 및 장비 이용료',
     [ExpenseCategory.PRIZE]: '상품'
 };
+
+// 정산 이력 호환 헬퍼: 신규 이력의 명시 필드와 구버전 expenseItems 구조를 모두 지원한다.
+function getHistoryPrizeCost(entry) {
+    if (!entry || typeof entry !== 'object') return 0;
+    const items = Array.isArray(entry.expenseItems) ? entry.expenseItems : [];
+    if (items.length > 0) {
+        return items.reduce((sum, item) => {
+            if (!item || item.category !== ExpenseCategory.PRIZE) return sum;
+            return sum + Math.max(0, parseAmount(item.amount));
+        }, 0);
+    }
+    return Math.max(0, parseAmount(entry.prizeCost));
+}
+
+function getHistoryEntryYear(entry) {
+    if (!entry || typeof entry !== 'object') return NaN;
+    if (entry.settlementDate && /^\d{4}/.test(entry.settlementDate)) {
+        return parseInt(entry.settlementDate.slice(0, 4), 10);
+    }
+    const rawDate = entry.date || (entry.id ? Number(entry.id) : null);
+    const date = rawDate ? new Date(rawDate) : null;
+    return date && !Number.isNaN(date.getTime()) ? date.getFullYear() : NaN;
+}
+
+function historyMatchesClub(entry, clubId, clubName) {
+    if (!entry || typeof entry !== 'object') return false;
+    const targetId = clubId === null || clubId === undefined ? '' : String(clubId);
+    const entryId = entry.clubId === null || entry.clubId === undefined ? '' : String(entry.clubId);
+    if (targetId && entryId && targetId === entryId) return true;
+    return !!clubName && entry.clubName === clubName;
+}
 
 // Default calculation thresholds and rates
 const DefaultRules = {
@@ -994,9 +1025,7 @@ const AppState = {
         }
         if (!this.firebaseDb || !this.isLoggedIn) {
             this.clubHistory = (this.settlementHistory || []).filter(e =>
-                e && (currentClubId
-                    ? (e.clubId === currentClubId || e.clubName === currentClubName)
-                    : e.clubName === currentClubName)
+                historyMatchesClub(e, currentClubId, currentClubName)
             );
             return;
         }
@@ -1010,9 +1039,7 @@ const AppState = {
             histSnap.forEach(child => {
                 const entry = child.val();
                 if (!entry || deletedIds.has(String(child.key))) return;
-                const matchById = currentClubId && (entry.clubId === currentClubId || entry.clubName === currentClubName);
-                const matchByName = !currentClubId && entry.clubName === currentClubName;
-                if (!matchById && !matchByName) return;
+                if (!historyMatchesClub(entry, currentClubId, currentClubName)) return;
                 allHistory.push(entry);
             });
             allHistory.sort((a, b) => {
@@ -1023,11 +1050,31 @@ const AppState = {
                 return (b.id || 0) - (a.id || 0);
             });
             this.clubHistory = allHistory;
+
+            // 구버전 이력은 prizeCost 필드 없이 expenseItems에만 상품비가 저장돼 있었다.
+            // 이력 합계가 레지스트리보다 큰 경우에만 상향 복구해, 동시 정산의 최신 누적값을 낮추지 않는다.
+            const currentYear = new Date().getFullYear();
+            const historyPrizeTotal = allHistory
+                .filter(entry => getHistoryEntryYear(entry) === currentYear)
+                .reduce((sum, entry) => sum + getHistoryPrizeCost(entry), 0);
+            const registryPair = currentClubId && this.clubRegistry[currentClubId]
+                ? [currentClubId, this.clubRegistry[currentClubId]]
+                : Object.entries(this.clubRegistry || {}).find(([, club]) => club && club.name === currentClubName);
+            if (registryPair) {
+                const [registryClubId, registryClub] = registryPair;
+                const registryPrizeUsed = Math.max(0, parseAmount(registryClub.prizeUsed));
+                if (historyPrizeTotal > registryPrizeUsed) {
+                    registryClub.prizeUsed = historyPrizeTotal;
+                    this.previousPrizeTotal = historyPrizeTotal;
+                    this.firebaseDb.ref(`clubRegistry/${registryClubId}`).update({ prizeUsed: historyPrizeTotal })
+                        .catch(err => console.error('상품비 누적액 자동 복구 실패:', err));
+                } else {
+                    this.previousPrizeTotal = registryPrizeUsed;
+                }
+            }
         } catch {
             this.clubHistory = (this.settlementHistory || []).filter(e =>
-                e && (currentClubId
-                    ? (e.clubId === currentClubId || e.clubName === currentClubName)
-                    : e.clubName === currentClubName)
+                historyMatchesClub(e, currentClubId, currentClubName)
             );
         }
     },
@@ -1927,8 +1974,12 @@ const AppState = {
         const historyContainer = document.getElementById('history-container');
         if (historyContainer) {
             historyContainer.innerHTML = '';
-            // clubHistory(전체 클럽원 이력)가 로드돼 있으면 우선 사용, 없으면 개인 이력
-            const historyList = this.clubHistory.length > 0 ? this.clubHistory : (this.settlementHistory || []);
+            // clubHistory가 비어 있어도 개인 이력 전체로 되돌아가지 않고 현재 클럽 항목만 표시한다.
+            // (해당 클럽 이력이 0건일 때 다른 클럽 이력이 노출되던 회귀 방지)
+            const historySource = this.clubHistory.length > 0 ? this.clubHistory : (this.settlementHistory || []);
+            const historyList = (this.clubId || this.clubName)
+                ? historySource.filter(entry => historyMatchesClub(entry, this.clubId, this.clubName))
+                : historySource;
             if (historyList.length === 0) {
                 historyContainer.innerHTML = `<div class="empty-state"><span class="empty-icon">📋</span><p>${t('empty.history')}</p></div>`;
             } else {
@@ -1952,6 +2003,10 @@ const AppState = {
                         const empIdStr = a.employeeId ? `<span style="font-size:0.68rem;color:var(--text-muted);margin-left:2px;">(${AppState.escapeHtml(String(a.employeeId))})</span>` : '';
                         return `<span class="expense-category-badge">${this.escapeHtml(a.name)}${empIdStr}</span>`;
                     }).join(' ');
+                    const historyPrizeCost = getHistoryPrizeCost(entry);
+                    const prizeSummaryHtml = historyPrizeCost > 0
+                        ? `<div class="history-stat history-stat-prize"><span>${t('hist.prize_cost')}</span><strong>${SettlementCalculator.formatCurrency(historyPrizeCost)}</strong></div>`
+                        : '';
 
                     const editedBadge = entry.isEdited
                         ? `<span class="badge-edited">${t('badge.edited')}</span>`
@@ -1994,6 +2049,7 @@ const AppState = {
                             <div class="history-stat"><span>${t('hist.total_cost')}</span><strong>${SettlementCalculator.formatCurrency(entry.totalCost)}</strong></div>
                             <div class="history-stat"><span>${t('hist.final_support')}</span><strong style="color:var(--color-secondary)">${SettlementCalculator.formatCurrency(entry.finalSupportAmount)}</strong></div>
                             <div class="history-stat"><span>${t('hist.self_pay')}</span><strong style="color:var(--warning-text)">${SettlementCalculator.formatCurrency(entry.totalSelfPay)}</strong></div>
+                            ${prizeSummaryHtml}
                         </div>
                         <details class="history-details">
                             <summary>${t('hist.view_details')}</summary>
@@ -2377,6 +2433,7 @@ const AppState = {
                 const updatedFields = {
                     memberCount: this.memberCount,
                     totalCost: result.totalCost,
+                    prizeCost: result.prizeCost,
                     finalSupportAmount: result.totalCost - finalTotalSelfPay,
                     totalSelfPay: finalTotalSelfPay,
                     perPersonSelfPay: this.memberCount > 0 ? Math.round(finalTotalSelfPay / this.memberCount) : result.perPersonSelfPay,
@@ -2650,6 +2707,7 @@ const AppState = {
             clubId: this.clubId || '',
             memberCount: this.memberCount,
             totalCost: result.totalCost,
+            prizeCost: result.prizeCost,
             finalSupportAmount: result.totalCost - finalTotalSelfPay,
             totalSelfPay: finalTotalSelfPay,
             perPersonSelfPay: finalPerPersonSelfPay,
@@ -2964,6 +3022,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const updatedFields = {
                     memberCount: AppState.memberCount,
                     totalCost: result.totalCost,
+                    prizeCost: result.prizeCost,
                     finalSupportAmount: result.totalCost - finalTotalSelfPay,
                     totalSelfPay: finalTotalSelfPay,
                     perPersonSelfPay: AppState.memberCount > 0
@@ -4274,18 +4333,17 @@ document.addEventListener('DOMContentLoaded', () => {
                         // Admin tab check
                         setAdminMode(pin === "000000");
 
-                        // Sync values to form fields
-                        AppState.loadClubRegistry().then(renderClubOptions);
+                        // 클럽 레지스트리를 먼저 받은 뒤 해당 클럽 이력을 로드해야
+                        // 과거 상품비 누적 복구값이 구형 레지스트리 값(0원)에 다시 덮이지 않는다.
                         memberInput.value = AppState.memberCount || 0;
                         prizeInput.value = AppState.previousPrizeTotal || 0;
                         setSettingsFormValues(AppState.rules);
             if (typeof setAdminRulesFormValues === 'function') setAdminRulesFormValues(AppState.rules);
-                        // 로그인 시 현재 클럽의 전체 이력을 globalHistory에서 로드 → 잔여 예산 정확화
-                        if (AppState.clubName || AppState.clubId) {
-                            AppState.loadClubHistory().then(() => AppState.render());
-                        } else {
-                            AppState.render();
-                        }
+                        AppState.loadClubRegistry().then(() => {
+                            renderClubOptions();
+                            // 로그인 시 현재 클럽의 전체 이력을 globalHistory에서 로드 → 잔여 예산·상품비 누적 정확화
+                            if (AppState.clubName || AppState.clubId) return AppState.loadClubHistory();
+                        }).then(() => AppState.render());
                     }).catch(err => {
                         console.error(err);
                         pinErrorText.textContent = err.message || "서버 연결에 실패했습니다.";
@@ -4458,6 +4516,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 변경이력 모달
     const CHANGELOG = [
+        { ver: '1.6.237', date: '2026.07.20', items: ['일반 사용자 정산 이력에서 선택한 클럽의 이력이 0건일 때 다른 클럽의 개인 이력 전체가 표시되던 문제 수정', '상품비가 있는 정산 이력의 간단 요약에 상품비 금액 표시', '구버전 정산 이력의 expenseItems에서 상품비를 역산해 누적액을 복구하고, 신규·수정 이력에는 prizeCost를 명시 저장하도록 개선'] },
         { ver: '1.6.236', date: '2026.07.17', items: ['"행사별 참석 인원" 차트를 가로 목록형으로 개편 — 한 줄에 "클럽명 날짜 → 인원수"가 바로 읽히도록 (최근 15건, 최신순)'] },
         { ver: '1.6.235', date: '2026.07.16', items: ['가로 막대 차트에서 막대가 끝까지 차면 값 라벨(예: "28명")이 잘리던 문제 수정 — 공간이 없으면 막대 안쪽에 자동 표시'] },
         { ver: '1.6.234', date: '2026.07.16', items: ['새 차트 2개 추가 — "행사별 참석 인원"(정산 1건마다 참석 인원수, 클럽 고유 색), "클럽별 참석 인원(중복 제외)"(올해 각 클럽에 참석한 서로 다른 인원수, 많은 순)', '관리자 "추가 배정" 팝업에서 금액 입력 후 Enter로 바로 적용 (Escape는 취소)'] },
@@ -5044,21 +5103,13 @@ document.addEventListener('DOMContentLoaded', () => {
             // 상품비: globalHistory 기준으로 올해 실제 사용액 계산 후 Firebase에도 동기화
             const prizeUsed = lastHistoryList
                 .filter(entry => {
-                    if (!entry || entry.clubName !== club.name) return false;
-                    const d = entry.settlementDate
-                        ? new Date(entry.settlementDate + 'T00:00:00')
-                        : (entry.date ? new Date(entry.date) : new Date(entry.id));
-                    return d.getFullYear() === _thisYear;
+                    return historyMatchesClub(entry, clubId, club.name) && getHistoryEntryYear(entry) === _thisYear;
                 })
-                .reduce((sum, entry) => sum + (entry.prizeCost || 0), 0);
+                .reduce((sum, entry) => sum + getHistoryPrizeCost(entry), 0);
             // usedBudget: 올해 globalHistory 기준 확정 지원금 합산 (유저 예산 리미트 동기화)
             const usedBudget = lastHistoryList
                 .filter(entry => {
-                    if (!entry || entry.clubName !== club.name) return false;
-                    const d = entry.settlementDate
-                        ? new Date(entry.settlementDate + 'T00:00:00')
-                        : (entry.date ? new Date(entry.date) : new Date(entry.id));
-                    return d.getFullYear() === _thisYear;
+                    return historyMatchesClub(entry, clubId, club.name) && getHistoryEntryYear(entry) === _thisYear;
                 })
                 .reduce((sum, entry) => sum + (entry.finalSupportAmount || 0), 0);
             // Firebase 값과 다를 때만 업데이트 (prizeUsed + usedBudget 동시 처리)
@@ -6170,6 +6221,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     </li>
                 `).join('');
             }
+            const historyPrizeCost = getHistoryPrizeCost(entry);
+            const prizeSummaryHtml = historyPrizeCost > 0
+                ? `<div class="history-stat history-stat-prize"><span>${t('hist.prize_cost')}</span><strong>${SettlementCalculator.formatCurrency(historyPrizeCost)}</strong></div>`
+                : '';
             
             const editedBadgeAdmin = entry.isEdited
                 ? `<span class="badge-edited">${t('badge.edited')}</span>` : '';
@@ -6209,6 +6264,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         <span>${t('hist.per_person_self_pay')} (${t('hist.attendees')}: ${entry.memberCount}${t('unit.person')})</span>
                         <strong>${SettlementCalculator.formatCurrency(entry.perPersonSelfPay)}</strong>
                     </div>
+                    ${prizeSummaryHtml}
                 </div>
                 <div class="history-details" style="margin-top:0.5rem;">
                     <details>
@@ -6312,13 +6368,9 @@ document.addEventListener('DOMContentLoaded', () => {
                         const _clubName = entry.clubName;
                         const _clubId   = entry.clubId;
                         const _yearFiltered = lastHistoryList.filter(e => {
-                            if (!e || e.clubName !== _clubName) return false;
-                            const d = e.settlementDate
-                                ? new Date(e.settlementDate + 'T00:00:00')
-                                : (e.date ? new Date(e.date) : new Date(e.id));
-                            return d.getFullYear() === _year;
+                            return historyMatchesClub(e, _clubId, _clubName) && getHistoryEntryYear(e) === _year;
                         });
-                        const _newPrize = _yearFiltered.reduce((s, e) => s + (e.prizeCost || 0), 0);
+                        const _newPrize = _yearFiltered.reduce((s, e) => s + getHistoryPrizeCost(e), 0);
                         const _newUsed  = _yearFiltered.reduce((s, e) => s + (e.finalSupportAmount || 0), 0);
                         const _regEntry = _clubId
                             ? AppState.clubRegistry[_clubId]

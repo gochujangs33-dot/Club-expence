@@ -1331,6 +1331,16 @@ select {
     font-weight: 700;
 }
 
+.history-stat.history-stat-prize {
+    grid-column: 1 / -1;
+    background: rgba(245, 158, 11, 0.08);
+    border: 1px solid rgba(245, 158, 11, 0.2);
+}
+
+.history-stat.history-stat-prize strong {
+    color: hsl(38, 92%, 60%);
+}
+
 .history-details summary {
     font-size: 0.82rem;
     color: var(--color-secondary);
