@@ -1,7 +1,7 @@
 /**
  * Club Expense Settlement App - Main JavaScript Logic
  */
-const APP_VERSION      = '1.6.247';
+const APP_VERSION      = '1.6.248';
 const APP_VERSION_DATE = '2026.07.20';
 
 // 인당 자부담 비용에 따라 강조 박스의 아이콘/색상을 전환 (100원 이상이면 🔥, 0이면 😊)
@@ -5046,6 +5046,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 변경이력 모달
     const CHANGELOG = [
+        { ver: '1.6.248', date: '2026.07.20', items: ['행사별 참석 인원과 클럽별 참석 인원(중복 제외) 차트의 막대에 마우스를 올리면 해당 참석자의 이름과 사번 목록을 함께 표시'] },
         { ver: '1.6.247', date: '2026.07.20', items: ['관리자 시작 안내에서 전사원 명부 관리를 제외하고, 클럽·예산 설정과 정산 기준 확인을 다시 누르면 해당 설정 카드를 접는 토글 방식으로 개선'] },
         { ver: '1.6.246', date: '2026.07.20', items: ['관리자 첫 화면에 시작 안내와 바로가기 4단계를 추가해 클럽·예산 설정, 정산 기준 확인, 명부 관리, 차트 확인의 순서를 한눈에 안내'] },
         { ver: '1.6.245', date: '2026.07.20', items: ['행사별 참석 인원 그래프를 최근 10건으로 조정하고, 모든 막대의 왼쪽 클럽명·날짜 레이블이 생략되지 않도록 고정 표시'] },
@@ -6575,6 +6576,25 @@ document.addEventListener('DOMContentLoaded', () => {
     // 사용자가 원하는 읽기: "어떤 클럽이 · 며칠 행사에 · 몇 명 참석" — 세 정보가 호버 없이
     // 한 줄에서 바로 읽히도록 세로 막대 → 가로 목록형으로 변경 (v1.6.236). 최근 행사가 위.
     const EVENT_ATTENDANCE_MAX_ROWS = 10;
+
+    // 차트 툴팁의 참석자 목록은 2명씩 묶어, 인원이 많은 행사도 화면을 과도하게 가리지 않도록 한다.
+    function formatAttendeeTooltipLines(attendees) {
+        const people = (attendees || [])
+            .map(attendee => {
+                const name = String(attendee?.name || '이름 없음').trim();
+                const employeeId = String(attendee?.employeeId || '').trim();
+                return employeeId ? `${name} (${employeeId})` : `${name} (사번 없음)`;
+            })
+            .sort((a, b) => a.localeCompare(b, 'ko-KR'));
+        if (people.length === 0) return ['참석자 정보가 저장되지 않았습니다.'];
+
+        const lines = ['참석자 (이름 / 사번)'];
+        for (let index = 0; index < people.length; index += 2) {
+            lines.push(people.slice(index, index + 2).join(' · '));
+        }
+        return lines;
+    }
+
     function renderEventAttendanceChart(historyList) {
         const canvas = document.getElementById('event-attendance-chart');
         if (!canvas || typeof Chart === 'undefined') return;
@@ -6584,7 +6604,8 @@ document.addEventListener('DOMContentLoaded', () => {
             .map(e => ({
                 club: e.clubName || '기본 클럽',
                 dateKey: e.settlementDate || (e.date ? e.date.slice(0, 10) : ''),
-                members: e.memberCount || (e.attendees ? e.attendees.length : 0)
+                members: e.memberCount || (e.attendees ? e.attendees.length : 0),
+                attendees: Array.isArray(e.attendees) ? e.attendees : []
             }))
             .sort((a, b) => b.dateKey.localeCompare(a.dateKey))
             .slice(0, EVENT_ATTENDANCE_MAX_ROWS);
@@ -6624,7 +6645,10 @@ document.addEventListener('DOMContentLoaded', () => {
                                 const en = entries[items[0].dataIndex];
                                 return `${en.club} · ${en.dateKey}`;
                             },
-                            label: ctx => `참석 ${ctx.parsed.x}명`
+                            label: ctx => {
+                                const en = entries[ctx.dataIndex];
+                                return [`참석 ${ctx.parsed.x}명`, ...formatAttendeeTooltipLines(en.attendees)];
+                            }
                         }
                     },
                     chartValueLabel: {
@@ -6648,7 +6672,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!canvas || typeof Chart === 'undefined') return;
 
         const currentYear = new Date().getFullYear();
-        // 클럽명 → Set(사번 기준 고유키; 사번 없는 참석자는 이름으로 폴백 — 동명이인 구분은 사번이 있을 때만 정확)
+        // 클럽명 → Map(사번 기준 고유키와 표시용 참석자 정보; 사번 없는 참석자는 이름으로 폴백)
         const uniqueMap = {};
         (historyList || [])
             .filter(e => {
@@ -6661,16 +6685,18 @@ document.addEventListener('DOMContentLoaded', () => {
             })
             .forEach(e => {
                 const club = e.clubName || '기본 클럽';
-                if (!uniqueMap[club]) uniqueMap[club] = new Set();
+                if (!uniqueMap[club]) uniqueMap[club] = new Map();
                 (e.attendees || []).forEach(a => {
                     if (!a) return;
                     const key = a.employeeId ? `id:${a.employeeId}` : (a.name ? `name:${a.name}` : null);
-                    if (key) uniqueMap[club].add(key);
+                    if (key && !uniqueMap[club].has(key)) {
+                        uniqueMap[club].set(key, { name: a.name || '이름 없음', employeeId: a.employeeId || '' });
+                    }
                 });
             });
 
         const sorted = Object.entries(uniqueMap)
-            .map(([name, set]) => [name, set.size])
+            .map(([name, attendeeMap]) => [name, attendeeMap.size, Array.from(attendeeMap.values())])
             .sort((a, b) => b[1] - a[1]);
 
         if (clubUniqueAttendeesChartInstance) clubUniqueAttendeesChartInstance.destroy();
@@ -6698,7 +6724,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 maintainAspectRatio: false,
                 plugins: {
                     legend: { display: false },
-                    tooltip: { callbacks: { label: ctx => `서로 다른 참석자 ${ctx.parsed.x}명` } },
+                    tooltip: {
+                        callbacks: {
+                            title: items => `${sorted[items[0].dataIndex][0]} · 올해 고유 참석자`,
+                            label: ctx => {
+                                const attendees = sorted[ctx.dataIndex][2];
+                                return [`서로 다른 참석자 ${ctx.parsed.x}명`, ...formatAttendeeTooltipLines(attendees)];
+                            }
+                        }
+                    },
                     chartValueLabel: {
                         color: '#e2e8f0',
                         getLabel: (i) => `${counts[i]}명`
