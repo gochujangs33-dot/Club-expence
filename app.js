@@ -1,7 +1,7 @@
 /**
  * Club Expense Settlement App - Main JavaScript Logic
  */
-const APP_VERSION      = '1.6.240';
+const APP_VERSION      = '1.6.241';
 const APP_VERSION_DATE = '2026.07.20';
 
 // 인당 자부담 비용에 따라 강조 박스의 아이콘/색상을 전환 (100원 이상이면 🔥, 0이면 😊)
@@ -108,6 +108,27 @@ function getHistoryEntryYear(entry) {
     const rawDate = entry.date || (entry.id ? Number(entry.id) : null);
     const date = rawDate ? new Date(rawDate) : null;
     return date && !Number.isNaN(date.getTime()) ? date.getFullYear() : NaN;
+}
+
+// 실제 정산일 우선 최신순 정렬. 같은 정산일이면 저장 시각(id)이 최신인 항목을 먼저 표시한다.
+function compareHistoryEntriesNewestFirst(a, b) {
+    const dateKey = entry => {
+        if (!entry || typeof entry !== 'object') return '';
+        if (typeof entry.settlementDate === 'string' && /^\d{4}-\d{2}-\d{2}/.test(entry.settlementDate)) {
+            return entry.settlementDate.slice(0, 10);
+        }
+        const rawDate = entry.date || (entry.id ? Number(entry.id) : null);
+        const savedDate = rawDate ? new Date(rawDate) : null;
+        if (!savedDate || Number.isNaN(savedDate.getTime())) return '';
+        return [
+            savedDate.getFullYear(),
+            String(savedDate.getMonth() + 1).padStart(2, '0'),
+            String(savedDate.getDate()).padStart(2, '0')
+        ].join('-');
+    };
+    const dateDiff = dateKey(b).localeCompare(dateKey(a));
+    if (dateDiff !== 0) return dateDiff;
+    return (Number(b && b.id) || 0) - (Number(a && a.id) || 0);
 }
 
 function historyMatchesClub(entry, clubId, clubName) {
@@ -1102,13 +1123,7 @@ const AppState = {
                 if (!historyMatchesClub(entry, currentClubId, currentClubName)) return;
                 allHistory.push(entry);
             });
-            allHistory.sort((a, b) => {
-                const da = a.settlementDate || (a.date ? a.date.slice(0, 10) : '');
-                const db = b.settlementDate || (b.date ? b.date.slice(0, 10) : '');
-                if (da > db) return -1;
-                if (da < db) return 1;
-                return (b.id || 0) - (a.id || 0);
-            });
+            allHistory.sort(compareHistoryEntriesNewestFirst);
             this.clubHistory = allHistory;
 
             // 구버전 이력은 prizeCost 필드 없이 expenseItems에만 상품비가 저장돼 있었다.
@@ -4725,6 +4740,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 변경이력 모달
     const CHANGELOG = [
+        { ver: '1.6.241', date: '2026.07.20', items: ['관리자 정산 이력을 저장 시각이 아닌 실제 정산일 기준 최신순으로 정렬하고 같은 날짜는 최근 저장 건을 먼저 표시', '클럽별 연간 예산 소진율과 예산 통계에서 과거 연도 이력을 제외하고 올해 기존 사용액과 올해 정산 지원금만 합산'] },
         { ver: '1.6.240', date: '2026.07.20', items: ['정산 이력의 참석자 수정·삭제 시 이름이 아닌 사번 기준으로 올해 누적 참석 횟수를 전체 재집계하고 관리자·작성자 명부에 함께 반영', '관리자가 다른 사용자의 이력을 수정할 때 작성자 개인 이력도 공유 이력과 함께 동기화', '행사 사진을 신규·수정 정산 이력에 저장하고 과거 이력 엑셀에는 해당 이력의 사진만 삽입하도록 개선'] },
         { ver: '1.6.239', date: '2026.07.20', items: ['정산 확정 시 공유 이력·개인 이력·클럽 누적액·세션 초기화를 Firebase에 원자적으로 저장하고, 저장 성공 후에만 입력 내용을 초기화하도록 개선', '동시 정산·이력 수정 시 클럽 사용액과 상품비 누적액이 서로 덮어써지지 않도록 서버 증분 방식 적용', '이력 수정 저장 실패가 성공으로 처리되던 문제를 수정해 실패 시 수정 화면과 입력 내용을 그대로 유지'] },
         { ver: '1.6.238', date: '2026.07.20', items: ['모바일 가입 회원 관리 표를 회원별 카드형 행으로 재배치해 가입일·최근 접속 날짜가 한 글자씩 줄바꿈되지 않고 수정·삭제 버튼이 안정적으로 보이도록 개선'] },
@@ -5214,7 +5230,7 @@ document.addEventListener('DOMContentLoaded', () => {
             cachedDeletedIds = deletedSnap.val() || {};
             const historyList = Object.values(historyData)
                 .filter(e => e && !cachedDeletedIds[String(e.id)])
-                .sort((a, b) => b.id - a.id);
+                .sort(compareHistoryEntriesNewestFirst);
 
             let totalSpend = 0;
             let totalSupport = 0;
@@ -5643,14 +5659,17 @@ document.addEventListener('DOMContentLoaded', () => {
         const countEl = document.getElementById('charts-total-count');
         if (!totalBudgetEl || !usedBudgetEl || !remainingBudgetEl) return;
 
+        const currentYear = new Date().getFullYear();
         const filtered = (historyList || []).filter(e =>
-            !selectedOverallClubs || selectedOverallClubs.has(e.clubName || '기본 클럽')
+            getHistoryEntryYear(e) === currentYear
+            && (!selectedOverallClubs || selectedOverallClubs.has(e.clubName || '기본 클럽'))
         );
 
-        const totalBudget = Object.values(AppState.clubRegistry || {})
-            .filter(c => !selectedOverallClubs || selectedOverallClubs.has(c.name))
-            .reduce((sum, c) => sum + (c.budget || 0), 0);
-        const usedBudget = filtered.reduce((sum, e) => sum + (e.finalSupportAmount || 0), 0);
+        const selectedClubs = Object.values(AppState.clubRegistry || {})
+            .filter(c => !selectedOverallClubs || selectedOverallClubs.has(c.name));
+        const totalBudget = selectedClubs.reduce((sum, c) => sum + (c.budget || 0), 0);
+        const priorUsed = selectedClubs.reduce((sum, c) => sum + (c.priorUsed || 0), 0);
+        const usedBudget = priorUsed + filtered.reduce((sum, e) => sum + (e.finalSupportAmount || 0), 0);
         const remaining = totalBudget - usedBudget;
 
         totalBudgetEl.textContent = SettlementCalculator.formatCurrency(totalBudget);
@@ -5869,13 +5888,17 @@ document.addEventListener('DOMContentLoaded', () => {
         const canvas = document.getElementById('club-usage-chart');
         if (!canvas || typeof Chart === 'undefined') return;
 
+        const currentYear = new Date().getFullYear();
         const allClubs = Object.values(AppState.clubRegistry || {}).sort((a, b) => a.name.localeCompare(b.name));
         const clubs = allClubs.filter(c => !selectedOverallClubs || selectedOverallClubs.has(c.name));
 
         // 소진율 높은 순 정렬
         const clubData = clubs.map(club => {
             const spent = (historyList || [])
-                .filter(entry => (entry.clubName || '기본 클럽') === club.name)
+                .filter(entry =>
+                    getHistoryEntryYear(entry) === currentYear
+                    && (entry.clubName || '기본 클럽') === club.name
+                )
                 .reduce((sum, entry) => sum + (entry.finalSupportAmount || 0), 0);
             const usedTotal = (club.priorUsed || 0) + spent;
             const budget = club.budget || 0;
@@ -6355,7 +6378,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function renderAdminHistory(rawHistoryList) {
         // tombstone 캐시로 항상 한 번 더 필터링 — 어떤 경로로 복원돼도 화면에 표시 안 됨
-        const historyList = (rawHistoryList || []).filter(e => e && !cachedDeletedIds[String(e.id)]);
+        const historyList = (rawHistoryList || [])
+            .filter(e => e && !cachedDeletedIds[String(e.id)])
+            .sort(compareHistoryEntriesNewestFirst);
         const container = document.getElementById('admin-history-container');
         const clubSelect = document.getElementById('club-history-select');
         const selectedClub = clubSelect ? clubSelect.value : '';

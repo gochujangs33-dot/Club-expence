@@ -284,6 +284,7 @@ previousPrizeTotal = clubRegistry[clubId].prizeUsed  (관리자 기준 단일 �
 ## 10. 이력 수정 모드
 
 - [정산 이력] 탭 또는 [클럽별 정산이력]에서 "✏️ 수정" 버튼 클릭
+- 관리자 [클럽별 정산이력]은 실제 정산일(`settlementDate`) 최신순으로 표시하고, 같은 날짜는 저장 시각(`id`) 최신순으로 표시
 - 수정 대상 항목을 정산 탭으로 복원 (비용항목, 참석자, 자부담값 등)
 - 수정 모드 배너 표시 ("수정 중: YYYY.MM.DD")
 - "엑셀 파일로 저장" 클릭 → 수정된 내용으로 엑셀 생성 + 이력 갱신
@@ -513,12 +514,13 @@ directory[이름] = {
 | 차트 | ID | 데이터 소스 | 유형 |
 |---|---|---|---|
 | 월별 비용 추이 | `monthly-trend-chart` | globalHistory 월별 합산 | Line |
-| 클럽별 예산 소진율 | `club-usage-chart` | clubRegistry 예산 vs 사용액 | Bar (수평) |
+| 클럽별 예산 소진율 | `club-usage-chart` | clubRegistry 예산 vs `priorUsed` + 올해 globalHistory 지원금 | Bar (수평) |
 | 카테고리별 누적 비용 비중 | `category-pie-chart` | globalHistory expenseItems 합산 | Doughnut |
 | 자부담 추이 | `selfpay-trend-chart` | globalHistory 월별 자부담 합산 | Line |
 | 클럽별 비용 지출 비교 | `club-spend-chart` | globalHistory expenseItems 클럽별 분류 | Bar 누적 수평 |
 
 - 월별·소진율 차트: 다중 클럽 필터 지원 ("전체 선택" 체크박스 포함)
+- 연간 예산 통계·소진율: 과거 연도 이력을 제외하고 `priorUsed + 올해 finalSupportAmount 합계`만 사용
 - `selectedOverallClubs`, `selectedUsageClubs` → 선택된 클럽 Set
 - 카테고리 파이 차트: `entry.expenseItems` 직접 읽어 카테고리별 합산 (구버전 `entry.eventCost` 필드 사용 금지)
 
