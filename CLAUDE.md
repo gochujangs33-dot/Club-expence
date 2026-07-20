@@ -76,6 +76,7 @@
    | `finalizeSettlement` / `updateHistoryEntry` Firebase 쓰기 | 공유 이력·개인 이력·누적액은 **루트 다중 경로 update + 서버 증분**으로 원자 저장하고, 성공 전 세션 초기화 금지. 오류는 호출부까지 다시 throw | v1.6.239 | 저장 실패인데 성공 표시·입력 초기화 / 동시 정산 누적액 덮어쓰기 |
    | 이력 참석자 수정·삭제 / `buildDirectoryCountsForHistory` | 누적 횟수는 남은 현재 연도 이력 전체를 **사번 기준으로 재집계**하고 관리자·작성자 `directory`를 이력과 함께 원자 저장. 단순 `count - 1` 금지 | v1.6.240 | `counts[사번]`은 그대로라 화면 누적 횟수가 수정·삭제 전 값으로 남는 문제 |
    | 정산 이력 행사 사진 | 신규·수정 이력에 `eventPhotos`를 저장하고 `downloadHistoryExcel`에서 이력 사진으로 교체 후 기존 세션 사진을 `finally`에서 복원 | v1.6.240 | 과거 엑셀에 사진 누락 또는 현재 작성 중인 다른 정산 사진 혼입 |
+   | 정산 이력 첨부 보관 | v1.6.242 이후 확정 이력의 사진·영수증 원본은 `globalHistory`에만 보관하고 개인 이력에는 `mediaStoredInGlobal` 표식과 메타데이터만 저장. 과거 이력은 보존 기한 전까지 원본 제거 금지 | v1.6.242 | 개인 이력 중복으로 Firebase 용량 급증 또는 과거 첨부 조기 유실 |
    | 관리자 이력 정렬 / 연간 예산 차트 | 이력은 `settlementDate` 최신순(`id`는 동률 보조), 연간 예산 사용액은 `priorUsed + 올해 finalSupportAmount`만 사용 | v1.6.241 | 늦게 등록한 과거 정산이 위로 노출 / 전년도 지출이 현재 연간 예산에 중복 합산 |
 
    - 위 항목 중 하나라도 되돌리거나 "리팩토링"하면 대응하는 버그가 즉시 재발함.
@@ -181,4 +182,4 @@
 - [`CHANGES.md`](CHANGES.md) — 버전별 변경 이력
 - [`CODE_REVIEW.md`](CODE_REVIEW.md) — **매 작업 시작 전 필독**: v1.6.201 검증 결과, 재수정 금지 항목 상세, 승인된 백로그(사용자 명시 요청 시에만 착수)
 
-현재 버전: **v1.6.241** (`sw.js` `APP_VERSION`)
+현재 버전: **v1.6.242** (`sw.js` `APP_VERSION`)

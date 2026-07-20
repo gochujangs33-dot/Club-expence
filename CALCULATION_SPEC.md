@@ -181,11 +181,13 @@ calculateSelfPayPerPerson(cost, rules) {
 ### 5-2. 사진 삽입 위치 (sheet3.xml / sheet4.xml)
 - **행사 사진** (`AppState.eventPhotos`): `sheet3.xml`의 `B3`부터 5열 간격으로 배치, 장당 240×180px.
   과거 정산 엑셀은 해당 이력의 `eventPhotos`만 사용하며 사진 필드가 없는 구버전 이력은 빈 사진으로 처리한다.
+- 행사 사진은 저장 전에 긴 변 960px·목표 70KB 수준의 JPEG로 변환한다. 확정 이력의 원본은 `globalHistory`에서 불러오며, 정산 연도 다음 해 4월 1일부터 사진·영수증은 삭제될 수 있어 이후 엑셀에는 첨부되지 않는다.
 - **영수증 사진**: `sheet4.xml`
   - 법인카드 영수증: `B5`부터 아래로 (행 간격 16행), 크기 220×300px
   - 개인카드 영수증: `D5`부터 아래로 (행 간격 16행), 크기 220×300px
   - `cardType === 'split'` (법인+개인 동시 첨부)인 경우 `corporateReceiptImage`/`personalReceiptImage` 각각 위 위치에 삽입
   - `cardType === 'personal'`이고 `receiptImage`만 있는 경우 → 개인카드 위치(D열)
+  - 영수증은 저장 전에 긴 변 1280px·목표 120KB 수준의 JPEG로 변환하며, 행사 사진과 합산한 첨부 총량은 정산 1건당 Base64 기준 6MB 이하로 제한한다.
   - 그 외(`cardType` 기본값=법인) → 법인카드 위치(B열)
 
 ---

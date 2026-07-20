@@ -1,7 +1,7 @@
 /**
  * Club Expense Settlement App - Main JavaScript Logic
  */
-const APP_VERSION      = '1.6.241';
+const APP_VERSION      = '1.6.242';
 const APP_VERSION_DATE = '2026.07.20';
 
 // 인당 자부담 비용에 따라 강조 박스의 아이콘/색상을 전환 (100원 이상이면 🔥, 0이면 😊)
@@ -129,6 +129,66 @@ function compareHistoryEntriesNewestFirst(a, b) {
     const dateDiff = dateKey(b).localeCompare(dateKey(a));
     if (dateDiff !== 0) return dateDiff;
     return (Number(b && b.id) || 0) - (Number(a && a.id) || 0);
+}
+
+// Firebase Realtime Database에 Base64 문자열로 보관하는 첨부파일의 용량 정책.
+// 영수증은 글자를 읽을 수 있는 수준을 유지하고, 행사 사진은 화면·엑셀 표시용 저용량으로 제한한다.
+const MediaStoragePolicy = Object.freeze({
+    receipt: { maxDimension: 1280, minDimension: 640, targetBytes: 120 * 1024, quality: 0.68, minQuality: 0.42 },
+    event: { maxDimension: 960, minDimension: 480, targetBytes: 70 * 1024, quality: 0.62, minQuality: 0.40 },
+    feedback: { maxDimension: 800, minDimension: 400, targetBytes: 80 * 1024, quality: 0.62, minQuality: 0.42 },
+    // Base64 문자열 기준 약 6MB: Firebase 단일 write 한도보다 충분히 낮게 유지한다.
+    maxSettlementBytes: 6 * 1024 * 1024
+});
+
+function getMediaDataSize(value) {
+    return typeof value === 'string' && value.startsWith('data:image/') ? value.length : 0;
+}
+
+function hasReceiptMedia(item) {
+    return !!(item && (item.receiptImage || item.corporateReceiptImage || item.personalReceiptImage));
+}
+
+function getHistoryExpenseItems(entry) {
+    if (!entry || typeof entry !== 'object' || !entry.expenseItems) return [];
+    return Array.isArray(entry.expenseItems) ? entry.expenseItems : Object.values(entry.expenseItems);
+}
+
+function hasHistoryMedia(entry) {
+    if (!entry || typeof entry !== 'object') return false;
+    const eventPhotos = getHistoryEventPhotos(entry);
+    return eventPhotos.length > 0 || getHistoryExpenseItems(entry).some(hasReceiptMedia);
+}
+
+// 개인 이력·로컬 백업에는 첨부 원본을 중복 저장하지 않는다.
+// 확정 이력의 첨부 원본은 globalHistory가 단일 기준이며, 필요 시 다운로드 시점에 불러온다.
+function stripHistoryMedia(entry) {
+    if (!entry || typeof entry !== 'object') return entry;
+    const cleaned = { ...entry };
+    delete cleaned.eventPhotos;
+    delete cleaned.eventPhoto;
+    const cleanItem = item => {
+        if (!item || typeof item !== 'object') return item;
+        const copy = { ...item };
+        delete copy.receiptImage;
+        delete copy.corporateReceiptImage;
+        delete copy.personalReceiptImage;
+        return copy;
+    };
+    if (Array.isArray(cleaned.expenseItems)) {
+        cleaned.expenseItems = cleaned.expenseItems.map(cleanItem);
+    } else if (cleaned.expenseItems && typeof cleaned.expenseItems === 'object') {
+        cleaned.expenseItems = Object.fromEntries(Object.entries(cleaned.expenseItems)
+            .map(([key, item]) => [key, cleanItem(item)]));
+    }
+    return cleaned;
+}
+
+// 정산 연도가 끝난 뒤 다음 해 4월 1일부터 해당 연도의 첨부만 자동 정리한다.
+function isHistoryMediaExpired(entry, now = new Date()) {
+    const entryYear = getHistoryEntryYear(entry);
+    if (!Number.isInteger(entryYear)) return false;
+    return now >= new Date(entryYear + 1, 3, 1);
 }
 
 function historyMatchesClub(entry, clubId, clubName) {
@@ -673,6 +733,50 @@ const AppState = {
         return directory;
     },
 
+    buildPersonalHistoryForSync(historyList = this.settlementHistory) {
+        const entries = Array.isArray(historyList) ? historyList : Object.values(historyList || {});
+        // v1.6.242부터 확정된 새 이력은 globalHistory에만 첨부 원본을 보관한다.
+        // 이전 이력은 global 원본 존재 여부가 보장되지 않으므로 보존 기한까지 그대로 둔다.
+        return entries.map(entry => entry && entry.mediaStoredInGlobal ? stripHistoryMedia(entry) : entry);
+    },
+
+    // 현재 정산 1건에 포함될 첨부의 Base64 문자열 크기(대략적인 Firebase write 크기)를 계산한다.
+    getDraftMediaBytes(overrides = {}) {
+        const hasOverride = key => Object.prototype.hasOwnProperty.call(overrides, key);
+        const eventPhotos = hasOverride('eventPhotos') ? overrides.eventPhotos : this.eventPhotos;
+        const eventPhotoList = Array.isArray(eventPhotos) ? eventPhotos : (eventPhotos ? [eventPhotos] : []);
+        const tempCorp = hasOverride('tempCorpReceiptImage') ? overrides.tempCorpReceiptImage : this.tempCorpReceiptImage;
+        const tempPersonal = hasOverride('tempPersonalReceiptImage') ? overrides.tempPersonalReceiptImage : this.tempPersonalReceiptImage;
+        // 수정 중인 항목은 임시 영수증으로 대체되므로 기존 첨부를 중복 합산하지 않는다.
+        const settledItems = (this.expenseItems || []).filter(item => item.id !== this.editingItemId);
+        const mediaValues = [
+            ...eventPhotoList,
+            tempCorp,
+            tempPersonal
+        ];
+        settledItems.forEach(item => {
+            mediaValues.push(item.receiptImage, item.corporateReceiptImage, item.personalReceiptImage);
+        });
+        return [...new Set(mediaValues.filter(Boolean))].reduce((sum, value) => sum + getMediaDataSize(value), 0);
+    },
+
+    getHistoryMediaBytes(entry) {
+        if (!entry || typeof entry !== 'object') return 0;
+        const mediaValues = [
+            ...getHistoryEventPhotos(entry),
+            ...getHistoryExpenseItems(entry).flatMap(item => [
+                item && item.receiptImage,
+                item && item.corporateReceiptImage,
+                item && item.personalReceiptImage
+            ])
+        ];
+        return [...new Set(mediaValues.filter(Boolean))].reduce((sum, value) => sum + getMediaDataSize(value), 0);
+    },
+
+    isDraftMediaWithinLimit(overrides = {}) {
+        return this.getDraftMediaBytes(overrides) <= MediaStoragePolicy.maxSettlementBytes;
+    },
+
     save(syncFirebase = true) {
         // 1. 로컬 백업 저장 (오프라인 상태 대비)
         try {
@@ -687,6 +791,8 @@ const AppState = {
             // club_expense_prev_prize → clubRegistry.prizeUsed (관리자 전용, localStorage 저장 중단)
             localStorage.setItem('club_name', this.clubName);
             localStorage.setItem('club_id', this.clubId || '');
+            // 확정 이력의 첨부 원본은 globalHistory 단일 기준으로 보관해 브라우저·개인 Firebase 용량을 줄인다.
+            // 오프라인에서도 기존 첨부를 잃지 않도록 브라우저 백업은 원본 그대로 유지한다.
             try { localStorage.setItem('club_settlement_history', JSON.stringify(this.settlementHistory)); } catch(_) {}
             if (this.eventPhotos && this.eventPhotos.length > 0) {
                 try { localStorage.setItem('club_event_photos', JSON.stringify(this.eventPhotos)); } catch(_) {}
@@ -708,7 +814,7 @@ const AppState = {
                 clubName: this.clubName,   // 마지막 선택 클럽명 (편의용)
                 clubId: this.clubId || '', // 마지막 선택 클럽 ID (편의용)
                 reportEmail: this.reportEmail || '',
-                settlementHistory: this.settlementHistory,
+                settlementHistory: this.buildPersonalHistoryForSync(),
                 eventPhotos: (this.eventPhotos && this.eventPhotos.length > 0) ? this.eventPhotos : null,
                 lastUpdated: Date.now()
                 // rules → globalSettings/rules (관리자 전용)
@@ -716,10 +822,81 @@ const AppState = {
                 // usedBudget → 동적 계산, 저장 불필요
                 // previousPrizeTotal → clubRegistry.prizeUsed (관리자 전용)
             };
-            this.firebaseDb.ref(`settlements/${this.currentPin}`).set(dataToSync)
-                .catch(err => console.error("Firebase sync failed:", err));
+            return this.firebaseDb.ref(`settlements/${this.currentPin}`).set(dataToSync)
+                .then(() => true)
+                .catch(err => {
+                    console.error("Firebase sync failed:", err);
+                    return false;
+                });
             // save() 시 globalHistory backfill 제거 — 관리자가 삭제한 항목을 되살리는 원인이 됨
             // 신규 정산 확정 시 finalizeSettlement()에서 직접 globalHistory에 쓰므로 여기선 불필요
+        }
+        return Promise.resolve(false);
+    },
+
+    // 보관 기한(정산 다음 해 1분기) 종료된 행사 사진·영수증만 제거한다.
+    // 금액, 참석자, 항목명 등 정산 데이터는 절대 변경하지 않는다.
+    async cleanupExpiredHistoryMedia() {
+        if (!this.firebaseDb || !this.isLoggedIn || !this.currentPin) {
+            return { cleanedGlobal: 0, cleanedPersonal: 0 };
+        }
+
+        const updates = {};
+        let cleanedGlobal = 0;
+        let cleanedPersonal = 0;
+        const addMediaRemoval = (basePath, entry, isGlobal) => {
+            if (!isHistoryMediaExpired(entry) || !hasHistoryMedia(entry)) return false;
+            const cleaned = stripHistoryMedia(entry);
+            updates[`${basePath}/eventPhotos`] = null;
+            updates[`${basePath}/eventPhoto`] = null;
+            if (getHistoryExpenseItems(entry).some(hasReceiptMedia)) {
+                updates[`${basePath}/expenseItems`] = cleaned.expenseItems;
+            }
+            if (isGlobal) cleanedGlobal++;
+            else cleanedPersonal++;
+            return true;
+        };
+
+        try {
+            const personalPins = new Set([String(this.currentPin)]);
+            if (this.currentPin === '000000') {
+                const [historySnapshot, deletedSnapshot] = await Promise.all([
+                    this.firebaseDb.ref('globalHistory').once('value'),
+                    this.firebaseDb.ref('deletedHistoryIds').once('value')
+                ]);
+                const deletedIds = new Set(Object.keys(deletedSnapshot.val() || {}));
+                historySnapshot.forEach(child => {
+                    if (deletedIds.has(String(child.key))) return;
+                    const entry = child.val();
+                    if (!entry || !isHistoryMediaExpired(entry)) return;
+                    if (entry.creatorPin) personalPins.add(String(entry.creatorPin));
+                    addMediaRemoval(`globalHistory/${child.key}`, entry, true);
+                });
+            }
+
+            const personalSnapshots = await Promise.all([...personalPins].map(async pin => {
+                try {
+                    return [pin, await this.firebaseDb.ref(`settlements/${pin}/settlementHistory`).once('value')];
+                } catch (err) {
+                    console.warn(`만료 첨부 개인 이력 조회 실패 (${pin}):`, err);
+                    return [pin, null];
+                }
+            }));
+            personalSnapshots.forEach(([pin, snapshot]) => {
+                if (!snapshot) return;
+                snapshot.forEach(child => {
+                    const entry = child.val();
+                    addMediaRemoval(`settlements/${pin}/settlementHistory/${child.key}`, entry, false);
+                });
+            });
+
+            if (Object.keys(updates).length > 0) {
+                await this.firebaseDb.ref().update(updates);
+            }
+            return { cleanedGlobal, cleanedPersonal };
+        } catch (err) {
+            console.error('만료 첨부 자동 정리 실패:', err);
+            return { cleanedGlobal: 0, cleanedPersonal: 0, error: err };
         }
     },
 
@@ -753,8 +930,21 @@ const AppState = {
                     .finally(() => {
                         // 관리자: globalHistory 전체 기준으로 카운트 계산 (모든 사용자 정산 반영)
                         this.recalculateDirectoryCountsFromGlobal()
-                            .then(() => { this.save(); resolve(true); })
-                            .catch(() => { this.recalculateDirectoryCounts(); this.save(); resolve(true); });
+                            .then(() => {
+                                this.save();
+                                this.cleanupExpiredHistoryMedia().then(result => {
+                                    if (result.cleanedGlobal || result.cleanedPersonal) {
+                                        console.log(`만료 첨부 자동 정리 완료: 공유 ${result.cleanedGlobal}건, 개인 ${result.cleanedPersonal}건`);
+                                    }
+                                });
+                                resolve(true);
+                            })
+                            .catch(() => {
+                                this.recalculateDirectoryCounts();
+                                this.save();
+                                this.cleanupExpiredHistoryMedia();
+                                resolve(true);
+                            });
                     });
                 return;
             }
@@ -825,6 +1015,12 @@ const AppState = {
                                 .finally(() => {
                                     this.recalculateDirectoryCounts();
                                     this.save();
+                                    // 만료 첨부 정리는 로그인 완료 뒤 백그라운드로 실행해 화면 진입을 지연시키지 않는다.
+                                    this.cleanupExpiredHistoryMedia().then(result => {
+                                        if (result.cleanedGlobal || result.cleanedPersonal) {
+                                            console.log(`만료 첨부 자동 정리 완료: 공유 ${result.cleanedGlobal}건, 개인 ${result.cleanedPersonal}건`);
+                                        }
+                                    });
                                     resolve(true);
                                 });
                         })
@@ -1232,8 +1428,8 @@ const AppState = {
         // 항목이 바뀌면 자부담을 다시 항목 합계 기준으로 재계산 — 수동 오버라이드 해제
         this.selfPayManuallyOverridden = false;
         this.cancelEdit();
-        this.save();
         this.render();
+        return this.save();
     },
 
     deleteExpense(id) {
@@ -2442,8 +2638,24 @@ const AppState = {
         });
     },
 
+    // 개인 이력은 용량 절감을 위해 첨부 원본을 제외하므로, 과거 엑셀 생성 시 공유 이력의 원본을 보완한다.
+    async hydrateHistoryMedia(entry) {
+        if (!entry || hasHistoryMedia(entry) || !this.firebaseDb || !entry.id) return entry;
+        try {
+            const snapshot = await this.firebaseDb.ref(`globalHistory/${entry.id}`).once('value');
+            const globalEntry = snapshot.val();
+            if (globalEntry && String(globalEntry.id) === String(entry.id)) {
+                return { ...entry, ...globalEntry };
+            }
+        } catch (err) {
+            console.warn('과거 이력 첨부 원본 조회 실패:', err);
+        }
+        return entry;
+    },
+
     // 이력 항목의 데이터를 기반으로 엑셀 생성 후 다운로드 (AppState를 임시 교체 후 복원)
     async downloadHistoryExcel(entry) {
+        entry = await this.hydrateHistoryMedia(entry);
         const sdi = document.getElementById('settlement-date-input');
         const prev = {
             memberCount: this.memberCount, expenseItems: this.expenseItems,
@@ -2581,11 +2793,12 @@ const AppState = {
     },
 
     // 이력 항목을 현재 정산 폼으로 복원 (수정 모드 진입)
-    loadHistoryEntryForEdit(entry) {
+    async loadHistoryEntryForEdit(entry) {
         if (!entry || typeof entry !== 'object' || !entry.id) {
             console.error('loadHistoryEntryForEdit: 유효하지 않은 이력 항목', entry);
             return;
         }
+        entry = await this.hydrateHistoryMedia(entry);
         this.editingHistoryId = entry.id;
         // 이 이력이 원래 기여했던 지원금·상품비 — 예산 한도 검사 시 "이미 사용한 금액"에서
         // 이 항목 자신의 몫을 빼줘야 수정 중 재검증이 자기 자신과 충돌해 잔여예산 초과로 막히지 않음
@@ -2648,7 +2861,8 @@ const AppState = {
         if (!oldEntry) throw new Error('수정할 정산 이력을 찾을 수 없습니다.');
 
         const editedAt = new Date().toISOString();
-        const merged = { ...oldEntry, ...updatedFields, isEdited: true, editedAt };
+        // 수정 저장은 globalHistory 원본까지 함께 완료된 뒤 개인 이력의 첨부를 생략할 수 있다.
+        const merged = { ...oldEntry, ...updatedFields, mediaStoredInGlobal: true, isEdited: true, editedAt };
         const ownIdx = (this.settlementHistory || []).findIndex(e => String(e.id) === String(id));
         const nextSettlementHistory = ownIdx >= 0
             ? this.settlementHistory.map((entry, index) => index === ownIdx ? merged : entry)
@@ -2710,21 +2924,21 @@ const AppState = {
                 // 공유 이력·개인 이력·클럽 누적액을 한 번의 원자적 update로 저장한다.
                 // 누적액은 서버 증분을 사용해 동시 수정/정산이 서로의 값을 덮어쓰지 않게 한다.
                 const firebaseUpdates = {};
-                const globalUpdate = { ...updatedFields, isEdited: true, editedAt };
+                const globalUpdate = { ...updatedFields, mediaStoredInGlobal: true, isEdited: true, editedAt };
                 Object.entries(globalUpdate).forEach(([key, value]) => {
                     firebaseUpdates[`globalHistory/${id}/${key}`] = value;
                 });
                 // 현재 로그인 계정이 보유한 개인 이력이면 해당 배열도 갱신한다.
                 // 관리자가 다른 작성자의 이력을 수정하는 경우에는 위에서 그 작성자 데이터만 직접 읽어 별도로 동기화한다.
                 if (nextSettlementHistory && this.currentPin) {
-                    firebaseUpdates[`settlements/${this.currentPin}/settlementHistory`] = nextSettlementHistory;
+                    firebaseUpdates[`settlements/${this.currentPin}/settlementHistory`] = this.buildPersonalHistoryForSync(nextSettlementHistory);
                 }
                 if (nextDirectory && this.currentPin) {
                     firebaseUpdates[`settlements/${this.currentPin}/directory`] = nextDirectory;
                 }
                 const creatorPin = merged.creatorPin || oldEntry.creatorPin;
                 if (creatorHistory && creatorPin) {
-                    firebaseUpdates[`settlements/${creatorPin}/settlementHistory`] = creatorHistory;
+                    firebaseUpdates[`settlements/${creatorPin}/settlementHistory`] = this.buildPersonalHistoryForSync(creatorHistory);
                 }
                 if (creatorDirectory && creatorPin) {
                     firebaseUpdates[`settlements/${creatorPin}/directory`] = creatorDirectory;
@@ -2873,9 +3087,14 @@ const AppState = {
                 expenseItems: JSON.parse(JSON.stringify(this.expenseItems)),
                 attendees: JSON.parse(JSON.stringify(this.attendees)),
                 eventPhotos: JSON.parse(JSON.stringify(this.eventPhotos || [])),
+                // 첨부 원본은 globalHistory에만 보관한다. 개인 이력은 메타데이터만 저장해 중복 용량을 막는다.
+                mediaStoredInGlobal: true,
             };
             const nextSettlementHistory = [newHistoryItem, ...(this.settlementHistory || [])];
             const nextDirectory = this.buildDirectoryCountsForHistory(nextSettlementHistory);
+            if (this.getHistoryMediaBytes(newHistoryItem) > MediaStoragePolicy.maxSettlementBytes) {
+                throw new Error('첨부 사진·영수증 용량이 너무 큽니다. 일부 파일을 삭제한 뒤 다시 시도해 주세요.');
+            }
             const prizeThisSession = result.prizeCost || 0;
             const registryClub = this.clubId ? this.clubRegistry[this.clubId] : null;
             let persistedClub = null;
@@ -2892,7 +3111,7 @@ const AppState = {
                     firebaseUpdates[`${settlementPath}/expenseItems`] = [];
                     firebaseUpdates[`${settlementPath}/attendees`] = [];
                     firebaseUpdates[`${settlementPath}/directory`] = nextDirectory;
-                    firebaseUpdates[`${settlementPath}/settlementHistory`] = nextSettlementHistory;
+                    firebaseUpdates[`${settlementPath}/settlementHistory`] = this.buildPersonalHistoryForSync(nextSettlementHistory);
                     firebaseUpdates[`${settlementPath}/eventPhotos`] = null;
                     firebaseUpdates[`${settlementPath}/lastUpdated`] = firebase.database.ServerValue.TIMESTAMP;
                 }
@@ -3663,7 +3882,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const amountInput = document.getElementById('expense-amount-input');
     const catSelect = document.getElementById('expense-category-select');
 
-    form.addEventListener('submit', (e) => {
+    form.addEventListener('submit', async (e) => {
         e.preventDefault();
 
         const description = descInput.value.trim();
@@ -3856,7 +4075,14 @@ document.addEventListener('DOMContentLoaded', () => {
                     return;
                 }
             }
-            AppState.addExpense(description, amount, category, corpChecked, personalChecked, corporateAmount);
+            const hadReceipt = !!(AppState.tempCorpReceiptImage || AppState.tempPersonalReceiptImage);
+            const syncResult = AppState.addExpense(description, amount, category, corpChecked, personalChecked, corporateAmount);
+            if (hadReceipt) {
+                const synced = await syncResult;
+                if (!synced) {
+                    alert('영수증은 항목에 반영됐지만 서버 저장에 실패했습니다. 네트워크를 확인한 뒤 항목을 다시 열어 저장해 주세요.');
+                }
+            }
             _corpOverLimitApproved = false; // 승인 플래그는 항목 하나당 1회만 유효 — 추가 완료 후 소진
             syncPrizeTotalFromItems();
             descInput.focus();
@@ -3940,10 +4166,17 @@ document.addEventListener('DOMContentLoaded', () => {
             if (file) {
                 status.textContent = "⌛ 영수증 압축 중...";
                 status.classList.remove('hidden');
-                compressReceiptImage(file, (compressedBase64) => {
+                compressReceiptImage(file, (compressedBase64, bytes) => {
+                    if (!AppState.isDraftMediaWithinLimit({ [stateKey]: compressedBase64 })) {
+                        status.textContent = `⚠ 첨부 합계가 ${formatMediaSize(MediaStoragePolicy.maxSettlementBytes)}를 초과합니다.`;
+                        if (deleteBtn) deleteBtn.classList.toggle('hidden', !AppState[stateKey]);
+                        return;
+                    }
                     AppState[stateKey] = compressedBase64;
-                    status.textContent = "✓ 영수증 대기 완료";
+                    status.textContent = `✓ 저용량 변환 완료 (${formatMediaSize(bytes)}, 정산 완료 시 서버 보관)`;
                     if (deleteBtn) deleteBtn.classList.remove('hidden');
+                }, MediaStoragePolicy.receipt, err => {
+                    status.textContent = `⚠ ${err.message || '영수증 압축에 실패했습니다.'}`;
                 });
             } else {
                 AppState[stateKey] = null;
@@ -4202,25 +4435,54 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Event photo upload handler (여러 장 지원)
     const eventPhotoInput = document.getElementById('event-photo-input');
+    const eventPhotoStatus = document.getElementById('event-photo-status');
 
     if (eventPhotoInput) {
-        eventPhotoInput.addEventListener('change', (e) => {
+        eventPhotoInput.addEventListener('change', async (e) => {
             const files = Array.from(e.target.files);
             if (!files.length) return;
-            const slots = new Array(files.length);
-            let processed = 0;
-            files.forEach((file, idx) => {
-                compressReceiptImage(file, (compressed) => {
-                    slots[idx] = compressed;
-                    processed++;
-                    if (processed === files.length) {
-                        AppState.eventPhotos.push(...slots);
-                        AppState.save();
-                        AppState.render();
+            eventPhotoInput.value = '';
+            if (eventPhotoStatus) {
+                eventPhotoStatus.textContent = `⌛ 행사 사진 ${files.length}장을 저용량 변환 중입니다...`;
+                eventPhotoStatus.style.color = 'var(--text-muted)';
+            }
+            try {
+                const compressed = await Promise.all(files.map(file =>
+                    compressImageForStorage(file, MediaStoragePolicy.event)
+                ));
+                const accepted = [];
+                let rejected = 0;
+                compressed.forEach(({ dataUrl }) => {
+                    const candidate = [...(AppState.eventPhotos || []), ...accepted, dataUrl];
+                    if (AppState.isDraftMediaWithinLimit({ eventPhotos: candidate })) {
+                        accepted.push(dataUrl);
+                    } else {
+                        rejected++;
                     }
                 });
-            });
-            eventPhotoInput.value = '';
+                if (accepted.length === 0) {
+                    throw new Error(`첨부 합계가 ${formatMediaSize(MediaStoragePolicy.maxSettlementBytes)}를 초과합니다. 일부 사진을 삭제한 뒤 다시 시도해 주세요.`);
+                }
+                AppState.eventPhotos.push(...accepted);
+                AppState.render();
+                const synced = await AppState.save();
+                const totalBytes = accepted.reduce((sum, value) => sum + getMediaDataSize(value), 0);
+                if (eventPhotoStatus) {
+                    if (synced) {
+                        eventPhotoStatus.textContent = `✓ ${accepted.length}장 서버 임시 저장 완료 (${formatMediaSize(totalBytes)})${rejected ? ` · ${rejected}장은 용량 초과로 제외` : ''}`;
+                        eventPhotoStatus.style.color = 'var(--color-secondary)';
+                    } else {
+                        eventPhotoStatus.textContent = '⚠ 사진은 이 기기에만 저장됐습니다. 네트워크를 확인한 뒤 다시 저장해 주세요.';
+                        eventPhotoStatus.style.color = 'var(--warning-text)';
+                    }
+                }
+            } catch (err) {
+                console.error('행사 사진 저장 실패:', err);
+                if (eventPhotoStatus) {
+                    eventPhotoStatus.textContent = `⚠ ${err.message || '행사 사진 저장에 실패했습니다.'}`;
+                    eventPhotoStatus.style.color = 'var(--warning-text)';
+                }
+            }
         });
     }
 
@@ -4233,8 +4495,14 @@ document.addEventListener('DOMContentLoaded', () => {
             const idx = parseInt(btn.dataset.pidx, 10);
             if (!isNaN(idx)) {
                 AppState.eventPhotos.splice(idx, 1);
-                AppState.save();
                 AppState.render();
+                AppState.save().then(synced => {
+                    if (!eventPhotoStatus) return;
+                    eventPhotoStatus.textContent = synced
+                        ? '✓ 행사 사진 삭제 내용이 서버에 반영됐습니다.'
+                        : '⚠ 행사 사진 삭제 내용이 이 기기에만 저장됐습니다.';
+                    eventPhotoStatus.style.color = synced ? 'var(--color-secondary)' : 'var(--warning-text)';
+                });
             }
         });
     }
@@ -4348,7 +4616,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     feedbackPhotoData = compressed;
                     feedbackPhotoImg.src = compressed;
                     feedbackPhotoPreview.classList.remove('hidden');
-                });
+                }, MediaStoragePolicy.feedback);
             }
         });
     }
@@ -4740,6 +5008,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 변경이력 모달
     const CHANGELOG = [
+        { ver: '1.6.242', date: '2026.07.20', items: ['영수증·행사 사진을 긴 변 기준 저용량 JPEG로 변환해 서버에 저장하고, 확정 이력의 첨부 원본은 전체 정산 이력에만 보관해 개인 이력 중복 용량을 제거', '첨부 총량 6MB 제한과 서버 저장 성공·실패 안내를 추가하고, 정산 다음 해 4월 1일 이후 만료 사진·영수증을 관리자 로그인 시 자동 정리'] },
         { ver: '1.6.241', date: '2026.07.20', items: ['관리자 정산 이력을 저장 시각이 아닌 실제 정산일 기준 최신순으로 정렬하고 같은 날짜는 최근 저장 건을 먼저 표시', '클럽별 연간 예산 소진율과 예산 통계에서 과거 연도 이력을 제외하고 올해 기존 사용액과 올해 정산 지원금만 합산'] },
         { ver: '1.6.240', date: '2026.07.20', items: ['정산 이력의 참석자 수정·삭제 시 이름이 아닌 사번 기준으로 올해 누적 참석 횟수를 전체 재집계하고 관리자·작성자 명부에 함께 반영', '관리자가 다른 사용자의 이력을 수정할 때 작성자 개인 이력도 공유 이력과 함께 동기화', '행사 사진을 신규·수정 정산 이력에 저장하고 과거 이력 엑셀에는 해당 이력의 사진만 삽입하도록 개선'] },
         { ver: '1.6.239', date: '2026.07.20', items: ['정산 확정 시 공유 이력·개인 이력·클럽 누적액·세션 초기화를 Firebase에 원자적으로 저장하고, 저장 성공 후에만 입력 내용을 초기화하도록 개선', '동시 정산·이력 수정 시 클럽 사용액과 상품비 누적액이 서로 덮어써지지 않도록 서버 증분 방식 적용', '이력 수정 저장 실패가 성공으로 처리되던 문제를 수정해 실패 시 수정 화면과 입력 내용을 그대로 유지'] },
@@ -6613,7 +6882,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                 'settlements/000000/directory': nextAdminDirectory
                             };
                             if (creatorHistory) {
-                                firebaseUpdates[`settlements/${entry.creatorPin}/settlementHistory`] = creatorHistory;
+                                firebaseUpdates[`settlements/${entry.creatorPin}/settlementHistory`] = AppState.buildPersonalHistoryForSync(creatorHistory);
                             }
                             if (creatorDirectory) {
                                 firebaseUpdates[`settlements/${entry.creatorPin}/directory`] = creatorDirectory;
@@ -7254,32 +7523,99 @@ function showPrizeModal(message, onOk, type) {
     okBtn.addEventListener('click', handler);
 }
 
-function compressReceiptImage(file, callback) {
-    const reader = new FileReader();
-    reader.onload = function(e) {
-        const img = new Image();
-        img.onload = function() {
-            const canvas = document.createElement('canvas');
-            let width = img.width;
-            let height = img.height;
-            const maxWidth = 600;
-            
-            if (width > maxWidth) {
-                height = (maxWidth / width) * height;
-                width = maxWidth;
+function formatMediaSize(bytes) {
+    if (bytes < 1024) return `${bytes}B`;
+    if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)}KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1).replace('.0', '')}MB`;
+}
+
+function readFileAsDataUrl(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(reader.error || new Error('이미지 파일을 읽지 못했습니다.'));
+        reader.readAsDataURL(file);
+    });
+}
+
+function loadImageFromDataUrl(dataUrl) {
+    return new Promise((resolve, reject) => {
+        const image = new Image();
+        image.onload = () => resolve(image);
+        image.onerror = () => reject(new Error('이미지를 해석하지 못했습니다.'));
+        image.src = dataUrl;
+    });
+}
+
+function canvasToBlob(canvas, quality) {
+    return new Promise((resolve, reject) => {
+        canvas.toBlob(blob => {
+            if (blob) resolve(blob);
+            else reject(new Error('이미지 압축에 실패했습니다.'));
+        }, 'image/jpeg', quality);
+    });
+}
+
+function blobToDataUrl(blob) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(reader.error || new Error('압축 이미지를 변환하지 못했습니다.'));
+        reader.readAsDataURL(blob);
+    });
+}
+
+// 긴 세로 영수증도 긴 변 기준으로 축소하고, 목표 바이트에 도달할 때까지 품질·해상도를 단계적으로 낮춘다.
+async function compressImageForStorage(file, policy = MediaStoragePolicy.receipt) {
+    if (!file || !file.type || !file.type.startsWith('image/')) {
+        throw new Error('이미지 파일만 첨부할 수 있습니다.');
+    }
+    const source = await readFileAsDataUrl(file);
+    const image = await loadImageFromDataUrl(source);
+    const originalLongest = Math.max(image.width, image.height);
+    let scale = Math.min(1, policy.maxDimension / Math.max(1, originalLongest));
+    let best = null;
+
+    for (let stage = 0; stage < 5; stage++) {
+        const width = Math.max(1, Math.round(image.width * scale));
+        const height = Math.max(1, Math.round(image.height * scale));
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        // PNG 투명 영역이 JPEG 변환 시 검게 보이지 않도록 흰 배경을 먼저 채운다.
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, width, height);
+        ctx.drawImage(image, 0, 0, width, height);
+
+        for (let quality = policy.quality; quality >= policy.minQuality - 0.001; quality -= 0.08) {
+            const blob = await canvasToBlob(canvas, Math.max(policy.minQuality, quality));
+            if (!best || blob.size < best.blob.size) best = { blob, width, height };
+            if (blob.size <= policy.targetBytes) {
+                return { dataUrl: await blobToDataUrl(blob), bytes: blob.size, width, height };
             }
-            
-            canvas.width = width;
-            canvas.height = height;
-            
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(img, 0, 0, width, height);
-            
-            // Compress to JPEG with 0.7 quality to stay within localStorage limits
-            const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.7);
-            callback(compressedDataUrl);
-        };
-        img.src = e.target.result;
+        }
+
+        if (Math.max(width, height) <= policy.minDimension) break;
+        scale *= 0.76;
+    }
+
+    if (!best) throw new Error('이미지 압축에 실패했습니다.');
+    return {
+        dataUrl: await blobToDataUrl(best.blob),
+        bytes: best.blob.size,
+        width: best.width,
+        height: best.height
     };
-    reader.readAsDataURL(file);
+}
+
+// 기존 콜백 호출부와의 호환용 래퍼
+function compressReceiptImage(file, callback, policy = MediaStoragePolicy.receipt, onError) {
+    compressImageForStorage(file, policy)
+        .then(({ dataUrl, bytes }) => callback(dataUrl, bytes))
+        .catch(err => {
+            console.error('이미지 압축 실패:', err);
+            if (onError) onError(err);
+            else alert(err.message || '이미지 압축에 실패했습니다.');
+        });
 }

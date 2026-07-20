@@ -43,6 +43,11 @@
 
 **유저 Firebase(`settlements/{PIN}`) 저장 항목 (세션 데이터만):**
 - `memberCount`, `expenseItems`, `attendees`, `directory`, `clubName`, `clubId`, `reportEmail`, `settlementHistory`, `eventPhotos`
+
+**첨부 저장 원칙 (v1.6.242+):**
+- 행사 사진·영수증 원본은 확정 시 `globalHistory/{id}`에만 보관하고, `settlements/{PIN}/settlementHistory`에는 첨부를 제외한 메타데이터만 저장한다.
+- 행사 사진은 긴 변 960px·목표 70KB, 영수증은 긴 변 1280px·목표 120KB 수준의 JPEG로 변환한다. 한 정산의 첨부 합계는 Base64 기준 6MB를 넘길 수 없다.
+- 정산 연도 다음 해 4월 1일부터 해당 이력의 사진·영수증만 삭제한다. 금액, 참석자, 항목 등 정산 데이터는 삭제하지 않는다. 전체 이력 정리는 관리자 로그인 시 실행된다.
 - `rules`, `annualBudget`, `usedBudget`, `previousPrizeTotal` → **저장·로드 금지** (관리자 경로 기준)
 
 ---
@@ -186,6 +191,7 @@ previousPrizeTotal = clubRegistry[clubId].prizeUsed  (관리자 기준 단일 �
 - 법인카드 영수증: `expense-receipt-corp-input`
 - 개인카드 영수증: `expense-receipt-personal-input`
 - 업로드 시 자동 압축 (`compressReceiptImage`)
+- 영수증은 긴 변 1280px·목표 120KB 수준의 JPEG로 변환하며, 행사 사진을 포함한 한 정산의 첨부 합계는 Base64 기준 6MB 이하다.
 - 상태 표시: "⌛ 영수증 압축 중..." → "✓ 영수증 대기 완료"
 - 엑셀 sheet4에 삽입 (법인: B열, 개인: D열, 행 간격 16행)
 
@@ -259,8 +265,8 @@ previousPrizeTotal = clubRegistry[clubId].prizeUsed  (관리자 기준 단일 �
 3. SettlementValidator.validate() 자동 교차 검증
 4. 엑셀 파일 생성 (lib/template.xlsx 기반)
 5. Firebase 루트 다중 경로 update로 한 번에 원자 저장:
-   - globalHistory/{id}                       [관리자 전체 이력, eventPhotos 포함]
-   - settlements/{PIN}/settlementHistory      [유저 개인 이력]
+   - globalHistory/{id}                       [전체 이력 및 사진·영수증 원본]
+   - settlements/{PIN}/settlementHistory      [유저 개인 이력, 첨부 원본 제외]
    - settlements/{PIN}/directory               [사번 기준 올해 누적 재집계]
    - clubRegistry/{clubId}.usedBudget/prizeUsed [서버 증분]
    - 개인 세션 비용·참석자·사진 초기화
@@ -577,9 +583,9 @@ directory[이름] = {
 /globalSettings/rules            → 자부담 구간/비율/상품비한도 (관리자 저장)
 /clubRegistry/{clubId}           → 클럽 정보 (name, budget, priorUsed, prizeUsed)
 /clubTotalBudget                 → 전체 클럽 총 예산 합계
-/globalHistory/{timestamp}       → 전체 정산 이력 (모든 유저)
+/globalHistory/{timestamp}       → 전체 정산 이력 및 사진·영수증 원본 (모든 유저)
 /deletedHistoryIds/{timestamp}   → 삭제된 이력 ID tombstone
 /settlements/{PIN}               → 유저별 세션 데이터 (expenseItems, attendees 등)
-/settlements/{PIN}/settlementHistory → 유저 본인 정산 이력
+/settlements/{PIN}/settlementHistory → 유저 본인 정산 이력(신규 확정 이력은 첨부 원본 제외)
 /requests/{key}                  → 유저 요청사항/피드백
 ```
