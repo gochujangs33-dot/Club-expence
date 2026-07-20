@@ -1,7 +1,7 @@
 /**
  * Club Expense Settlement App - Main JavaScript Logic
  */
-const APP_VERSION      = '1.6.242';
+const APP_VERSION      = '1.6.243';
 const APP_VERSION_DATE = '2026.07.20';
 
 // 인당 자부담 비용에 따라 강조 박스의 아이콘/색상을 전환 (100원 이상이면 🔥, 0이면 😊)
@@ -1538,6 +1538,18 @@ const AppState = {
     },
 
     addAttendee(name, employeeId) {
+        const normalizedEmployeeId = String(employeeId || '').trim();
+        const duplicateAttendee = normalizedEmployeeId
+            ? this.attendees.find(attendee =>
+                attendee && String(attendee.employeeId || '').trim() === normalizedEmployeeId &&
+                String(attendee.id) !== String(this.editingAttendeeId)
+            )
+            : null;
+        if (duplicateAttendee) {
+            alert(`이미 등록된 참석자입니다.\n${duplicateAttendee.name} (사번: ${normalizedEmployeeId})\n동일한 사번은 한 번만 등록할 수 있습니다.`);
+            return false;
+        }
+
         if (this.editingAttendeeId !== null) {
             const index = this.attendees.findIndex(att => att.id === this.editingAttendeeId);
             if (index !== -1) {
@@ -1575,6 +1587,7 @@ const AppState = {
         this.save();
         this.render();
         this.updateDatalist();
+        return true;
     },
 
     deleteAttendee(id) {
@@ -3660,13 +3673,6 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!name) { showAttendeeError('이름을 입력해 주세요.'); return; }
         if (!id) { showAttendeeError('사번(EMP ID)은 필수입니다.'); return; }
 
-        if (AppState.editingAttendeeId === null) {
-            const isDuplicate = AppState.attendees.some(att => att.name === name && att.employeeId === id);
-            if (isDuplicate) {
-                showAttendeeError(`이미 등록된 참석자입니다: ${name} (사번: ${id})`);
-                return;
-            }
-        }
         AppState.addAttendee(name, id);
     }
 
@@ -5008,6 +5014,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 변경이력 모달
     const CHANGELOG = [
+        { ver: '1.6.243', date: '2026.07.20', items: ['현재 참석자 추가·수정에서 이름과 무관하게 동일 사번을 중복 등록하지 못하도록 차단하고, 이미 등록된 참석자 이름·사번을 팝업으로 안내'] },
         { ver: '1.6.242', date: '2026.07.20', items: ['영수증·행사 사진을 긴 변 기준 저용량 JPEG로 변환해 서버에 저장하고, 확정 이력의 첨부 원본은 전체 정산 이력에만 보관해 개인 이력 중복 용량을 제거', '첨부 총량 6MB 제한과 서버 저장 성공·실패 안내를 추가하고, 정산 다음 해 4월 1일 이후 만료 사진·영수증을 관리자 로그인 시 자동 정리'] },
         { ver: '1.6.241', date: '2026.07.20', items: ['관리자 정산 이력을 저장 시각이 아닌 실제 정산일 기준 최신순으로 정렬하고 같은 날짜는 최근 저장 건을 먼저 표시', '클럽별 연간 예산 소진율과 예산 통계에서 과거 연도 이력을 제외하고 올해 기존 사용액과 올해 정산 지원금만 합산'] },
         { ver: '1.6.240', date: '2026.07.20', items: ['정산 이력의 참석자 수정·삭제 시 이름이 아닌 사번 기준으로 올해 누적 참석 횟수를 전체 재집계하고 관리자·작성자 명부에 함께 반영', '관리자가 다른 사용자의 이력을 수정할 때 작성자 개인 이력도 공유 이력과 함께 동기화', '행사 사진을 신규·수정 정산 이력에 저장하고 과거 이력 엑셀에는 해당 이력의 사진만 삽입하도록 개선'] },
