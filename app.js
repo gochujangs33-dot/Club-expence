@@ -1,7 +1,7 @@
 /**
  * Club Expense Settlement App - Main JavaScript Logic
  */
-const APP_VERSION      = '1.6.245';
+const APP_VERSION      = '1.6.246';
 const APP_VERSION_DATE = '2026.07.20';
 
 // 인당 자부담 비용에 따라 강조 박스의 아이콘/색상을 전환 (100원 이상이면 🔥, 0이면 😊)
@@ -5045,6 +5045,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 변경이력 모달
     const CHANGELOG = [
+        { ver: '1.6.246', date: '2026.07.20', items: ['관리자 첫 화면에 시작 안내와 바로가기 4단계를 추가해 클럽·예산 설정, 정산 기준 확인, 명부 관리, 차트 확인의 순서를 한눈에 안내'] },
         { ver: '1.6.245', date: '2026.07.20', items: ['행사별 참석 인원 그래프를 최근 10건으로 조정하고, 모든 막대의 왼쪽 클럽명·날짜 레이블이 생략되지 않도록 고정 표시'] },
         { ver: '1.6.244', date: '2026.07.20', items: ['현재 참석자 중복 사번 안내를 브라우저 기본 팝업 대신 이름 입력란 옆의 빨간 문구로 변경하고, 입력을 수정하면 안내가 즉시 사라지도록 개선'] },
         { ver: '1.6.243', date: '2026.07.20', items: ['현재 참석자 추가·수정에서 이름과 무관하게 동일 사번을 중복 등록하지 못하도록 차단하고, 이미 등록된 참석자 이름·사번을 팝업으로 안내'] },
@@ -5488,6 +5489,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!firebaseDb) return;
 
         renderFeedbackList();
+        updateAdminStartGuide();
 
         // 1. Fetch Users
         firebaseDb.ref('users').once('value').then(snapshot => {
@@ -5579,6 +5581,44 @@ document.addEventListener('DOMContentLoaded', () => {
         renderClubHistorySelect();
     }
 
+    // 관리자 첫 진입 시 현재 설정 상태를 행동 중심으로 알려 준다.
+    function updateAdminStartGuide() {
+        const status = document.getElementById('admin-start-club-status');
+        if (!status) return;
+        const clubs = Object.values(AppState.clubRegistry || {})
+            .filter(club => club && String(club.name || '').trim());
+        if (clubs.length === 0) {
+            status.textContent = '설정 필요 · 클럽을 먼저 등록해 주세요';
+            status.style.color = '#fbbf24';
+            return;
+        }
+        status.textContent = `등록 완료 · 현재 ${clubs.length}개 클럽`;
+        status.style.color = '#5eead4';
+    }
+
+    function openAdminStartCard(cardId) {
+        const card = document.getElementById(cardId);
+        if (!card) return;
+        card.classList.remove('collapsed');
+        localStorage.setItem(`card_collapsed_${cardId}`, '0');
+        card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        setTimeout(() => {
+            const input = card.querySelector('input:not([type="hidden"]), select');
+            if (input) input.focus({ preventScroll: true });
+        }, 350);
+    }
+
+    document.querySelectorAll('.admin-start-action').forEach(button => {
+        button.addEventListener('click', () => {
+            const action = button.dataset.adminAction;
+            if (action === 'club') return openAdminStartCard('club-management-card');
+            if (action === 'rules') return openAdminStartCard('rules-management-card');
+            const tabId = action === 'directory' ? 'tab-directory' : 'tab-charts';
+            const tabButton = document.querySelector(`.tab-nav .tab-btn[data-tab="${tabId}"]`);
+            if (tabButton) tabButton.click();
+        });
+    });
+
     // ── 클럽별 정산이력 탭 - 클럽 선택 드롭다운 ───────────────────────────
     function renderClubHistorySelect() {
         const select = document.getElementById('club-history-select');
@@ -5622,6 +5662,7 @@ document.addEventListener('DOMContentLoaded', () => {
             _seenClubNames.add(key);
             return true;
         });
+        updateAdminStartGuide();
         const allocated = clubs.reduce((sum, [, c]) => sum + (c.budget || 0), 0);
         const remaining = (AppState.clubTotalBudget || 0) - allocated;
         if (clubBudgetSummary) {
