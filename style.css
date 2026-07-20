@@ -1852,7 +1852,7 @@ body:has(.update-banner:not(.hidden)) {
 
 .admin-start-actions {
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 0.65rem;
 }
 
@@ -1876,6 +1876,11 @@ body:has(.update-banner:not(.hidden)) {
     border-color: var(--color-secondary);
     background: rgba(139, 92, 246, 0.19);
     transform: translateY(-1px);
+}
+
+.admin-start-action.is-open {
+    border-color: rgba(94, 234, 212, 0.72);
+    background: rgba(13, 148, 136, 0.13);
 }
 
 .admin-start-action > span:nth-child(2) {
@@ -1904,6 +1909,13 @@ body:has(.update-banner:not(.hidden)) {
 }
 
 .admin-start-arrow { color: #c4b5fd; font-size: 1rem; }
+.admin-start-toggle-label {
+    flex: 0 0 auto;
+    color: #c4b5fd;
+    font-size: 0.72rem;
+    font-weight: 700;
+}
+.admin-start-action.is-open .admin-start-toggle-label { color: #5eead4; }
 
 @media (max-width: 850px) {
     .admin-start-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }

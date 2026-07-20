@@ -1,7 +1,7 @@
 /**
  * Club Expense Settlement App - Main JavaScript Logic
  */
-const APP_VERSION      = '1.6.246';
+const APP_VERSION      = '1.6.247';
 const APP_VERSION_DATE = '2026.07.20';
 
 // 인당 자부담 비용에 따라 강조 박스의 아이콘/색상을 전환 (100원 이상이면 🔥, 0이면 😊)
@@ -4910,6 +4910,7 @@ document.addEventListener('DOMContentLoaded', () => {
         btn.addEventListener('click', () => {
             const collapsed = card.classList.toggle('collapsed');
             localStorage.setItem(storageKey, collapsed ? '1' : '0');
+            syncAdminStartActionState(cardId);
         });
     });
 
@@ -5045,6 +5046,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 변경이력 모달
     const CHANGELOG = [
+        { ver: '1.6.247', date: '2026.07.20', items: ['관리자 시작 안내에서 전사원 명부 관리를 제외하고, 클럽·예산 설정과 정산 기준 확인을 다시 누르면 해당 설정 카드를 접는 토글 방식으로 개선'] },
         { ver: '1.6.246', date: '2026.07.20', items: ['관리자 첫 화면에 시작 안내와 바로가기 4단계를 추가해 클럽·예산 설정, 정산 기준 확인, 명부 관리, 차트 확인의 순서를 한눈에 안내'] },
         { ver: '1.6.245', date: '2026.07.20', items: ['행사별 참석 인원 그래프를 최근 10건으로 조정하고, 모든 막대의 왼쪽 클럽명·날짜 레이블이 생략되지 않도록 고정 표시'] },
         { ver: '1.6.244', date: '2026.07.20', items: ['현재 참석자 중복 사번 안내를 브라우저 기본 팝업 대신 이름 입력란 옆의 빨간 문구로 변경하고, 입력을 수정하면 안내가 즉시 사라지도록 개선'] },
@@ -5596,11 +5598,26 @@ document.addEventListener('DOMContentLoaded', () => {
         status.style.color = '#5eead4';
     }
 
-    function openAdminStartCard(cardId) {
+    function syncAdminStartActionState(cardId) {
         const card = document.getElementById(cardId);
         if (!card) return;
-        card.classList.remove('collapsed');
-        localStorage.setItem(`card_collapsed_${cardId}`, '0');
+        const isOpen = !card.classList.contains('collapsed');
+        document.querySelectorAll(`.admin-start-action[data-admin-target="${cardId}"]`).forEach(button => {
+            button.setAttribute('aria-expanded', String(isOpen));
+            button.classList.toggle('is-open', isOpen);
+            const label = button.querySelector('.admin-start-toggle-label');
+            if (label) label.textContent = isOpen ? '접기' : '열기';
+        });
+    }
+
+    function toggleAdminStartCard(cardId) {
+        const card = document.getElementById(cardId);
+        if (!card) return;
+        const shouldOpen = card.classList.contains('collapsed');
+        card.classList.toggle('collapsed', !shouldOpen);
+        localStorage.setItem(`card_collapsed_${cardId}`, shouldOpen ? '0' : '1');
+        syncAdminStartActionState(cardId);
+        if (!shouldOpen) return;
         card.scrollIntoView({ behavior: 'smooth', block: 'start' });
         setTimeout(() => {
             const input = card.querySelector('input:not([type="hidden"]), select');
@@ -5611,13 +5628,15 @@ document.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll('.admin-start-action').forEach(button => {
         button.addEventListener('click', () => {
             const action = button.dataset.adminAction;
-            if (action === 'club') return openAdminStartCard('club-management-card');
-            if (action === 'rules') return openAdminStartCard('rules-management-card');
-            const tabId = action === 'directory' ? 'tab-directory' : 'tab-charts';
+            if (action === 'club') return toggleAdminStartCard('club-management-card');
+            if (action === 'rules') return toggleAdminStartCard('rules-management-card');
+            const tabId = 'tab-charts';
             const tabButton = document.querySelector(`.tab-nav .tab-btn[data-tab="${tabId}"]`);
             if (tabButton) tabButton.click();
         });
     });
+    syncAdminStartActionState('club-management-card');
+    syncAdminStartActionState('rules-management-card');
 
     // ── 클럽별 정산이력 탭 - 클럽 선택 드롭다운 ───────────────────────────
     function renderClubHistorySelect() {
