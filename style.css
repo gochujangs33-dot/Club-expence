@@ -1435,6 +1435,68 @@ input[aria-invalid="true"] {
     .club-usage-summary-totals { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
+/* 클럽별 정산 이력은 모바일에서 가로 표 대신 행사별 정보 카드로 표시한다. */
+@media (max-width: 640px) {
+    .admin-inline-club-usage-card { padding: 0.75rem; }
+    .admin-inline-club-usage-header { align-items: flex-start; margin-bottom: 0.7rem; padding-bottom: 0.65rem; }
+    .inline-club-usage-summary .club-usage-summary-totals {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0.45rem;
+    }
+    .inline-club-usage-summary .club-usage-total-card { padding: 0.55rem; }
+    .inline-club-usage-summary .club-usage-total-card span { font-size: 0.68rem; }
+    .inline-club-usage-summary .club-usage-total-card strong { font-size: 0.82rem; }
+
+    .inline-club-usage-table-wrap { overflow: visible; border: 0; border-radius: 0; }
+    .inline-club-usage-summary .club-usage-summary-table,
+    .inline-club-usage-summary .club-usage-summary-table tbody,
+    .inline-club-usage-summary .club-usage-summary-table tr,
+    .inline-club-usage-summary .club-usage-summary-table td {
+        display: block;
+        width: 100%;
+        min-width: 0;
+    }
+    .inline-club-usage-summary .club-usage-summary-table { font-size: 0.82rem; }
+    .inline-club-usage-summary .club-usage-summary-table thead { display: none; }
+    .inline-club-usage-summary .club-usage-summary-table tbody tr {
+        margin: 0 0 0.55rem;
+        padding: 0.2rem 0.65rem;
+        border: 1px solid rgba(148, 163, 184, 0.2);
+        border-radius: 9px;
+        background: rgba(15, 23, 42, 0.5);
+    }
+    .inline-club-usage-summary .club-usage-summary-table tbody td {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.8rem;
+        min-height: 2.1rem;
+        padding: 0.35rem 0;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        text-align: right;
+        white-space: normal;
+    }
+    .inline-club-usage-summary .club-usage-summary-table tbody td::before {
+        content: attr(data-label);
+        flex: 0 0 42%;
+        color: var(--text-secondary);
+        font-size: 0.71rem;
+        font-weight: 700;
+        text-align: left;
+    }
+    .inline-club-usage-summary .club-usage-summary-table tbody td:last-child { border-bottom: 0; }
+    .inline-club-usage-summary .club-usage-summary-table td:first-child,
+    .inline-club-usage-summary .club-usage-summary-table td:nth-child(2) { text-align: right; }
+    .inline-club-usage-summary .club-usage-summary-empty { display: block !important; text-align: center !important; }
+    .inline-club-usage-summary .club-usage-summary-empty::before { display: none; }
+    .inline-club-usage-summary .club-usage-attendee-button,
+    .inline-club-usage-summary .club-usage-excel-button { min-height: 2rem; }
+}
+
+@media (max-width: 360px) {
+    .inline-club-usage-summary .club-usage-summary-totals { grid-template-columns: 1fr; }
+}
+
 .modal-content {
     margin: auto;
     display: block;

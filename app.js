@@ -1,7 +1,7 @@
 /**
  * Club Expense Settlement App - Main JavaScript Logic
  */
-const APP_VERSION      = '1.6.262';
+const APP_VERSION      = '1.6.263';
 const APP_VERSION_DATE = '2026.07.21';
 
 // 인당 자부담 비용에 따라 강조 박스의 아이콘/색상을 전환 (100원 이상이면 🔥, 0이면 😊)
@@ -5133,6 +5133,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 변경이력 모달
     const CHANGELOG = [
+        { ver: '1.6.263', date: '2026.07.21', items: ['모바일 클럽별 정산 이력을 행사별 세로 정보 카드로 전환해 가로 잘림 없이 확인', '모바일에서도 행사 날짜 수정·참석자 명단·엑셀 다시 받기 버튼을 한 행에서 사용 가능'] },
         { ver: '1.6.262', date: '2026.07.21', items: ['일반 사용자 정산 이력도 클럽별 사용 요약·총 상품비·날짜 수정·참석자 명단 확인 방식으로 통일', '사용자 본인 정산 행에 엑셀 다시 받기 버튼 추가'] },
         { ver: '1.6.261', date: '2026.07.21', items: ['관리자 클럽별 사용 요약의 정산 이력 상세·수정 영역을 제거하고 행사 날짜 클릭으로 바로 수정 진입', '상단 사용 안내와 총 상품비 요약을 추가'] },
         { ver: '1.6.260', date: '2026.07.21', items: ['관리자 클럽별 정산 이력에서 모든 클럽의 사용 요약과 행사별 비용 표를 즉시 표시', '행사별 참석 인원 숫자를 클릭하면 이름·사번 명단 확인과 복사가 가능하도록 연결'] },
@@ -6711,6 +6712,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function appendClubUsageRows(listEl, rows, year, { clickableAttendees = false, editableDates = false, excelDownloads = false } = {}) {
         listEl.innerHTML = '';
+        const columnLabels = ['행사 날짜', '참석 인원', '행사비', '시설·장비 이용료', '상품비', '회사 지원금', '자부담 비용', '총 비용'];
         if (rows.length === 0) {
             const row = document.createElement('tr');
             const cell = document.createElement('td');
@@ -6736,6 +6738,7 @@ document.addEventListener('DOMContentLoaded', () => {
             ];
             values.forEach((value, index) => {
                 const cell = document.createElement('td');
+                cell.dataset.label = columnLabels[index];
                 const canEdit = typeof editableDates === 'function'
                     ? editableDates(rowData.entry)
                     : editableDates;
@@ -6771,6 +6774,7 @@ document.addEventListener('DOMContentLoaded', () => {
             });
             if (excelDownloads) {
                 const excelCell = document.createElement('td');
+                excelCell.dataset.label = '엑셀';
                 const canDownload = typeof excelDownloads === 'function'
                     ? excelDownloads(rowData.entry)
                     : excelDownloads;
