@@ -1,8 +1,8 @@
 /**
  * Club Expense Settlement App - Main JavaScript Logic
  */
-const APP_VERSION      = '1.6.251';
-const APP_VERSION_DATE = '2026.07.20';
+const APP_VERSION      = '1.6.252';
+const APP_VERSION_DATE = '2026.07.21';
 
 // 인당 자부담 비용에 따라 강조 박스의 아이콘/색상을 전환 (100원 이상이면 🔥, 0이면 😊)
 function updatePerPersonSelfPayIcon(perPersonSelfPay) {
@@ -5046,6 +5046,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 변경이력 모달
     const CHANGELOG = [
+        { ver: '1.6.252', date: '2026.07.21', items: ['자부담·회사지원금 추이 카드에 총 회사 지원금과 총 자부담 비용 누적 요약을 추가', '클럽별 정산 횟수 차트의 막대를 클릭하면 올해 행사별 날짜·참석 인원·비용 카테고리·회사 지원금·자부담·총 비용을 표로 확인하도록 개선'] },
         { ver: '1.6.251', date: '2026.07.20', items: ['두 참석 인원 차트에서 마우스 오버 시 이름·사번 명단을 다시 표시하고, 막대 클릭 시 명단 팝업과 복사 기능도 함께 유지하도록 개선'] },
         { ver: '1.6.250', date: '2026.07.20', items: ['이전 앱 셸 캐시가 최신 차트 기능을 받지 못하던 문제를 해결하기 위해 HTML·JS·CSS는 서비스워커에서 HTTP 캐시를 우회해 항상 최신 파일을 확인하도록 개선'] },
         { ver: '1.6.249', date: '2026.07.20', items: ['참석자 이름·사번이 길어 차트 툴팁에서 잘리던 문제를 수정해, 두 참석 인원 차트의 막대를 클릭하면 스크롤 가능한 명단 팝업을 열고 명단 복사도 가능하도록 개선'] },
@@ -6432,6 +6433,13 @@ document.addEventListener('DOMContentLoaded', () => {
             !selectedOverallClubs || selectedOverallClubs.has(entry.clubName || '기본 클럽')
         );
 
+        const totalSupport = filtered.reduce((sum, entry) => sum + Math.max(0, parseAmount(entry.finalSupportAmount)), 0);
+        const totalSelfPay = filtered.reduce((sum, entry) => sum + Math.max(0, parseAmount(entry.totalSelfPay)), 0);
+        const totalSupportEl = document.getElementById('selfpay-trend-total-support');
+        const totalSelfPayEl = document.getElementById('selfpay-trend-total-selfpay');
+        if (totalSupportEl) totalSupportEl.textContent = SettlementCalculator.formatCurrency(totalSupport);
+        if (totalSelfPayEl) totalSelfPayEl.textContent = SettlementCalculator.formatCurrency(totalSelfPay);
+
         const byMonth = {};
         filtered.forEach(entry => {
             const d = entry.settlementDate
@@ -6503,6 +6511,136 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    function getHistoryCategoryCost(entry, category, legacyField) {
+        const items = getHistoryExpenseItems(entry);
+        if (items.length > 0) {
+            return items
+                .filter(item => item && item.category === category)
+                .reduce((sum, item) => sum + Math.max(0, parseAmount(item.amount)), 0);
+        }
+        return Math.max(0, parseAmount(entry && entry[legacyField]));
+    }
+
+    function getHistoryUsageBreakdown(entry) {
+        const eventCost = getHistoryCategoryCost(entry, ExpenseCategory.EVENT, 'eventCost');
+        const facilityCost = getHistoryCategoryCost(entry, ExpenseCategory.FACILITY, 'facilityCost');
+        const prizeCost = getHistoryPrizeCost(entry);
+        const categoryTotal = eventCost + facilityCost + prizeCost;
+        const hasTotal = Object.prototype.hasOwnProperty.call(entry || {}, 'totalCost');
+        const totalCost = hasTotal ? Math.max(0, parseAmount(entry.totalCost)) : categoryTotal;
+        const hasSelfPay = Object.prototype.hasOwnProperty.call(entry || {}, 'totalSelfPay');
+        const selfPay = hasSelfPay ? Math.max(0, parseAmount(entry.totalSelfPay)) : 0;
+        const hasSupport = Object.prototype.hasOwnProperty.call(entry || {}, 'finalSupportAmount');
+        const support = hasSupport ? Math.max(0, parseAmount(entry.finalSupportAmount)) : Math.max(0, totalCost - selfPay);
+        const memberCount = Number.isFinite(Number(entry && entry.memberCount))
+            ? Number(entry.memberCount)
+            : (entry && Array.isArray(entry.attendees) ? entry.attendees.length : 0);
+        return { eventCost, facilityCost, prizeCost, totalCost, selfPay, support, memberCount };
+    }
+
+    function formatHistoryUsageDate(entry) {
+        if (entry && /^\d{4}-\d{2}-\d{2}/.test(entry.settlementDate || '')) return entry.settlementDate.slice(0, 10);
+        const rawDate = entry && (entry.date || entry.id);
+        const date = rawDate ? new Date(rawDate) : null;
+        if (!date || Number.isNaN(date.getTime())) return '-';
+        return [date.getFullYear(), String(date.getMonth() + 1).padStart(2, '0'), String(date.getDate()).padStart(2, '0')].join('-');
+    }
+
+    function closeClubUsageSummaryModal() {
+        document.getElementById('club-usage-summary-modal')?.classList.add('hidden');
+    }
+
+    function appendClubUsageTotalCard(container, label, amount, className = '', formatter = SettlementCalculator.formatCurrency) {
+        const card = document.createElement('div');
+        card.className = `club-usage-total-card ${className}`.trim();
+        const labelEl = document.createElement('span');
+        const valueEl = document.createElement('strong');
+        labelEl.textContent = label;
+        valueEl.textContent = formatter(amount);
+        card.append(labelEl, valueEl);
+        container.appendChild(card);
+    }
+
+    function openClubUsageSummaryModal(clubName, entries, year) {
+        const modal = document.getElementById('club-usage-summary-modal');
+        const titleEl = document.getElementById('club-usage-summary-title');
+        const descriptionEl = document.getElementById('club-usage-summary-description');
+        const totalsEl = document.getElementById('club-usage-summary-totals');
+        const listEl = document.getElementById('club-usage-summary-list');
+        if (!modal || !titleEl || !descriptionEl || !totalsEl || !listEl) return;
+
+        const rows = (entries || [])
+            .slice()
+            .sort(compareHistoryEntriesNewestFirst)
+            .map(entry => ({ entry, ...getHistoryUsageBreakdown(entry) }));
+        const totals = rows.reduce((sum, row) => ({
+            memberCount: sum.memberCount + row.memberCount,
+            eventCost: sum.eventCost + row.eventCost,
+            facilityCost: sum.facilityCost + row.facilityCost,
+            prizeCost: sum.prizeCost + row.prizeCost,
+            support: sum.support + row.support,
+            selfPay: sum.selfPay + row.selfPay,
+            totalCost: sum.totalCost + row.totalCost
+        }), { memberCount: 0, eventCost: 0, facilityCost: 0, prizeCost: 0, support: 0, selfPay: 0, totalCost: 0 });
+
+        titleEl.textContent = `${clubName} 사용 요약`;
+        descriptionEl.textContent = `${year}년 정산 ${rows.length}건 · 행사별 비용 내역`;
+        totalsEl.innerHTML = '';
+        appendClubUsageTotalCard(totalsEl, '총 참석 인원', totals.memberCount, '', value => `${value}명`);
+        appendClubUsageTotalCard(totalsEl, '총 회사 지원금', totals.support, 'support');
+        appendClubUsageTotalCard(totalsEl, '총 자부담 비용', totals.selfPay, 'selfpay');
+        appendClubUsageTotalCard(totalsEl, '총 비용', totals.totalCost, '');
+
+        listEl.innerHTML = '';
+        if (rows.length === 0) {
+            const row = document.createElement('tr');
+            const cell = document.createElement('td');
+            cell.colSpan = 8;
+            cell.className = 'club-usage-summary-empty';
+            cell.textContent = `${year}년 정산 이력이 없습니다.`;
+            row.appendChild(cell);
+            listEl.appendChild(row);
+        } else {
+            rows.forEach(rowData => {
+                const row = document.createElement('tr');
+                const values = [
+                    formatHistoryUsageDate(rowData.entry),
+                    `${rowData.memberCount}명`,
+                    SettlementCalculator.formatCurrency(rowData.eventCost),
+                    SettlementCalculator.formatCurrency(rowData.facilityCost),
+                    SettlementCalculator.formatCurrency(rowData.prizeCost),
+                    SettlementCalculator.formatCurrency(rowData.support),
+                    SettlementCalculator.formatCurrency(rowData.selfPay),
+                    SettlementCalculator.formatCurrency(rowData.totalCost)
+                ];
+                values.forEach((value, index) => {
+                    const cell = document.createElement('td');
+                    cell.textContent = value;
+                    if (index === 5) cell.className = 'support';
+                    if (index === 6) cell.className = 'selfpay';
+                    row.appendChild(cell);
+                });
+                listEl.appendChild(row);
+            });
+        }
+        modal.classList.remove('hidden');
+        document.getElementById('close-club-usage-summary-modal')?.focus();
+    }
+
+    function initClubUsageSummaryModal() {
+        const modal = document.getElementById('club-usage-summary-modal');
+        if (!modal) return;
+        document.getElementById('close-club-usage-summary-modal')?.addEventListener('click', closeClubUsageSummaryModal);
+        document.getElementById('dismiss-club-usage-summary-btn')?.addEventListener('click', closeClubUsageSummaryModal);
+        modal.addEventListener('click', event => {
+            if (event.target === modal) closeClubUsageSummaryModal();
+        });
+        document.addEventListener('keydown', event => {
+            if (event.key === 'Escape' && !modal.classList.contains('hidden')) closeClubUsageSummaryModal();
+        });
+    }
+    initClubUsageSummaryModal();
+
     let clubActivityChartInstance = null;
 
     // ── 클럽별 정산 횟수 (올해 활동량, 가로 막대) ─────────────────────────
@@ -6514,20 +6652,17 @@ document.addEventListener('DOMContentLoaded', () => {
         const countMap = {};
         Object.values(AppState.clubRegistry || {}).forEach(c => { countMap[c.name] = 0; });
 
-        (historyList || [])
-            .filter(e => {
-                if (!selectedOverallClubs || selectedOverallClubs.has(e.clubName || '기본 클럽')) {
-                    const y = e.settlementDate
-                        ? parseInt(e.settlementDate.slice(0, 4), 10)
-                        : (e.date ? new Date(e.date).getFullYear() : currentYear);
-                    return y === currentYear;
-                }
-                return false;
-            })
-            .forEach(e => {
-                const club = e.clubName || '기본 클럽';
-                countMap[club] = (countMap[club] || 0) + 1;
-            });
+        const currentYearEntries = (historyList || []).filter(e => {
+            if (!e || (selectedOverallClubs && !selectedOverallClubs.has(e.clubName || '기본 클럽'))) return false;
+            return getHistoryEntryYear(e) === currentYear;
+        });
+        const entriesByClub = {};
+        currentYearEntries.forEach(e => {
+            const club = e.clubName || '기본 클럽';
+            countMap[club] = (countMap[club] || 0) + 1;
+            if (!entriesByClub[club]) entriesByClub[club] = [];
+            entriesByClub[club].push(e);
+        });
 
         const sorted = Object.entries(countMap)
             .filter(([name]) => !selectedOverallClubs || selectedOverallClubs.has(name))
@@ -6558,7 +6693,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 maintainAspectRatio: false,
                 plugins: {
                     legend: { display: false },
-                    tooltip: { callbacks: { label: ctx => `정산 ${ctx.parsed.x}건` } },
+                    tooltip: { callbacks: { label: ctx => `정산 ${ctx.parsed.x}건 · 막대를 클릭해 사용 요약 확인` } },
                     chartValueLabel: {
                         color: '#e2e8f0',
                         getLabel: (i) => `${counts[i]}건`
@@ -6568,6 +6703,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     // 끝(tip) 라벨이 잘리지 않도록 최대치에 여유 확보
                     x: { ticks: { color: '#94a3b8', stepSize: 1 }, grid: { color: 'rgba(255,255,255,0.04)' }, beginAtZero: true, suggestedMax: Math.max(...counts, 1) + 1 },
                     y: { ticks: { color: '#cbd5e1', font: { size: 11 } }, grid: { display: false } }
+                },
+                onHover: (_event, elements) => { canvas.style.cursor = elements.length ? 'pointer' : 'default'; },
+                onClick: (_event, elements) => {
+                    const selected = elements[0];
+                    if (!selected) return;
+                    const clubName = labels[selected.index];
+                    openClubUsageSummaryModal(clubName, entriesByClub[clubName] || [], currentYear);
                 }
             }
         });

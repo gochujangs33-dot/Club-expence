@@ -639,11 +639,11 @@
 
                 <!-- 클럽별 정산 횟수 -->
                 <div class="card chart-card-glow">
-                    <div class="card-header">
-                        <span class="card-icon">🏃</span>
-                        <div>
-                            <h2>클럽별 정산 횟수</h2>
-                            <div class="chart-subtitle">올해 정산 활동량 비교</div>
+                <div class="card-header">
+                    <span class="card-icon">🏃</span>
+                    <div>
+                        <h2>클럽별 정산 횟수</h2>
+                        <div class="chart-subtitle">올해 정산 활동량 비교 · 막대를 클릭하면 클럽별 사용 요약을 확인할 수 있습니다</div>
                         </div>
                     </div>
                     <div class="card-body">
@@ -696,6 +696,16 @@
                     </div>
                 </div>
                 <div class="card-body">
+                    <div class="trend-total-summary" aria-label="회사 지원금과 자부담 비용 누적 요약">
+                        <div class="trend-total-card support">
+                            <span>총 회사 지원금</span>
+                            <strong id="selfpay-trend-total-support">0원</strong>
+                        </div>
+                        <div class="trend-total-card selfpay">
+                            <span>총 자부담 비용</span>
+                            <strong id="selfpay-trend-total-selfpay">0원</strong>
+                        </div>
+                    </div>
                     <div class="chart-canvas-wrap tall">
                         <canvas id="selfpay-trend-chart"></canvas>
                     </div>
@@ -900,6 +910,34 @@
                 <div class="form-actions attendance-roster-actions">
                     <button type="button" id="copy-attendance-roster-btn" class="btn-primary">📋 명단 복사</button>
                     <button type="button" id="dismiss-attendance-roster-btn" class="btn-secondary">닫기</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 클럽별 사용 요약 모달 -->
+    <div id="club-usage-summary-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="club-usage-summary-title">
+        <div class="modal-content-card card club-usage-summary-modal-card">
+            <div class="card-header">
+                <span class="card-icon">📊</span>
+                <h2 id="club-usage-summary-title">클럽 사용 요약</h2>
+                <button type="button" id="close-club-usage-summary-modal" class="attendance-roster-close" aria-label="클럽 사용 요약 닫기">&times;</button>
+            </div>
+            <div class="card-body">
+                <p id="club-usage-summary-description" class="attendance-roster-summary"></p>
+                <div id="club-usage-summary-totals" class="club-usage-summary-totals"></div>
+                <div class="club-usage-summary-table-wrap">
+                    <table class="club-usage-summary-table">
+                        <thead>
+                            <tr>
+                                <th>행사 날짜</th><th>참석 인원</th><th>행사비</th><th>시설·장비 이용료</th><th>상품비</th><th>회사 지원금</th><th>자부담 비용</th><th>총 비용</th>
+                            </tr>
+                        </thead>
+                        <tbody id="club-usage-summary-list"></tbody>
+                    </table>
+                </div>
+                <div class="form-actions attendance-roster-actions">
+                    <button type="button" id="dismiss-club-usage-summary-btn" class="btn-secondary">닫기</button>
                 </div>
             </div>
         </div>
