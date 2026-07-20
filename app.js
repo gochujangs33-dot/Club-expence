@@ -1,7 +1,7 @@
 /**
  * Club Expense Settlement App - Main JavaScript Logic
  */
-const APP_VERSION      = '1.6.250';
+const APP_VERSION      = '1.6.251';
 const APP_VERSION_DATE = '2026.07.20';
 
 // 인당 자부담 비용에 따라 강조 박스의 아이콘/색상을 전환 (100원 이상이면 🔥, 0이면 😊)
@@ -5046,6 +5046,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 변경이력 모달
     const CHANGELOG = [
+        { ver: '1.6.251', date: '2026.07.20', items: ['두 참석 인원 차트에서 마우스 오버 시 이름·사번 명단을 다시 표시하고, 막대 클릭 시 명단 팝업과 복사 기능도 함께 유지하도록 개선'] },
         { ver: '1.6.250', date: '2026.07.20', items: ['이전 앱 셸 캐시가 최신 차트 기능을 받지 못하던 문제를 해결하기 위해 HTML·JS·CSS는 서비스워커에서 HTTP 캐시를 우회해 항상 최신 파일을 확인하도록 개선'] },
         { ver: '1.6.249', date: '2026.07.20', items: ['참석자 이름·사번이 길어 차트 툴팁에서 잘리던 문제를 수정해, 두 참석 인원 차트의 막대를 클릭하면 스크롤 가능한 명단 팝업을 열고 명단 복사도 가능하도록 개선'] },
         { ver: '1.6.248', date: '2026.07.20', items: ['행사별 참석 인원과 클럽별 참석 인원(중복 제외) 차트의 막대에 마우스를 올리면 해당 참석자의 이름과 사번 목록을 함께 표시'] },
@@ -6592,6 +6593,18 @@ document.addEventListener('DOMContentLoaded', () => {
         return attendee.employeeId ? `${attendee.name} (${attendee.employeeId})` : `${attendee.name} (사번 없음)`;
     }
 
+    // 호버 툴팁은 빠른 확인용으로 이름·사번을 2명씩 묶어 모두 표시한다.
+    // 긴 명단은 막대 클릭 후 팝업에서 스크롤·복사까지 할 수 있다.
+    function formatChartAttendeeTooltipLines(attendees) {
+        const people = normalizeChartAttendees(attendees);
+        if (people.length === 0) return ['참석자 상세 정보가 저장되지 않았습니다.'];
+        const lines = ['참석자 (이름 / 사번)'];
+        for (let index = 0; index < people.length; index += 2) {
+            lines.push(people.slice(index, index + 2).map(formatChartAttendee).join(' · '));
+        }
+        return lines;
+    }
+
     let attendanceRosterCopyText = '';
     function closeAttendanceRosterModal() {
         document.getElementById('attendance-roster-modal')?.classList.add('hidden');
@@ -6704,8 +6717,11 @@ document.addEventListener('DOMContentLoaded', () => {
                                 const en = entries[items[0].dataIndex];
                                 return `${en.club} · ${en.dateKey}`;
                             },
-                            label: ctx => `참석 ${ctx.parsed.x}명 · 막대를 클릭해 명단 확인`,
-                            footer: () => '이름과 사번을 확인하거나 명단을 복사할 수 있습니다.'
+                            label: ctx => {
+                                const entry = entries[ctx.dataIndex];
+                                return [`참석 ${ctx.parsed.x}명`, ...formatChartAttendeeTooltipLines(entry.attendees)];
+                            },
+                            footer: () => '막대를 클릭하면 명단 팝업에서 전체 확인·복사가 가능합니다.'
                         }
                     },
                     chartValueLabel: {
@@ -6795,8 +6811,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     tooltip: {
                         callbacks: {
                             title: items => `${sorted[items[0].dataIndex][0]} · 올해 고유 참석자`,
-                            label: ctx => `서로 다른 참석자 ${ctx.parsed.x}명 · 막대를 클릭해 명단 확인`,
-                            footer: () => '이름과 사번을 확인하거나 명단을 복사할 수 있습니다.'
+                            label: ctx => {
+                                const attendees = sorted[ctx.dataIndex][2];
+                                return [`서로 다른 참석자 ${ctx.parsed.x}명`, ...formatChartAttendeeTooltipLines(attendees)];
+                            },
+                            footer: () => '막대를 클릭하면 명단 팝업에서 전체 확인·복사가 가능합니다.'
                         }
                     },
                     chartValueLabel: {
