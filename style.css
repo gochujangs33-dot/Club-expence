@@ -607,6 +607,29 @@ select {
     margin-top: 0.5rem;
 }
 
+.attendee-label-row {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.attendee-label-row label {
+    margin-bottom: 0;
+}
+
+.attendee-duplicate-hint {
+    color: #f87171;
+    font-size: 0.78rem;
+    font-weight: 700;
+    line-height: 1.25;
+}
+
+input[aria-invalid="true"] {
+    border-color: #ef4444 !important;
+    box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.18);
+}
+
 .btn-icon-only {
     background: transparent;
     border: none;

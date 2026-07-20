@@ -1,7 +1,7 @@
 /**
  * Club Expense Settlement App - Main JavaScript Logic
  */
-const APP_VERSION      = '1.6.243';
+const APP_VERSION      = '1.6.244';
 const APP_VERSION_DATE = '2026.07.20';
 
 // 인당 자부담 비용에 따라 강조 박스의 아이콘/색상을 전환 (100원 이상이면 🔥, 0이면 😊)
@@ -1546,9 +1546,11 @@ const AppState = {
             )
             : null;
         if (duplicateAttendee) {
-            alert(`이미 등록된 참석자입니다.\n${duplicateAttendee.name} (사번: ${normalizedEmployeeId})\n동일한 사번은 한 번만 등록할 수 있습니다.`);
+            this.showAttendeeDuplicateHint(duplicateAttendee, normalizedEmployeeId);
             return false;
         }
+
+        this.clearAttendeeDuplicateHint();
 
         if (this.editingAttendeeId !== null) {
             const index = this.attendees.findIndex(att => att.id === this.editingAttendeeId);
@@ -1590,6 +1592,31 @@ const AppState = {
         return true;
     },
 
+    // 브라우저 기본 alert 대신 이름 입력란 옆에서 중복 사번을 안내한다.
+    showAttendeeDuplicateHint(attendee, employeeId) {
+        const hint = document.getElementById('attendee-duplicate-hint');
+        const nameInput = document.getElementById('attendee-name-input');
+        const idInput = document.getElementById('attendee-id-input');
+        if (hint) {
+            hint.textContent = `⚠ 이미 등록됨: ${attendee.name} (사번 ${employeeId})`;
+            hint.classList.remove('hidden');
+        }
+        if (nameInput) nameInput.setAttribute('aria-invalid', 'true');
+        if (idInput) idInput.setAttribute('aria-invalid', 'true');
+    },
+
+    clearAttendeeDuplicateHint() {
+        const hint = document.getElementById('attendee-duplicate-hint');
+        const nameInput = document.getElementById('attendee-name-input');
+        const idInput = document.getElementById('attendee-id-input');
+        if (hint) {
+            hint.textContent = '';
+            hint.classList.add('hidden');
+        }
+        if (nameInput) nameInput.removeAttribute('aria-invalid');
+        if (idInput) idInput.removeAttribute('aria-invalid');
+    },
+
     deleteAttendee(id) {
         this.attendees = this.attendees.filter(att => att.id !== id);
         if (this.editingAttendeeId === id) {
@@ -1626,6 +1653,7 @@ const AppState = {
 
     cancelEditAttendee() {
         this.editingAttendeeId = null;
+        this.clearAttendeeDuplicateHint();
         document.getElementById('attendee-name-input').value = '';
         document.getElementById('attendee-id-input').value = '';
 
@@ -3628,6 +3656,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     attendeeNameInput.addEventListener('input', () => {
+        AppState.clearAttendeeDuplicateHint();
         const query = attendeeNameInput.value.trim();
         if (!query) { hideAttendeeDropdown(); return; }
 
@@ -3657,6 +3686,8 @@ document.addEventListener('DOMContentLoaded', () => {
     attendeeNameInput.addEventListener('blur', () => {
         setTimeout(hideAttendeeDropdown, 150);
     });
+
+    attendeeIdInput.addEventListener('input', () => AppState.clearAttendeeDuplicateHint());
 
     function showAttendeeError(msg) {
         const el = document.getElementById('attendee-error-msg');
@@ -5014,6 +5045,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 변경이력 모달
     const CHANGELOG = [
+        { ver: '1.6.244', date: '2026.07.20', items: ['현재 참석자 중복 사번 안내를 브라우저 기본 팝업 대신 이름 입력란 옆의 빨간 문구로 변경하고, 입력을 수정하면 안내가 즉시 사라지도록 개선'] },
         { ver: '1.6.243', date: '2026.07.20', items: ['현재 참석자 추가·수정에서 이름과 무관하게 동일 사번을 중복 등록하지 못하도록 차단하고, 이미 등록된 참석자 이름·사번을 팝업으로 안내'] },
         { ver: '1.6.242', date: '2026.07.20', items: ['영수증·행사 사진을 긴 변 기준 저용량 JPEG로 변환해 서버에 저장하고, 확정 이력의 첨부 원본은 전체 정산 이력에만 보관해 개인 이력 중복 용량을 제거', '첨부 총량 6MB 제한과 서버 저장 성공·실패 안내를 추가하고, 정산 다음 해 4월 1일 이후 만료 사진·영수증을 관리자 로그인 시 자동 정리'] },
         { ver: '1.6.241', date: '2026.07.20', items: ['관리자 정산 이력을 저장 시각이 아닌 실제 정산일 기준 최신순으로 정렬하고 같은 날짜는 최근 저장 건을 먼저 표시', '클럽별 연간 예산 소진율과 예산 통계에서 과거 연도 이력을 제외하고 올해 기존 사용액과 올해 정산 지원금만 합산'] },

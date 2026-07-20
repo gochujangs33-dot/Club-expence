@@ -422,7 +422,10 @@
                         <div class="card-body">
                             <form id="attendee-form" onsubmit="return false;">
                                 <div class="input-group" style="position:relative;">
-                                    <label for="attendee-name-input" data-i18n="label.name">이름</label>
+                                    <div class="attendee-label-row">
+                                        <label for="attendee-name-input" data-i18n="label.name">이름</label>
+                                        <span id="attendee-duplicate-hint" class="attendee-duplicate-hint hidden" role="alert"></span>
+                                    </div>
                                     <input type="text" id="attendee-name-input" data-i18n-ph="ph.name" placeholder="예: 홍길동" required autocomplete="off">
                                     <div id="attendee-name-dropdown" class="hidden attendee-dropdown"></div>
                                 </div>
