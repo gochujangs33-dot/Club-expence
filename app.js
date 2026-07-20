@@ -1,7 +1,7 @@
 /**
  * Club Expense Settlement App - Main JavaScript Logic
  */
-const APP_VERSION      = '1.6.253';
+const APP_VERSION      = '1.6.254';
 const APP_VERSION_DATE = '2026.07.21';
 
 // 인당 자부담 비용에 따라 강조 박스의 아이콘/색상을 전환 (100원 이상이면 🔥, 0이면 😊)
@@ -5046,6 +5046,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 변경이력 모달
     const CHANGELOG = [
+        { ver: '1.6.254', date: '2026.07.21', items: ['월별 지출 현황 차트의 세로축과 막대 합계 금액을 K·M 대신 한국 원화 단위(억·만·천·원)로 표시'] },
         { ver: '1.6.253', date: '2026.07.21', items: ['클럽 사용 요약 팝업에 관리자 클럽 레지스트리 기준의 클럽 총 예산과 현재 잔여 예산을 추가'] },
         { ver: '1.6.252', date: '2026.07.21', items: ['자부담·회사지원금 추이 카드에 총 회사 지원금과 총 자부담 비용 누적 요약을 추가', '클럽별 정산 횟수 차트의 막대를 클릭하면 올해 행사별 날짜·참석 인원·비용 카테고리·회사 지원금·자부담·총 비용을 표로 확인하도록 개선'] },
         { ver: '1.6.251', date: '2026.07.20', items: ['두 참석 인원 차트에서 마우스 오버 시 이름·사번 명단을 다시 표시하고, 막대 클릭 시 명단 팝업과 복사 기능도 함께 유지하도록 개선'] },
@@ -6223,7 +6224,23 @@ document.addEventListener('DOMContentLoaded', () => {
         }));
 
         const stacked = sortedClubs.length > 1;
-        const compactWon = v => v >= 1000000 ? (v/1000000).toFixed(1)+'M' : v >= 1000 ? (v/1000).toFixed(0)+'K' : String(v);
+        // 차트 표기는 한국 원화 단위(억·만·천)로 통일한다.
+        // 축에는 단위를 간결하게, 막대 합계에는 원 단위까지 표시한다.
+        const formatKoreanWon = (value, includeWon = false) => {
+            const amount = Math.round(Number(value) || 0);
+            if (amount === 0) return includeWon ? '0원' : '0';
+
+            const eok = Math.floor(amount / 100000000);
+            const restAfterEok = amount % 100000000;
+            const man = Math.floor(restAfterEok / 10000);
+            const restWon = restAfterEok % 10000;
+            const parts = [];
+            if (eok) parts.push(`${eok}억`);
+            if (man) parts.push(`${man.toLocaleString('ko-KR')}만`);
+            if (restWon >= 1000) parts.push(`${Math.floor(restWon / 1000)}천`);
+            if (restWon % 1000) parts.push(`${restWon % 1000}`);
+            return `${parts.join(' ')}${includeWon ? '원' : ''}`;
+        };
         // 스택 합계 라벨이 막대 위쪽에 잘리지 않도록 y축 최대치에 여유 확보
         const monthTotals = labels.map(month => sortedClubs.reduce((s, c) => s + ((spendByMonthClub[month] && spendByMonthClub[month][c]) || 0), 0));
         const maxTotal = Math.max(0, ...monthTotals);
@@ -6245,12 +6262,19 @@ document.addEventListener('DOMContentLoaded', () => {
                     },
                     chartValueLabel: {
                         color: '#e2e8f0',
-                        getLabel: (_idx, total) => compactWon(total)
+                        getLabel: (_idx, total) => formatKoreanWon(total, true)
                     }
                 },
                 scales: {
                     x: { stacked, ticks: { color: '#94a3b8', font: { size: 11 } }, grid: { color: 'rgba(255,255,255,0.04)' } },
-                    y: { stacked, suggestedMax: maxTotal * 1.15 || undefined, ticks: { color: '#94a3b8', callback: compactWon }, grid: { color: 'rgba(255,255,255,0.05)' }, beginAtZero: true }
+                    y: {
+                        stacked,
+                        suggestedMax: maxTotal * 1.15 || undefined,
+                        title: { display: true, text: '금액 (원)', color: '#94a3b8', font: { size: 11, weight: '600' } },
+                        ticks: { color: '#94a3b8', callback: value => formatKoreanWon(value) },
+                        grid: { color: 'rgba(255,255,255,0.05)' },
+                        beginAtZero: true
+                    }
                 }
             }
         });
