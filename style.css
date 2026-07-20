@@ -1680,6 +1680,21 @@ input[aria-invalid="true"] {
     color: #cffafe;
 }
 
+.club-usage-excel-button {
+    padding: 0.2rem 0.45rem;
+    border: 1px solid rgba(16, 185, 129, 0.42);
+    border-radius: 6px;
+    background: rgba(16, 185, 129, 0.14);
+    color: #6ee7b7;
+    font: inherit;
+    font-size: 0.76rem;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.club-usage-excel-button:hover:not(:disabled) { background: rgba(16, 185, 129, 0.28); }
+.club-usage-excel-button:disabled { cursor: wait; opacity: 0.62; }
+
 .club-usage-date-button {
     padding: 0;
     border: 0;

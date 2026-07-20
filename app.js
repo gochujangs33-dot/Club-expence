@@ -1,7 +1,7 @@
 /**
  * Club Expense Settlement App - Main JavaScript Logic
  */
-const APP_VERSION      = '1.6.261';
+const APP_VERSION      = '1.6.262';
 const APP_VERSION_DATE = '2026.07.21';
 
 // 인당 자부담 비용에 따라 강조 박스의 아이콘/색상을 전환 (100원 이상이면 🔥, 0이면 😊)
@@ -2294,6 +2294,41 @@ const AppState = {
                 : historySource;
             if (historyList.length === 0) {
                 historyContainer.innerHTML = `<div class="empty-state"><span class="empty-icon">📋</span><p>${t('empty.history')}</p></div>`;
+            } else if (typeof window.createInlineClubUsageSummary === 'function') {
+                // 사용자도 클럽별 사용 요약을 바로 확인한다. 수정·엑셀은 본인 이력에만 제공한다.
+                const entriesByClub = new Map();
+                historyList.forEach(entry => {
+                    const clubName = entry.clubName || t('label.default_club');
+                    if (!entriesByClub.has(clubName)) entriesByClub.set(clubName, []);
+                    entriesByClub.get(clubName).push(entry);
+                });
+                const currentYear = new Date().getFullYear();
+                const isMyHistoryEntry = entry => !entry.creatorPin || String(entry.creatorPin) === String(this.currentPin);
+
+                entriesByClub.forEach((clubEntries, clubName) => {
+                    const currentYearEntries = clubEntries.filter(entry => getHistoryEntryYear(entry) === currentYear);
+                    const clubCard = document.createElement('section');
+                    clubCard.className = 'admin-inline-club-usage-card user-inline-club-usage-card';
+                    const header = document.createElement('div');
+                    header.className = 'admin-inline-club-usage-header';
+                    const heading = document.createElement('div');
+                    heading.className = 'admin-history-club-heading';
+                    const title = document.createElement('strong');
+                    title.textContent = `📁 ${clubName} 사용 요약`;
+                    const count = document.createElement('span');
+                    count.className = 'admin-history-club-count';
+                    count.textContent = `${currentYear}년 정산 ${currentYearEntries.length}건`;
+                    heading.append(title, count);
+                    header.appendChild(heading);
+                    clubCard.append(
+                        header,
+                        window.createInlineClubUsageSummary(clubName, currentYearEntries, currentYear, {
+                            editableDates: isMyHistoryEntry,
+                            excelDownloads: isMyHistoryEntry
+                        })
+                    );
+                    historyContainer.appendChild(clubCard);
+                });
             } else {
                 // 사용자 이력도 클럽별 그룹으로 표시한다. 현재 선택된 클럽이 하나면 해당 그룹만 보인다.
                 const groupContainers = new Map();
@@ -5098,6 +5133,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 변경이력 모달
     const CHANGELOG = [
+        { ver: '1.6.262', date: '2026.07.21', items: ['일반 사용자 정산 이력도 클럽별 사용 요약·총 상품비·날짜 수정·참석자 명단 확인 방식으로 통일', '사용자 본인 정산 행에 엑셀 다시 받기 버튼 추가'] },
         { ver: '1.6.261', date: '2026.07.21', items: ['관리자 클럽별 사용 요약의 정산 이력 상세·수정 영역을 제거하고 행사 날짜 클릭으로 바로 수정 진입', '상단 사용 안내와 총 상품비 요약을 추가'] },
         { ver: '1.6.260', date: '2026.07.21', items: ['관리자 클럽별 정산 이력에서 모든 클럽의 사용 요약과 행사별 비용 표를 즉시 표시', '행사별 참석 인원 숫자를 클릭하면 이름·사번 명단 확인과 복사가 가능하도록 연결'] },
         { ver: '1.6.259', date: '2026.07.21', items: ['관리자 클럽별 정산 이력에서 클럽 선택 상자를 없애고 모든 등록 클럽을 기본 접힘 목록으로 표시', '새로 등록된 정산은 해당 클럽에 신규 등록 건수로 표시하고, 클럽을 펼쳐 확인하면 읽음 처리'] },
@@ -6673,12 +6709,12 @@ document.addEventListener('DOMContentLoaded', () => {
         return { rows, totals, hasAssignedBudget, clubBudget, clubRemaining };
     }
 
-    function appendClubUsageRows(listEl, rows, year, { clickableAttendees = false, editableDates = false } = {}) {
+    function appendClubUsageRows(listEl, rows, year, { clickableAttendees = false, editableDates = false, excelDownloads = false } = {}) {
         listEl.innerHTML = '';
         if (rows.length === 0) {
             const row = document.createElement('tr');
             const cell = document.createElement('td');
-            cell.colSpan = 8;
+            cell.colSpan = excelDownloads ? 9 : 8;
             cell.className = 'club-usage-summary-empty';
             cell.textContent = `${year}년 정산 이력이 없습니다.`;
             row.appendChild(cell);
@@ -6700,7 +6736,10 @@ document.addEventListener('DOMContentLoaded', () => {
             ];
             values.forEach((value, index) => {
                 const cell = document.createElement('td');
-                if (index === 0 && editableDates) {
+                const canEdit = typeof editableDates === 'function'
+                    ? editableDates(rowData.entry)
+                    : editableDates;
+                if (index === 0 && canEdit) {
                     const dateButton = document.createElement('button');
                     dateButton.type = 'button';
                     dateButton.className = 'club-usage-date-button';
@@ -6730,11 +6769,39 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (index === 6) cell.className = 'selfpay';
                 row.appendChild(cell);
             });
+            if (excelDownloads) {
+                const excelCell = document.createElement('td');
+                const canDownload = typeof excelDownloads === 'function'
+                    ? excelDownloads(rowData.entry)
+                    : excelDownloads;
+                if (canDownload) {
+                    const excelButton = document.createElement('button');
+                    excelButton.type = 'button';
+                    excelButton.className = 'club-usage-excel-button';
+                    excelButton.textContent = '엑셀';
+                    excelButton.title = '이 정산 이력을 엑셀로 다시 받기';
+                    excelButton.addEventListener('click', async () => {
+                        excelButton.disabled = true;
+                        excelButton.textContent = '생성 중';
+                        try {
+                            await AppState.downloadHistoryExcel(rowData.entry);
+                        } finally {
+                            excelButton.disabled = false;
+                            excelButton.textContent = '엑셀';
+                        }
+                    });
+                    excelCell.appendChild(excelButton);
+                } else {
+                    excelCell.textContent = '-';
+                }
+                row.appendChild(excelCell);
+            }
             listEl.appendChild(row);
         });
     }
 
-    function createInlineClubUsageSummary(clubName, entries, year) {
+    function createInlineClubUsageSummary(clubName, entries, year, options = {}) {
+        const { editableDates = false, excelDownloads = false } = options;
         const data = getClubUsageSummaryData(clubName, entries);
         const summary = document.createElement('section');
         summary.className = 'inline-club-usage-summary';
@@ -6760,15 +6827,16 @@ document.addEventListener('DOMContentLoaded', () => {
         table.className = 'club-usage-summary-table';
         table.innerHTML = `
             <thead><tr>
-                <th>행사 날짜</th><th>참석 인원</th><th>행사비</th><th>시설·장비 이용료</th><th>상품비</th><th>회사 지원금</th><th>자부담 비용</th><th>총 비용</th>
+                <th>행사 날짜</th><th>참석 인원</th><th>행사비</th><th>시설·장비 이용료</th><th>상품비</th><th>회사 지원금</th><th>자부담 비용</th><th>총 비용</th>${excelDownloads ? '<th>엑셀</th>' : ''}
             </tr></thead>`;
         const listEl = document.createElement('tbody');
-        appendClubUsageRows(listEl, data.rows, year, { clickableAttendees: true, editableDates: AppState.currentPin === '000000' });
+        appendClubUsageRows(listEl, data.rows, year, { clickableAttendees: true, editableDates, excelDownloads });
         table.appendChild(listEl);
         tableWrap.appendChild(table);
         summary.append(totalsEl, tableWrap);
         return summary;
     }
+    window.createInlineClubUsageSummary = createInlineClubUsageSummary;
 
     function openClubUsageSummaryModal(clubName, entries, year) {
         const modal = document.getElementById('club-usage-summary-modal');
@@ -7272,7 +7340,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 heading.appendChild(newBadge);
             }
             header.appendChild(heading);
-            clubCard.append(header, createInlineClubUsageSummary(clubName, currentYearEntries, currentYear));
+            clubCard.append(header, createInlineClubUsageSummary(clubName, currentYearEntries, currentYear, { editableDates: true }));
             container.appendChild(clubCard);
         });
         if (needsSeenSave) saveAdminHistorySeenByClub(seenByClub);
