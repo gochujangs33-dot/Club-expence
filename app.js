@@ -1,7 +1,7 @@
 /**
  * Club Expense Settlement App - Main JavaScript Logic
  */
-const APP_VERSION      = '1.6.260';
+const APP_VERSION      = '1.6.261';
 const APP_VERSION_DATE = '2026.07.21';
 
 // 인당 자부담 비용에 따라 강조 박스의 아이콘/색상을 전환 (100원 이상이면 🔥, 0이면 😊)
@@ -5098,6 +5098,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 변경이력 모달
     const CHANGELOG = [
+        { ver: '1.6.261', date: '2026.07.21', items: ['관리자 클럽별 사용 요약의 정산 이력 상세·수정 영역을 제거하고 행사 날짜 클릭으로 바로 수정 진입', '상단 사용 안내와 총 상품비 요약을 추가'] },
         { ver: '1.6.260', date: '2026.07.21', items: ['관리자 클럽별 정산 이력에서 모든 클럽의 사용 요약과 행사별 비용 표를 즉시 표시', '행사별 참석 인원 숫자를 클릭하면 이름·사번 명단 확인과 복사가 가능하도록 연결'] },
         { ver: '1.6.259', date: '2026.07.21', items: ['관리자 클럽별 정산 이력에서 클럽 선택 상자를 없애고 모든 등록 클럽을 기본 접힘 목록으로 표시', '새로 등록된 정산은 해당 클럽에 신규 등록 건수로 표시하고, 클럽을 펼쳐 확인하면 읽음 처리'] },
         { ver: '1.6.258', date: '2026.07.21', items: ['일반 사용자 정산 이력의 참석자 명단을 기본 접힘으로 분리하고, 펼치면 이름과 사번을 확인하도록 개선'] },
@@ -6672,7 +6673,7 @@ document.addEventListener('DOMContentLoaded', () => {
         return { rows, totals, hasAssignedBudget, clubBudget, clubRemaining };
     }
 
-    function appendClubUsageRows(listEl, rows, year, clickableAttendees = false) {
+    function appendClubUsageRows(listEl, rows, year, { clickableAttendees = false, editableDates = false } = {}) {
         listEl.innerHTML = '';
         if (rows.length === 0) {
             const row = document.createElement('tr');
@@ -6699,7 +6700,15 @@ document.addEventListener('DOMContentLoaded', () => {
             ];
             values.forEach((value, index) => {
                 const cell = document.createElement('td');
-                if (index === 1 && clickableAttendees) {
+                if (index === 0 && editableDates) {
+                    const dateButton = document.createElement('button');
+                    dateButton.type = 'button';
+                    dateButton.className = 'club-usage-date-button';
+                    dateButton.textContent = value;
+                    dateButton.title = '이 정산 이력 수정';
+                    dateButton.addEventListener('click', () => AppState.loadHistoryEntryForEdit(rowData.entry));
+                    cell.appendChild(dateButton);
+                } else if (index === 1 && clickableAttendees) {
                     const attendeeButton = document.createElement('button');
                     attendeeButton.type = 'button';
                     attendeeButton.className = 'club-usage-attendee-button';
@@ -6740,6 +6749,7 @@ document.addEventListener('DOMContentLoaded', () => {
             appendClubUsageTotalCard(totalsEl, '현재 잔여 예산', 0, '', () => '미설정');
         }
         appendClubUsageTotalCard(totalsEl, '총 참석 인원', data.totals.memberCount, '', value => `${value}명`);
+        appendClubUsageTotalCard(totalsEl, '총 상품비', data.totals.prizeCost, 'prize');
         appendClubUsageTotalCard(totalsEl, '총 회사 지원금', data.totals.support, 'support');
         appendClubUsageTotalCard(totalsEl, '총 자부담 비용', data.totals.selfPay, 'selfpay');
         appendClubUsageTotalCard(totalsEl, '총 비용', data.totals.totalCost, '');
@@ -6753,7 +6763,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <th>행사 날짜</th><th>참석 인원</th><th>행사비</th><th>시설·장비 이용료</th><th>상품비</th><th>회사 지원금</th><th>자부담 비용</th><th>총 비용</th>
             </tr></thead>`;
         const listEl = document.createElement('tbody');
-        appendClubUsageRows(listEl, data.rows, year, true);
+        appendClubUsageRows(listEl, data.rows, year, { clickableAttendees: true, editableDates: AppState.currentPin === '000000' });
         table.appendChild(listEl);
         tableWrap.appendChild(table);
         summary.append(totalsEl, tableWrap);
@@ -6781,11 +6791,12 @@ document.addEventListener('DOMContentLoaded', () => {
             appendClubUsageTotalCard(totalsEl, '현재 잔여 예산', 0, '', () => '미설정');
         }
         appendClubUsageTotalCard(totalsEl, '총 참석 인원', data.totals.memberCount, '', value => `${value}명`);
+        appendClubUsageTotalCard(totalsEl, '총 상품비', data.totals.prizeCost, 'prize');
         appendClubUsageTotalCard(totalsEl, '총 회사 지원금', data.totals.support, 'support');
         appendClubUsageTotalCard(totalsEl, '총 자부담 비용', data.totals.selfPay, 'selfpay');
         appendClubUsageTotalCard(totalsEl, '총 비용', data.totals.totalCost, '');
 
-        appendClubUsageRows(listEl, data.rows, year, true);
+        appendClubUsageRows(listEl, data.rows, year, { clickableAttendees: true });
         modal.classList.remove('hidden');
         document.getElementById('close-club-usage-summary-modal')?.focus();
     }
@@ -7262,27 +7273,12 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             header.appendChild(heading);
             clubCard.append(header, createInlineClubUsageSummary(clubName, currentYearEntries, currentYear));
-
-            if (clubEntries.length > 0) {
-                const management = document.createElement('details');
-                management.className = 'admin-history-entry-management';
-                const managementSummary = document.createElement('summary');
-                managementSummary.textContent = `정산 이력 상세·수정 (${clubEntries.length}건)`;
-                const list = document.createElement('div');
-                list.className = 'admin-history-club-list';
-                management.append(managementSummary, list);
-                clubCard.appendChild(management);
-                groupContainers.set(clubName, list);
-                management.addEventListener('toggle', () => {
-                    if (!management.open || newEntryCount === 0) return;
-                    seenByClub[clubName] = Math.max(Number(seenByClub[clubName] || 0), latestSavedAt);
-                    saveAdminHistorySeenByClub(seenByClub);
-                    clubCard.querySelector('.admin-history-new-badge')?.remove();
-                });
-            }
             container.appendChild(clubCard);
         });
         if (needsSeenSave) saveAdminHistorySeenByClub(seenByClub);
+
+        // 행사 날짜를 눌러 바로 수정 화면으로 진입하는 요약 전용 레이아웃이다.
+        return;
 
         filtered.forEach(entry => {
             const div = document.createElement('div');

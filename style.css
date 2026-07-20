@@ -1388,6 +1388,7 @@ input[aria-invalid="true"] {
 .club-usage-total-card.remaining.over-budget strong { color: var(--warning-text); }
 .club-usage-total-card.support strong { color: #34d399; }
 .club-usage-total-card.selfpay strong { color: #f87171; }
+.club-usage-total-card.prize strong { color: hsl(38, 92%, 60%); }
 
 .club-usage-summary-table-wrap {
     max-height: 45vh;
@@ -1679,6 +1680,27 @@ input[aria-invalid="true"] {
     color: #cffafe;
 }
 
+.club-usage-date-button {
+    padding: 0;
+    border: 0;
+    border-bottom: 1px dashed rgba(96, 165, 250, 0.78);
+    background: transparent;
+    color: var(--text-primary);
+    font: inherit;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.club-usage-date-button:hover { color: #7dd3fc; }
+
+.club-history-guide {
+    margin: 0 0 0 auto;
+    color: var(--text-secondary);
+    font-size: 0.78rem;
+    line-height: 1.4;
+    text-align: right;
+}
+
 .admin-history-entry-management {
     margin-top: 0.9rem;
     border: 1px solid rgba(255, 255, 255, 0.12);
@@ -1701,6 +1723,7 @@ input[aria-invalid="true"] {
 @media (max-width: 480px) {
     .admin-inline-club-usage-card { padding: 0.8rem; }
     .admin-inline-club-usage-header { align-items: flex-start; }
+    .club-history-guide { width: 100%; margin-left: 0; text-align: left; }
 }
 
 @media (max-width: 480px) {
