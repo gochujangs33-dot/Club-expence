@@ -6,7 +6,7 @@
  *   예) '1.0.0' → '1.1.0'
  *   그러면 앱에 자동으로 "업데이트 있음" 알림이 표시됩니다.
  */
-const APP_VERSION = '1.6.249';
+const APP_VERSION = '1.6.250';
 const CACHE_NAME  = `club-expense-v${APP_VERSION}`;
 
 const ASSETS = [
@@ -58,8 +58,20 @@ self.addEventListener('activate', event => {
 self.addEventListener('fetch', event => {
   if (event.request.method !== 'GET') return;
 
+  // 앱 화면을 구성하는 HTML·JS·CSS는 GitHub Pages의 HTTP 캐시를 거치지 않는다.
+  // 이전 앱 셸이 최신 SW를 감지한 뒤에도 과거 index.html/app.js를 다시 받는 문제를 방지한다.
+  const requestUrl = new URL(event.request.url);
+  const isSameOrigin = requestUrl.origin === self.location.origin;
+  const isAppShell = isSameOrigin && (
+    event.request.mode === 'navigate' ||
+    /\.(?:html|js|css)$/.test(requestUrl.pathname)
+  );
+  const networkRequest = isAppShell
+    ? new Request(event.request, { cache: 'reload' })
+    : event.request;
+
   event.respondWith(
-    fetch(event.request)
+    fetch(networkRequest)
       .then(response => {
         // 성공하면 캐시도 최신으로 갱신
         const clone = response.clone();

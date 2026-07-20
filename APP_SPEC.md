@@ -546,6 +546,7 @@ directory[이름] = {
 
 - 네트워크 우선(Network First) + 실패 시 캐시 폴백
 - 성공 응답은 캐시에 최신으로 갱신 (`cache.put`)
+- HTML·JS·CSS 앱 화면 파일은 HTTP 캐시를 우회(`cache:'reload'`)해 이전 앱 셸이 남지 않도록 한다.
 
 ### 16-2. 버전 업데이트 흐름
 

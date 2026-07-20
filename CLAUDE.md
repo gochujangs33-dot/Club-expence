@@ -186,4 +186,4 @@
 - [`CODE_REVIEW.md`](CODE_REVIEW.md) — **매 작업 시작 전 필독**: v1.6.201 검증 결과, 재수정 금지 항목 상세, 승인된 백로그(사용자 명시 요청 시에만 착수)
 - [`ADMIN_DASHBOARD_UX_NOTES.md`](ADMIN_DASHBOARD_UX_NOTES.md) — 관리자 첫 화면 UX 진단과 적용한 개선 기록
 
-현재 버전: **v1.6.249** (`sw.js` `APP_VERSION`)
+현재 버전: **v1.6.250** (`sw.js` `APP_VERSION`)
