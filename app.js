@@ -1,7 +1,7 @@
 /**
  * Club Expense Settlement App - Main JavaScript Logic
  */
-const APP_VERSION      = '1.6.252';
+const APP_VERSION      = '1.6.253';
 const APP_VERSION_DATE = '2026.07.21';
 
 // 인당 자부담 비용에 따라 강조 박스의 아이콘/색상을 전환 (100원 이상이면 🔥, 0이면 😊)
@@ -5046,6 +5046,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 변경이력 모달
     const CHANGELOG = [
+        { ver: '1.6.253', date: '2026.07.21', items: ['클럽 사용 요약 팝업에 관리자 클럽 레지스트리 기준의 클럽 총 예산과 현재 잔여 예산을 추가'] },
         { ver: '1.6.252', date: '2026.07.21', items: ['자부담·회사지원금 추이 카드에 총 회사 지원금과 총 자부담 비용 누적 요약을 추가', '클럽별 정산 횟수 차트의 막대를 클릭하면 올해 행사별 날짜·참석 인원·비용 카테고리·회사 지원금·자부담·총 비용을 표로 확인하도록 개선'] },
         { ver: '1.6.251', date: '2026.07.20', items: ['두 참석 인원 차트에서 마우스 오버 시 이름·사번 명단을 다시 표시하고, 막대 클릭 시 명단 팝업과 복사 기능도 함께 유지하도록 개선'] },
         { ver: '1.6.250', date: '2026.07.20', items: ['이전 앱 셸 캐시가 최신 차트 기능을 받지 못하던 문제를 해결하기 위해 HTML·JS·CSS는 서비스워커에서 HTTP 캐시를 우회해 항상 최신 파일을 확인하도록 개선'] },
@@ -6582,10 +6583,25 @@ document.addEventListener('DOMContentLoaded', () => {
             selfPay: sum.selfPay + row.selfPay,
             totalCost: sum.totalCost + row.totalCost
         }), { memberCount: 0, eventCost: 0, facilityCost: 0, prizeCost: 0, support: 0, selfPay: 0, totalCost: 0 });
+        // 정산 결과 화면과 같은 기준: 기존 사용액 + 올해 이력/누적 지원금 중 큰 값.
+        const registryClub = Object.values(AppState.clubRegistry || {}).find(club => club && club.name === clubName);
+        const hasAssignedBudget = Boolean(registryClub) && Object.prototype.hasOwnProperty.call(registryClub, 'budget');
+        const clubBudget = registryClub ? Math.max(0, parseAmount(registryClub.budget)) : 0;
+        const priorUsed = registryClub ? Math.max(0, parseAmount(registryClub.priorUsed)) : 0;
+        const registryUsed = registryClub ? Math.max(0, parseAmount(registryClub.usedBudget)) : 0;
+        const clubUsed = priorUsed + Math.max(totals.support, registryUsed);
+        const clubRemaining = clubBudget - clubUsed;
 
         titleEl.textContent = `${clubName} 사용 요약`;
         descriptionEl.textContent = `${year}년 정산 ${rows.length}건 · 행사별 비용 내역`;
         totalsEl.innerHTML = '';
+        if (hasAssignedBudget) {
+            appendClubUsageTotalCard(totalsEl, '클럽 총 예산', clubBudget, 'budget');
+            appendClubUsageTotalCard(totalsEl, '현재 잔여 예산', clubRemaining, clubRemaining < 0 ? 'remaining over-budget' : 'remaining');
+        } else {
+            appendClubUsageTotalCard(totalsEl, '클럽 총 예산', 0, '', () => '미설정');
+            appendClubUsageTotalCard(totalsEl, '현재 잔여 예산', 0, '', () => '미설정');
+        }
         appendClubUsageTotalCard(totalsEl, '총 참석 인원', totals.memberCount, '', value => `${value}명`);
         appendClubUsageTotalCard(totalsEl, '총 회사 지원금', totals.support, 'support');
         appendClubUsageTotalCard(totalsEl, '총 자부담 비용', totals.selfPay, 'selfpay');

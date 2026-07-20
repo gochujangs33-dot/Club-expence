@@ -1369,7 +1369,7 @@ input[aria-invalid="true"] {
 
 .club-usage-summary-totals {
     display: grid;
-    grid-template-columns: repeat(4, minmax(130px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
     gap: 0.55rem;
     margin: 0 0 0.75rem;
 }
@@ -1383,6 +1383,9 @@ input[aria-invalid="true"] {
 
 .club-usage-total-card span { display: block; color: var(--text-secondary); font-size: 0.72rem; }
 .club-usage-total-card strong { display: block; margin-top: 0.2rem; color: var(--text-primary); font-size: 0.9rem; }
+.club-usage-total-card.budget strong { color: #38bdf8; }
+.club-usage-total-card.remaining strong { color: var(--color-secondary); }
+.club-usage-total-card.remaining.over-budget strong { color: var(--warning-text); }
 .club-usage-total-card.support strong { color: #34d399; }
 .club-usage-total-card.selfpay strong { color: #f87171; }
 
