@@ -1557,6 +1557,23 @@ input[aria-invalid="true"] {
     padding: 0.25rem 0;
 }
 
+.history-attendees-details {
+    margin-top: 0.65rem;
+    padding-top: 0.55rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.history-attendees-details summary {
+    color: var(--text-secondary);
+}
+
+.history-attendee-list {
+    margin-top: 0.5rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+}
+
 .history-items {
     list-style: none;
     margin-top: 0.5rem;

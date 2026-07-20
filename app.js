@@ -1,7 +1,7 @@
 /**
  * Club Expense Settlement App - Main JavaScript Logic
  */
-const APP_VERSION      = '1.6.257';
+const APP_VERSION      = '1.6.258';
 const APP_VERSION_DATE = '2026.07.21';
 
 // 인당 자부담 비용에 따라 강조 박스의 아이콘/색상을 전환 (100원 이상이면 🔥, 0이면 😊)
@@ -2360,6 +2360,9 @@ const AppState = {
                         const empIdStr = a.employeeId ? `<span style="font-size:0.68rem;color:var(--text-muted);margin-left:2px;">(${AppState.escapeHtml(String(a.employeeId))})</span>` : '';
                         return `<span class="expense-category-badge">${this.escapeHtml(a.name)}${empIdStr}</span>`;
                     }).join(' ');
+                    const attendeeCount = Number.isFinite(Number(entry.memberCount))
+                        ? Number(entry.memberCount)
+                        : (entry.attendees || []).length;
                     const historyPrizeCost = getHistoryPrizeCost(entry);
                     const prizeSummaryHtml = historyPrizeCost > 0
                         ? `<div class="history-stat history-stat-prize"><span>${t('hist.prize_cost')}</span><strong>${SettlementCalculator.formatCurrency(historyPrizeCost)}</strong></div>`
@@ -2411,7 +2414,10 @@ const AppState = {
                         <details class="history-details">
                             <summary>${t('hist.view_details')}</summary>
                             <ul class="history-items">${itemsHtml || `<li>${t('hist.no_items')}</li>`}</ul>
-                            <div style="margin-top:0.5rem; display:flex; flex-wrap:wrap; gap:0.3rem;">${attendeesHtml || t('hist.no_attendees')}</div>
+                            <details class="history-attendees-details">
+                                <summary>참석자 명단 (${attendeeCount}${t('unit.person')})</summary>
+                                <div class="history-attendee-list">${attendeesHtml || t('hist.no_attendees')}</div>
+                            </details>
                         </details>
                     `;
                     const clubName = entry.clubName || t('label.default_club');
@@ -5093,6 +5099,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 변경이력 모달
     const CHANGELOG = [
+        { ver: '1.6.258', date: '2026.07.21', items: ['일반 사용자 정산 이력의 참석자 명단을 기본 접힘으로 분리하고, 펼치면 이름과 사번을 확인하도록 개선'] },
         { ver: '1.6.257', date: '2026.07.21', items: ['일반 사용자 정산 이력에도 클럽별 그룹·접기/펼치기·올해 사용 요약 버튼을 관리자 화면과 동일하게 적용'] },
         { ver: '1.6.256', date: '2026.07.21', items: ['관리자 클럽별 정산 이력의 전체 보기를 월별 혼합 목록에서 클럽별 그룹으로 변경하고, 각 클럽 그룹에서 사용 요약을 바로 열 수 있도록 개선'] },
         { ver: '1.6.255', date: '2026.07.21', items: ['일반 사용자 정산 이력의 상세 내역에도 행사비·시설 및 장비 이용료·상품비 카테고리를 관리자 화면과 동일하게 표시'] },
