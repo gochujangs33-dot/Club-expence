@@ -1,7 +1,7 @@
 /**
  * Club Expense Settlement App - Main JavaScript Logic
  */
-const APP_VERSION      = '1.6.256';
+const APP_VERSION      = '1.6.257';
 const APP_VERSION_DATE = '2026.07.21';
 
 // 인당 자부담 비용에 따라 강조 박스의 아이콘/색상을 전환 (100원 이상이면 🔥, 0이면 😊)
@@ -2295,6 +2295,50 @@ const AppState = {
             if (historyList.length === 0) {
                 historyContainer.innerHTML = `<div class="empty-state"><span class="empty-icon">📋</span><p>${t('empty.history')}</p></div>`;
             } else {
+                // 사용자 이력도 클럽별 그룹으로 표시한다. 현재 선택된 클럽이 하나면 해당 그룹만 보인다.
+                const groupContainers = new Map();
+                const entriesByClub = new Map();
+                historyList.forEach(entry => {
+                    const clubName = entry.clubName || t('label.default_club');
+                    if (!entriesByClub.has(clubName)) entriesByClub.set(clubName, []);
+                    entriesByClub.get(clubName).push(entry);
+                });
+
+                entriesByClub.forEach((clubEntries, clubName) => {
+                    const group = document.createElement('details');
+                    group.className = 'admin-history-club-group user-history-club-group';
+                    group.open = true;
+
+                    const summary = document.createElement('summary');
+                    const heading = document.createElement('div');
+                    heading.className = 'admin-history-club-heading';
+                    const title = document.createElement('strong');
+                    title.textContent = `📁 ${clubName}`;
+                    const count = document.createElement('span');
+                    count.className = 'admin-history-club-count';
+                    count.textContent = `정산 ${clubEntries.length}건`;
+                    heading.append(title, count);
+
+                    const summaryButton = document.createElement('button');
+                    summaryButton.type = 'button';
+                    summaryButton.className = 'admin-history-club-summary-btn';
+                    summaryButton.textContent = '📊 사용 요약';
+                    summaryButton.addEventListener('click', event => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        const currentYear = new Date().getFullYear();
+                        const currentYearEntries = clubEntries.filter(entry => getHistoryEntryYear(entry) === currentYear);
+                        openClubUsageSummaryModal(clubName, currentYearEntries, currentYear);
+                    });
+                    summary.append(heading, summaryButton);
+
+                    const list = document.createElement('div');
+                    list.className = 'admin-history-club-list';
+                    group.append(summary, list);
+                    historyContainer.appendChild(group);
+                    groupContainers.set(clubName, list);
+                });
+
                 historyList.forEach((entry) => {
                     // 정산 날짜(settlementDate) 우선, 없으면 등록 시각(date) 표시
                     let dateStr;
@@ -2348,7 +2392,7 @@ const AppState = {
                         <div class="history-header">
                             <div style="display:flex;align-items:center;gap:0.4rem;flex-wrap:wrap;">
                                 <span class="history-date">${dateStr}</span>
-                                ${entry.clubName ? `<span class="history-club">${this.escapeHtml(entry.clubName)}</span>` : ''}
+                                <!-- 클럽명은 상단 그룹 헤더에서 표시 -->
                                 ${creatorLabel}
                                 ${editedBadge}${editedAtStr}
                             </div>
@@ -2370,7 +2414,9 @@ const AppState = {
                             <div style="margin-top:0.5rem; display:flex; flex-wrap:wrap; gap:0.3rem;">${attendeesHtml || t('hist.no_attendees')}</div>
                         </details>
                     `;
-                    historyContainer.appendChild(card);
+                    const clubName = entry.clubName || t('label.default_club');
+                    const targetContainer = groupContainers.get(clubName) || historyContainer;
+                    targetContainer.appendChild(card);
                 });
 
                 // 엑셀 다운로드 버튼 이벤트
@@ -5047,6 +5093,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 변경이력 모달
     const CHANGELOG = [
+        { ver: '1.6.257', date: '2026.07.21', items: ['일반 사용자 정산 이력에도 클럽별 그룹·접기/펼치기·올해 사용 요약 버튼을 관리자 화면과 동일하게 적용'] },
         { ver: '1.6.256', date: '2026.07.21', items: ['관리자 클럽별 정산 이력의 전체 보기를 월별 혼합 목록에서 클럽별 그룹으로 변경하고, 각 클럽 그룹에서 사용 요약을 바로 열 수 있도록 개선'] },
         { ver: '1.6.255', date: '2026.07.21', items: ['일반 사용자 정산 이력의 상세 내역에도 행사비·시설 및 장비 이용료·상품비 카테고리를 관리자 화면과 동일하게 표시'] },
         { ver: '1.6.254', date: '2026.07.21', items: ['월별 지출 현황 차트의 세로축과 막대 합계 금액을 K·M 대신 한국 원화 단위(억·만·천·원)로 표시'] },
@@ -5654,7 +5701,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!select) return;
         const current = select.value;
         const clubs = Object.values(AppState.clubRegistry || {}).sort((a, b) => a.name.localeCompare(b.name));
-        select.innerHTML = `<option value="">전체 클럽 (월별)</option>` +
+        select.innerHTML = `<option value="">전체 클럽 (클럽별)</option>` +
             clubs.map(c => `<option value="${AppState.escapeHtml(c.name)}">${AppState.escapeHtml(c.name)}</option>`).join('');
         select.value = current;
     }
