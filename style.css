@@ -2594,3 +2594,168 @@ body:has(.update-banner:not(.hidden)) {
     background: rgba(139, 92, 246, 0.15);
     color: #c4b5fd;
 }
+
+/* 전 화면 공통 모바일 보정: 가로 넘침을 없애고 조작 영역을 터치하기 쉽게 유지한다. */
+@media (max-width: 640px) {
+    body {
+        padding: calc(0.75rem + env(safe-area-inset-top))
+                 calc(0.5rem + env(safe-area-inset-right))
+                 calc(0.9rem + env(safe-area-inset-bottom))
+                 calc(0.5rem + env(safe-area-inset-left));
+    }
+
+    .app-header { margin-bottom: 1.35rem; }
+    .logo-area { gap: 0.45rem; }
+    .app-header h1 { font-size: clamp(1.65rem, 8vw, 2rem); }
+    .login-status-wrapper,
+    #login-status-wrapper { flex-wrap: wrap; }
+    .new-club-input-row { flex-wrap: wrap; }
+    .new-club-input-row input,
+    .new-club-input-row .btn-secondary { flex: 1 1 100%; width: 100%; }
+
+    #edit-mode-banner {
+        flex-direction: column;
+        align-items: stretch !important;
+    }
+    #edit-mode-banner > div {
+        justify-content: flex-end;
+        flex-wrap: wrap;
+    }
+
+    #expense-form .input-row {
+        flex-direction: column;
+        gap: 0.75rem;
+    }
+    #expense-form .input-row > .input-group {
+        width: 100%;
+        flex: 1 1 auto;
+    }
+    #corp-amount-group > div:first-child,
+    #personal-amount-group > div:first-child {
+        display: grid !important;
+        grid-template-columns: auto minmax(0, 1fr);
+        gap: 0.5rem !important;
+        align-items: center !important;
+    }
+    #corp-amount-group input,
+    #personal-amount-group input {
+        min-width: 0 !important;
+        width: 100%;
+    }
+    #corp-receipt-group,
+    #personal-receipt-group {
+        grid-column: 1 / -1;
+    }
+
+    .form-actions { flex-wrap: wrap; }
+    .form-actions > button { flex: 1 1 140px; min-height: 2.7rem; }
+    .expense-row { padding: 0.7rem 0.75rem; }
+    .expense-row-meta { flex-wrap: wrap; }
+    .history-items li { gap: 0.55rem; flex-wrap: wrap; overflow-wrap: anywhere; }
+
+    /* 클럽 관리의 넓은 1행 요약을 2열 정보 카드로 전환한다. */
+    #club-list-container .expense-row {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        align-items: stretch;
+        gap: 0.55rem;
+        overflow: hidden;
+    }
+    #club-list-container .expense-row-left,
+    #club-list-container .expense-row-right { grid-column: 1 / -1; }
+    #club-list-container .expense-row > div:not(.expense-row-left):not(.expense-row-right) {
+        min-width: 0 !important;
+        padding: 0.45rem;
+        border-radius: 8px;
+        background: rgba(15, 23, 42, 0.42);
+    }
+    #club-list-container .club-prior-used-input { width: 100% !important; max-width: none; }
+    #club-list-container .expense-row-right {
+        width: 100%;
+        flex-wrap: wrap;
+        justify-content: flex-start;
+    }
+    #club-list-container .expense-row-right button { min-height: 2.25rem; }
+
+    /* 모달은 화면 안에서 세로 스크롤하고, 모든 표는 항목명을 가진 카드로 읽는다. */
+    .modal {
+        padding: calc(0.75rem + env(safe-area-inset-top)) 0.5rem calc(0.75rem + env(safe-area-inset-bottom));
+        justify-content: flex-start;
+    }
+    .modal .modal-content-card {
+        width: 100% !important;
+        max-width: 100% !important;
+        max-height: calc(100dvh - 1.5rem) !important;
+        margin: auto 0;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+    }
+    .modal .card-header { align-items: flex-start; }
+    .modal .form-actions > button { min-height: 2.65rem; }
+    textarea { width: 100%; max-width: 100%; min-width: 0; }
+
+    .club-usage-summary-table-wrap {
+        max-height: none;
+        overflow: visible;
+        border: 0;
+        border-radius: 0;
+    }
+    .club-usage-summary-table,
+    .club-usage-summary-table tbody,
+    .club-usage-summary-table tr,
+    .club-usage-summary-table td {
+        display: block;
+        width: 100%;
+        min-width: 0;
+    }
+    .club-usage-summary-table { font-size: 0.82rem; }
+    .club-usage-summary-table thead { display: none; }
+    .club-usage-summary-table tbody tr {
+        margin: 0 0 0.55rem;
+        padding: 0.2rem 0.65rem;
+        border: 1px solid rgba(148, 163, 184, 0.2);
+        border-radius: 9px;
+        background: rgba(15, 23, 42, 0.5);
+    }
+    .club-usage-summary-table tbody td {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.8rem;
+        min-height: 2.1rem;
+        padding: 0.35rem 0;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        text-align: right;
+        white-space: normal;
+    }
+    .club-usage-summary-table tbody td::before {
+        content: attr(data-label);
+        flex: 0 0 42%;
+        color: var(--text-secondary);
+        font-size: 0.71rem;
+        font-weight: 700;
+        text-align: left;
+    }
+    .club-usage-summary-table tbody td:last-child { border-bottom: 0; }
+    .club-usage-summary-empty { display: block !important; text-align: center !important; }
+    .club-usage-summary-empty::before { display: none; }
+    .club-usage-attendee-button,
+    .club-usage-excel-button { min-height: 2rem; }
+
+    .admin-start-guide-heading { align-items: flex-start; }
+    .update-banner { flex-wrap: wrap; gap: 0.4rem 0.65rem; }
+    .update-banner span { flex-basis: calc(100% - 6rem); text-align: left; }
+    .diff-popup { width: min(calc(100vw - 1.5rem), 340px); min-width: 0; padding: 0.75rem 1rem; }
+
+    .chart-canvas-wrap:has(#club-activity-chart),
+    .chart-canvas-wrap:has(#event-attendance-chart),
+    .chart-canvas-wrap:has(#club-unique-attendees-chart) { height: 350px; }
+}
+
+@media (max-width: 360px) {
+    #club-list-container .expense-row { grid-template-columns: 1fr; }
+    .club-usage-summary-totals { grid-template-columns: 1fr; }
+    .chart-canvas-wrap:has(#club-activity-chart),
+    .chart-canvas-wrap:has(#event-attendance-chart),
+    .chart-canvas-wrap:has(#club-unique-attendees-chart) { height: 390px; }
+}
