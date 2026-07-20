@@ -1,7 +1,7 @@
 /**
  * Club Expense Settlement App - Main JavaScript Logic
  */
-const APP_VERSION      = '1.6.244';
+const APP_VERSION      = '1.6.245';
 const APP_VERSION_DATE = '2026.07.20';
 
 // 인당 자부담 비용에 따라 강조 박스의 아이콘/색상을 전환 (100원 이상이면 🔥, 0이면 😊)
@@ -5045,6 +5045,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 변경이력 모달
     const CHANGELOG = [
+        { ver: '1.6.245', date: '2026.07.20', items: ['행사별 참석 인원 그래프를 최근 10건으로 조정하고, 모든 막대의 왼쪽 클럽명·날짜 레이블이 생략되지 않도록 고정 표시'] },
         { ver: '1.6.244', date: '2026.07.20', items: ['현재 참석자 중복 사번 안내를 브라우저 기본 팝업 대신 이름 입력란 옆의 빨간 문구로 변경하고, 입력을 수정하면 안내가 즉시 사라지도록 개선'] },
         { ver: '1.6.243', date: '2026.07.20', items: ['현재 참석자 추가·수정에서 이름과 무관하게 동일 사번을 중복 등록하지 못하도록 차단하고, 이미 등록된 참석자 이름·사번을 팝업으로 안내'] },
         { ver: '1.6.242', date: '2026.07.20', items: ['영수증·행사 사진을 긴 변 기준 저용량 JPEG로 변환해 서버에 저장하고, 확정 이력의 첨부 원본은 전체 정산 이력에만 보관해 개인 이력 중복 용량을 제거', '첨부 총량 6MB 제한과 서버 저장 성공·실패 안내를 추가하고, 정산 다음 해 4월 1일 이후 만료 사진·영수증을 관리자 로그인 시 자동 정리'] },
@@ -6513,7 +6514,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // ── 행사별 참석 인원 (행사 1건 = 1줄 가로 목록형, "클럽명 날짜" 라벨 + 클럽 고유 색) ──
     // 사용자가 원하는 읽기: "어떤 클럽이 · 며칠 행사에 · 몇 명 참석" — 세 정보가 호버 없이
     // 한 줄에서 바로 읽히도록 세로 막대 → 가로 목록형으로 변경 (v1.6.236). 최근 행사가 위.
-    const EVENT_ATTENDANCE_MAX_ROWS = 15;
+    const EVENT_ATTENDANCE_MAX_ROWS = 10;
     function renderEventAttendanceChart(historyList) {
         const canvas = document.getElementById('event-attendance-chart');
         if (!canvas || typeof Chart === 'undefined') return;
@@ -6573,7 +6574,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 },
                 scales: {
                     x: { ticks: { color: '#94a3b8', stepSize: 1 }, grid: { color: 'rgba(255,255,255,0.04)' }, beginAtZero: true, suggestedMax: Math.max(...counts, 1) + 2 },
-                    y: { ticks: { color: '#cbd5e1', font: { size: 11 } }, grid: { display: false } }
+                    y: { ticks: { color: '#cbd5e1', font: { size: 11 }, autoSkip: false }, grid: { display: false } }
                 }
             }
         });

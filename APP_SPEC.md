@@ -529,6 +529,7 @@ directory[이름] = {
 - 연간 예산 통계·소진율: 과거 연도 이력을 제외하고 `priorUsed + 올해 finalSupportAmount 합계`만 사용
 - `selectedOverallClubs`, `selectedUsageClubs` → 선택된 클럽 Set
 - 카테고리 파이 차트: `entry.expenseItems` 직접 읽어 카테고리별 합산 (구버전 `entry.eventCost` 필드 사용 금지)
+- 행사별 참석 인원 차트: 실제 정산일 최신순 최근 10건을 가로 막대로 표시하며, 왼쪽 `클럽명 날짜` 레이블은 `autoSkip:false`로 모든 행사에 표시한다.
 
 ---
 
