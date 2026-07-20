@@ -1,7 +1,7 @@
 /**
  * Club Expense Settlement App - Main JavaScript Logic
  */
-const APP_VERSION      = '1.6.259';
+const APP_VERSION      = '1.6.260';
 const APP_VERSION_DATE = '2026.07.21';
 
 // 인당 자부담 비용에 따라 강조 박스의 아이콘/색상을 전환 (100원 이상이면 🔥, 0이면 😊)
@@ -5098,6 +5098,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 변경이력 모달
     const CHANGELOG = [
+        { ver: '1.6.260', date: '2026.07.21', items: ['관리자 클럽별 정산 이력에서 모든 클럽의 사용 요약과 행사별 비용 표를 즉시 표시', '행사별 참석 인원 숫자를 클릭하면 이름·사번 명단 확인과 복사가 가능하도록 연결'] },
         { ver: '1.6.259', date: '2026.07.21', items: ['관리자 클럽별 정산 이력에서 클럽 선택 상자를 없애고 모든 등록 클럽을 기본 접힘 목록으로 표시', '새로 등록된 정산은 해당 클럽에 신규 등록 건수로 표시하고, 클럽을 펼쳐 확인하면 읽음 처리'] },
         { ver: '1.6.258', date: '2026.07.21', items: ['일반 사용자 정산 이력의 참석자 명단을 기본 접힘으로 분리하고, 펼치면 이름과 사번을 확인하도록 개선'] },
         { ver: '1.6.257', date: '2026.07.21', items: ['일반 사용자 정산 이력에도 클럽별 그룹·접기/펼치기·올해 사용 요약 버튼을 관리자 화면과 동일하게 적용'] },
@@ -6647,14 +6648,7 @@ document.addEventListener('DOMContentLoaded', () => {
         container.appendChild(card);
     }
 
-    function openClubUsageSummaryModal(clubName, entries, year) {
-        const modal = document.getElementById('club-usage-summary-modal');
-        const titleEl = document.getElementById('club-usage-summary-title');
-        const descriptionEl = document.getElementById('club-usage-summary-description');
-        const totalsEl = document.getElementById('club-usage-summary-totals');
-        const listEl = document.getElementById('club-usage-summary-list');
-        if (!modal || !titleEl || !descriptionEl || !totalsEl || !listEl) return;
-
+    function getClubUsageSummaryData(clubName, entries) {
         const rows = (entries || [])
             .slice()
             .sort(compareHistoryEntriesNewestFirst)
@@ -6668,7 +6662,6 @@ document.addEventListener('DOMContentLoaded', () => {
             selfPay: sum.selfPay + row.selfPay,
             totalCost: sum.totalCost + row.totalCost
         }), { memberCount: 0, eventCost: 0, facilityCost: 0, prizeCost: 0, support: 0, selfPay: 0, totalCost: 0 });
-        // 정산 결과 화면과 같은 기준: 기존 사용액 + 올해 이력/누적 지원금 중 큰 값.
         const registryClub = Object.values(AppState.clubRegistry || {}).find(club => club && club.name === clubName);
         const hasAssignedBudget = Boolean(registryClub) && Object.prototype.hasOwnProperty.call(registryClub, 'budget');
         const clubBudget = registryClub ? Math.max(0, parseAmount(registryClub.budget)) : 0;
@@ -6676,22 +6669,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const registryUsed = registryClub ? Math.max(0, parseAmount(registryClub.usedBudget)) : 0;
         const clubUsed = priorUsed + Math.max(totals.support, registryUsed);
         const clubRemaining = clubBudget - clubUsed;
+        return { rows, totals, hasAssignedBudget, clubBudget, clubRemaining };
+    }
 
-        titleEl.textContent = `${clubName} 사용 요약`;
-        descriptionEl.textContent = `${year}년 정산 ${rows.length}건 · 행사별 비용 내역`;
-        totalsEl.innerHTML = '';
-        if (hasAssignedBudget) {
-            appendClubUsageTotalCard(totalsEl, '클럽 총 예산', clubBudget, 'budget');
-            appendClubUsageTotalCard(totalsEl, '현재 잔여 예산', clubRemaining, clubRemaining < 0 ? 'remaining over-budget' : 'remaining');
-        } else {
-            appendClubUsageTotalCard(totalsEl, '클럽 총 예산', 0, '', () => '미설정');
-            appendClubUsageTotalCard(totalsEl, '현재 잔여 예산', 0, '', () => '미설정');
-        }
-        appendClubUsageTotalCard(totalsEl, '총 참석 인원', totals.memberCount, '', value => `${value}명`);
-        appendClubUsageTotalCard(totalsEl, '총 회사 지원금', totals.support, 'support');
-        appendClubUsageTotalCard(totalsEl, '총 자부담 비용', totals.selfPay, 'selfpay');
-        appendClubUsageTotalCard(totalsEl, '총 비용', totals.totalCost, '');
-
+    function appendClubUsageRows(listEl, rows, year, clickableAttendees = false) {
         listEl.innerHTML = '';
         if (rows.length === 0) {
             const row = document.createElement('tr');
@@ -6701,29 +6682,110 @@ document.addEventListener('DOMContentLoaded', () => {
             cell.textContent = `${year}년 정산 이력이 없습니다.`;
             row.appendChild(cell);
             listEl.appendChild(row);
-        } else {
-            rows.forEach(rowData => {
-                const row = document.createElement('tr');
-                const values = [
-                    formatHistoryUsageDate(rowData.entry),
-                    `${rowData.memberCount}명`,
-                    SettlementCalculator.formatCurrency(rowData.eventCost),
-                    SettlementCalculator.formatCurrency(rowData.facilityCost),
-                    SettlementCalculator.formatCurrency(rowData.prizeCost),
-                    SettlementCalculator.formatCurrency(rowData.support),
-                    SettlementCalculator.formatCurrency(rowData.selfPay),
-                    SettlementCalculator.formatCurrency(rowData.totalCost)
-                ];
-                values.forEach((value, index) => {
-                    const cell = document.createElement('td');
-                    cell.textContent = value;
-                    if (index === 5) cell.className = 'support';
-                    if (index === 6) cell.className = 'selfpay';
-                    row.appendChild(cell);
-                });
-                listEl.appendChild(row);
-            });
+            return;
         }
+
+        rows.forEach(rowData => {
+            const row = document.createElement('tr');
+            const values = [
+                formatHistoryUsageDate(rowData.entry),
+                `${rowData.memberCount}명`,
+                SettlementCalculator.formatCurrency(rowData.eventCost),
+                SettlementCalculator.formatCurrency(rowData.facilityCost),
+                SettlementCalculator.formatCurrency(rowData.prizeCost),
+                SettlementCalculator.formatCurrency(rowData.support),
+                SettlementCalculator.formatCurrency(rowData.selfPay),
+                SettlementCalculator.formatCurrency(rowData.totalCost)
+            ];
+            values.forEach((value, index) => {
+                const cell = document.createElement('td');
+                if (index === 1 && clickableAttendees) {
+                    const attendeeButton = document.createElement('button');
+                    attendeeButton.type = 'button';
+                    attendeeButton.className = 'club-usage-attendee-button';
+                    attendeeButton.textContent = value;
+                    attendeeButton.title = '참석자 명단 확인 및 복사';
+                    attendeeButton.addEventListener('click', () => {
+                        const date = formatHistoryUsageDate(rowData.entry);
+                        openAttendanceRosterModal(
+                            `${rowData.entry.clubName || '클럽'} ${date} 참석자 명단`,
+                            `참석 ${rowData.memberCount}명`,
+                            rowData.entry.attendees || []
+                        );
+                    });
+                    cell.appendChild(attendeeButton);
+                } else {
+                    cell.textContent = value;
+                }
+                if (index === 5) cell.className = 'support';
+                if (index === 6) cell.className = 'selfpay';
+                row.appendChild(cell);
+            });
+            listEl.appendChild(row);
+        });
+    }
+
+    function createInlineClubUsageSummary(clubName, entries, year) {
+        const data = getClubUsageSummaryData(clubName, entries);
+        const summary = document.createElement('section');
+        summary.className = 'inline-club-usage-summary';
+
+        const totalsEl = document.createElement('div');
+        totalsEl.className = 'club-usage-summary-totals';
+        if (data.hasAssignedBudget) {
+            appendClubUsageTotalCard(totalsEl, '클럽 총 예산', data.clubBudget, 'budget');
+            appendClubUsageTotalCard(totalsEl, '현재 잔여 예산', data.clubRemaining, data.clubRemaining < 0 ? 'remaining over-budget' : 'remaining');
+        } else {
+            appendClubUsageTotalCard(totalsEl, '클럽 총 예산', 0, '', () => '미설정');
+            appendClubUsageTotalCard(totalsEl, '현재 잔여 예산', 0, '', () => '미설정');
+        }
+        appendClubUsageTotalCard(totalsEl, '총 참석 인원', data.totals.memberCount, '', value => `${value}명`);
+        appendClubUsageTotalCard(totalsEl, '총 회사 지원금', data.totals.support, 'support');
+        appendClubUsageTotalCard(totalsEl, '총 자부담 비용', data.totals.selfPay, 'selfpay');
+        appendClubUsageTotalCard(totalsEl, '총 비용', data.totals.totalCost, '');
+
+        const tableWrap = document.createElement('div');
+        tableWrap.className = 'club-usage-summary-table-wrap inline-club-usage-table-wrap';
+        const table = document.createElement('table');
+        table.className = 'club-usage-summary-table';
+        table.innerHTML = `
+            <thead><tr>
+                <th>행사 날짜</th><th>참석 인원</th><th>행사비</th><th>시설·장비 이용료</th><th>상품비</th><th>회사 지원금</th><th>자부담 비용</th><th>총 비용</th>
+            </tr></thead>`;
+        const listEl = document.createElement('tbody');
+        appendClubUsageRows(listEl, data.rows, year, true);
+        table.appendChild(listEl);
+        tableWrap.appendChild(table);
+        summary.append(totalsEl, tableWrap);
+        return summary;
+    }
+
+    function openClubUsageSummaryModal(clubName, entries, year) {
+        const modal = document.getElementById('club-usage-summary-modal');
+        const titleEl = document.getElementById('club-usage-summary-title');
+        const descriptionEl = document.getElementById('club-usage-summary-description');
+        const totalsEl = document.getElementById('club-usage-summary-totals');
+        const listEl = document.getElementById('club-usage-summary-list');
+        if (!modal || !titleEl || !descriptionEl || !totalsEl || !listEl) return;
+
+        const data = getClubUsageSummaryData(clubName, entries);
+
+        titleEl.textContent = `${clubName} 사용 요약`;
+        descriptionEl.textContent = `${year}년 정산 ${data.rows.length}건 · 행사별 비용 내역`;
+        totalsEl.innerHTML = '';
+        if (data.hasAssignedBudget) {
+            appendClubUsageTotalCard(totalsEl, '클럽 총 예산', data.clubBudget, 'budget');
+            appendClubUsageTotalCard(totalsEl, '현재 잔여 예산', data.clubRemaining, data.clubRemaining < 0 ? 'remaining over-budget' : 'remaining');
+        } else {
+            appendClubUsageTotalCard(totalsEl, '클럽 총 예산', 0, '', () => '미설정');
+            appendClubUsageTotalCard(totalsEl, '현재 잔여 예산', 0, '', () => '미설정');
+        }
+        appendClubUsageTotalCard(totalsEl, '총 참석 인원', data.totals.memberCount, '', value => `${value}명`);
+        appendClubUsageTotalCard(totalsEl, '총 회사 지원금', data.totals.support, 'support');
+        appendClubUsageTotalCard(totalsEl, '총 자부담 비용', data.totals.selfPay, 'selfpay');
+        appendClubUsageTotalCard(totalsEl, '총 비용', data.totals.totalCost, '');
+
+        appendClubUsageRows(listEl, data.rows, year, true);
         modal.classList.remove('hidden');
         document.getElementById('close-club-usage-summary-modal')?.focus();
     }
@@ -7170,58 +7232,56 @@ document.addEventListener('DOMContentLoaded', () => {
         const seenByClub = getAdminHistorySeenByClub();
         let needsSeenSave = false;
         entriesByClub.forEach((clubEntries, clubName) => {
-                const group = document.createElement('details');
-                group.className = 'admin-history-club-group';
-                group.open = false;
+            const clubCard = document.createElement('section');
+            clubCard.className = 'admin-inline-club-usage-card';
 
-                const latestSavedAt = clubEntries.reduce((latest, entry) => Math.max(latest, getHistoryEntrySavedAt(entry)), 0);
-                if (!Object.prototype.hasOwnProperty.call(seenByClub, clubName)) {
-                    seenByClub[clubName] = latestSavedAt;
-                    needsSeenSave = true;
-                }
-                const newEntryCount = clubEntries.filter(entry => getHistoryEntrySavedAt(entry) > Number(seenByClub[clubName] || 0)).length;
+            const latestSavedAt = clubEntries.reduce((latest, entry) => Math.max(latest, getHistoryEntrySavedAt(entry)), 0);
+            if (!Object.prototype.hasOwnProperty.call(seenByClub, clubName)) {
+                seenByClub[clubName] = latestSavedAt;
+                needsSeenSave = true;
+            }
+            const newEntryCount = clubEntries.filter(entry => getHistoryEntrySavedAt(entry) > Number(seenByClub[clubName] || 0)).length;
+            const currentYear = new Date().getFullYear();
+            const currentYearEntries = clubEntries.filter(entry => getHistoryEntryYear(entry) === currentYear);
 
-                const summary = document.createElement('summary');
-                const heading = document.createElement('div');
-                heading.className = 'admin-history-club-heading';
-                const title = document.createElement('strong');
-                title.textContent = `📁 ${clubName}`;
-                const count = document.createElement('span');
-                count.className = 'admin-history-club-count';
-                count.textContent = `정산 ${clubEntries.length}건`;
-                heading.append(title, count);
-                if (newEntryCount > 0) {
-                    const newBadge = document.createElement('span');
-                    newBadge.className = 'admin-history-new-badge';
-                    newBadge.textContent = `신규 등록 ${newEntryCount}건`;
-                    heading.appendChild(newBadge);
-                }
+            const header = document.createElement('div');
+            header.className = 'admin-inline-club-usage-header';
+            const heading = document.createElement('div');
+            heading.className = 'admin-history-club-heading';
+            const title = document.createElement('strong');
+            title.textContent = `📁 ${clubName} 사용 요약`;
+            const count = document.createElement('span');
+            count.className = 'admin-history-club-count';
+            count.textContent = `${currentYear}년 정산 ${currentYearEntries.length}건`;
+            heading.append(title, count);
+            if (newEntryCount > 0) {
+                const newBadge = document.createElement('span');
+                newBadge.className = 'admin-history-new-badge';
+                newBadge.textContent = `신규 등록 ${newEntryCount}건`;
+                heading.appendChild(newBadge);
+            }
+            header.appendChild(heading);
+            clubCard.append(header, createInlineClubUsageSummary(clubName, currentYearEntries, currentYear));
 
-                const summaryButton = document.createElement('button');
-                summaryButton.type = 'button';
-                summaryButton.className = 'admin-history-club-summary-btn';
-                summaryButton.textContent = '📊 사용 요약';
-                summaryButton.addEventListener('click', event => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    const currentYear = new Date().getFullYear();
-                    const currentYearEntries = clubEntries.filter(entry => getHistoryEntryYear(entry) === currentYear);
-                    openClubUsageSummaryModal(clubName, currentYearEntries, currentYear);
-                });
-                summary.append(heading, summaryButton);
-
+            if (clubEntries.length > 0) {
+                const management = document.createElement('details');
+                management.className = 'admin-history-entry-management';
+                const managementSummary = document.createElement('summary');
+                managementSummary.textContent = `정산 이력 상세·수정 (${clubEntries.length}건)`;
                 const list = document.createElement('div');
                 list.className = 'admin-history-club-list';
-                group.append(summary, list);
-                container.appendChild(group);
+                management.append(managementSummary, list);
+                clubCard.appendChild(management);
                 groupContainers.set(clubName, list);
-                group.addEventListener('toggle', () => {
-                    if (!group.open || newEntryCount === 0) return;
+                management.addEventListener('toggle', () => {
+                    if (!management.open || newEntryCount === 0) return;
                     seenByClub[clubName] = Math.max(Number(seenByClub[clubName] || 0), latestSavedAt);
                     saveAdminHistorySeenByClub(seenByClub);
-                    group.querySelector('.admin-history-new-badge')?.remove();
+                    clubCard.querySelector('.admin-history-new-badge')?.remove();
                 });
-            });
+            }
+            container.appendChild(clubCard);
+        });
         if (needsSeenSave) saveAdminHistorySeenByClub(seenByClub);
 
         filtered.forEach(entry => {
@@ -7322,11 +7382,6 @@ document.addEventListener('DOMContentLoaded', () => {
             (targetContainer || container).appendChild(div);
         });
 
-        groupContainers.forEach((list, clubName) => {
-            if (list.childElementCount > 0) return;
-            list.innerHTML = `<div class="empty-state admin-history-club-empty"><p>${AppState.escapeHtml(clubName)} 클럽의 정산 이력이 없습니다.</p></div>`;
-        });
-        
         // 정산인 이름 수정 (관리자 전용)
         container.querySelectorAll('.admin-edit-creator').forEach(span => {
             span.addEventListener('click', () => {
