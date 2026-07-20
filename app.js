@@ -1,7 +1,7 @@
 /**
  * Club Expense Settlement App - Main JavaScript Logic
  */
-const APP_VERSION      = '1.6.258';
+const APP_VERSION      = '1.6.259';
 const APP_VERSION_DATE = '2026.07.21';
 
 // 인당 자부담 비용에 따라 강조 박스의 아이콘/색상을 전환 (100원 이상이면 🔥, 0이면 😊)
@@ -3423,7 +3423,6 @@ document.addEventListener('DOMContentLoaded', () => {
     window._onClubRegistryUpdate = () => {
         renderClubOptions();
         if (typeof renderClubManagement === 'function') renderClubManagement();
-        if (typeof renderClubHistorySelect === 'function') renderClubHistorySelect();
     };
 
     if (clubNameInput) {
@@ -5099,6 +5098,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 변경이력 모달
     const CHANGELOG = [
+        { ver: '1.6.259', date: '2026.07.21', items: ['관리자 클럽별 정산 이력에서 클럽 선택 상자를 없애고 모든 등록 클럽을 기본 접힘 목록으로 표시', '새로 등록된 정산은 해당 클럽에 신규 등록 건수로 표시하고, 클럽을 펼쳐 확인하면 읽음 처리'] },
         { ver: '1.6.258', date: '2026.07.21', items: ['일반 사용자 정산 이력의 참석자 명단을 기본 접힘으로 분리하고, 펼치면 이름과 사번을 확인하도록 개선'] },
         { ver: '1.6.257', date: '2026.07.21', items: ['일반 사용자 정산 이력에도 클럽별 그룹·접기/펼치기·올해 사용 요약 버튼을 관리자 화면과 동일하게 적용'] },
         { ver: '1.6.256', date: '2026.07.21', items: ['관리자 클럽별 정산 이력의 전체 보기를 월별 혼합 목록에서 클럽별 그룹으로 변경하고, 각 클럽 그룹에서 사용 요약을 바로 열 수 있도록 개선'] },
@@ -5394,13 +5394,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    const clubHistorySelect = document.getElementById('club-history-select');
-    if (clubHistorySelect) {
-        clubHistorySelect.addEventListener('change', () => {
-            renderAdminHistory(lastHistoryList);
-        });
-    }
-
     // ── 가입 회원 - 이름/PIN 수정 및 삭제 ────────────────────────────────
     function editAdminUser(oldPin, currentName) {
         const overlay   = document.getElementById('edit-user-modal-overlay');
@@ -5644,7 +5637,6 @@ document.addEventListener('DOMContentLoaded', () => {
         renderClubManagement();
         updateChartsBudgetStats(lastHistoryList);
         renderClubFilters();
-        renderClubHistorySelect();
     }
 
     // 관리자 첫 진입 시 현재 설정 상태를 행동 중심으로 알려 준다.
@@ -5702,23 +5694,35 @@ document.addEventListener('DOMContentLoaded', () => {
     syncAdminStartActionState('club-management-card');
     syncAdminStartActionState('rules-management-card');
 
-    // ── 클럽별 정산이력 탭 - 클럽 선택 드롭다운 ───────────────────────────
-    function renderClubHistorySelect() {
-        const select = document.getElementById('club-history-select');
-        if (!select) return;
-        const current = select.value;
-        const clubs = Object.values(AppState.clubRegistry || {}).sort((a, b) => a.name.localeCompare(b.name));
-        select.innerHTML = `<option value="">전체 클럽 (클럽별)</option>` +
-            clubs.map(c => `<option value="${AppState.escapeHtml(c.name)}">${AppState.escapeHtml(c.name)}</option>`).join('');
-        select.value = current;
-    }
-
     // ── 클럽 관리 (관리자 대시보드) ───────────────────────────────────────
     let editingClubId = null;
     let lastHistoryList = [];
     let historyLoaded = false; // globalHistory 최초 로드 완료 여부 — 로드 전 빈 리스트 기준으로 Firebase에 0을 써버리는 사고 방지
     let cachedDeletedIds = {}; // tombstone 캐시 — 어떤 경로로도 삭제된 항목이 보이지 않도록
     let selectedOverallClubs = null; // null = 전체 표시, Set이면 해당 클럽만 표시
+    const ADMIN_HISTORY_SEEN_STORAGE_KEY = 'admin_history_seen_by_club';
+
+    function getHistoryEntrySavedAt(entry) {
+        const idTime = Number(entry?.id);
+        if (Number.isFinite(idTime) && idTime > 100000000000) return idTime;
+        const dateTime = new Date(entry?.date || entry?.settlementDate || 0).getTime();
+        return Number.isFinite(dateTime) ? dateTime : 0;
+    }
+
+    function getAdminHistorySeenByClub() {
+        try {
+            const parsed = JSON.parse(localStorage.getItem(ADMIN_HISTORY_SEEN_STORAGE_KEY) || '{}');
+            return parsed && typeof parsed === 'object' ? parsed : {};
+        } catch (_) {
+            return {};
+        }
+    }
+
+    function saveAdminHistorySeenByClub(seenByClub) {
+        try {
+            localStorage.setItem(ADMIN_HISTORY_SEEN_STORAGE_KEY, JSON.stringify(seenByClub));
+        } catch (_) {}
+    }
 
     const clubTotalBudgetInput = document.getElementById('club-total-budget-input');
     const clubBudgetSummary = document.getElementById('club-budget-summary');
@@ -7103,16 +7107,13 @@ document.addEventListener('DOMContentLoaded', () => {
         renderSelfPayTrendChart(historyList);
     }
 
-    // 클럽별 정산이력 탭 - 정산인(사용자) 선택 드롭다운 (선택된 클럽 기준, 사용자가 2명 이상일 때만 표시)
-    function renderAdminUserSelect(historyList, selectedClub) {
+    // 클럽별 정산이력 탭 - 정산인(사용자) 선택 드롭다운
+    function renderAdminUserSelect(historyList) {
         const select = document.getElementById('admin-user-select');
         const group = document.getElementById('admin-user-select-group');
         if (!select || !group) return;
         const current = select.value;
-        const scoped = selectedClub
-            ? (historyList || []).filter(e => (e.clubName || '기본 클럽') === selectedClub)
-            : (historyList || []);
-        const names = [...new Set(scoped.map(e => e.creatorName).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+        const names = [...new Set((historyList || []).map(e => e.creatorName).filter(Boolean))].sort((a, b) => a.localeCompare(b));
         if (names.length <= 1) {
             group.classList.add('hidden');
             select.innerHTML = `<option value="">전체 사용자</option>`;
@@ -7131,9 +7132,8 @@ document.addEventListener('DOMContentLoaded', () => {
             .filter(e => e && !cachedDeletedIds[String(e.id)])
             .sort(compareHistoryEntriesNewestFirst);
         const container = document.getElementById('admin-history-container');
-        const clubSelect = document.getElementById('club-history-select');
-        const selectedClub = clubSelect ? clubSelect.value : '';
-        renderAdminUserSelect(historyList, selectedClub);
+        if (!container) return;
+        renderAdminUserSelect(historyList);
         const userSelect = document.getElementById('admin-user-select');
         const selectedUser = userSelect ? userSelect.value : '';
         container.innerHTML = '';
@@ -7143,36 +7143,43 @@ document.addEventListener('DOMContentLoaded', () => {
             return entry.creatorName === selectedUser;
         });
 
-        if (selectedClub) {
-            filtered = filtered.filter(entry => (entry.clubName || '기본 클럽') === selectedClub);
-        }
-        
-        if (filtered.length === 0) {
+        // 클럽 선택 없이 모든 등록 클럽을 기본 접힘 그룹으로 표시한다.
+        const groupContainers = new Map();
+        const entriesByClub = new Map();
+        Object.values(AppState.clubRegistry || {})
+            .map(club => club.name)
+            .filter(Boolean)
+            .sort((a, b) => a.localeCompare(b))
+            .forEach(clubName => entriesByClub.set(clubName, []));
+        filtered.forEach(entry => {
+            const clubName = entry.clubName || t('label.default_club');
+            if (!entriesByClub.has(clubName)) entriesByClub.set(clubName, []);
+            entriesByClub.get(clubName).push(entry);
+        });
+
+        if (entriesByClub.size === 0) {
             container.innerHTML = `
                 <div class="empty-state">
                     <span class="empty-icon">💨</span>
-                    <p>일치하는 정산 내역이 없습니다.</p>
+                    <p>등록된 클럽 또는 정산 내역이 없습니다.</p>
                 </div>
             `;
             return;
         }
-        
-        // 전체 보기에서는 월별 혼합 목록 대신 클럽별 그룹으로 정리한다.
-        // filtered는 최신순이므로 그룹 순서도 가장 최근 정산이 있는 클럽부터 유지된다.
-        const groupContainers = new Map();
-        const isGroupedByClub = !selectedClub;
-        if (isGroupedByClub) {
-            const entriesByClub = new Map();
-            filtered.forEach(entry => {
-                const clubName = entry.clubName || t('label.default_club');
-                if (!entriesByClub.has(clubName)) entriesByClub.set(clubName, []);
-                entriesByClub.get(clubName).push(entry);
-            });
 
-            entriesByClub.forEach((clubEntries, clubName) => {
+        const seenByClub = getAdminHistorySeenByClub();
+        let needsSeenSave = false;
+        entriesByClub.forEach((clubEntries, clubName) => {
                 const group = document.createElement('details');
                 group.className = 'admin-history-club-group';
-                group.open = true;
+                group.open = false;
+
+                const latestSavedAt = clubEntries.reduce((latest, entry) => Math.max(latest, getHistoryEntrySavedAt(entry)), 0);
+                if (!Object.prototype.hasOwnProperty.call(seenByClub, clubName)) {
+                    seenByClub[clubName] = latestSavedAt;
+                    needsSeenSave = true;
+                }
+                const newEntryCount = clubEntries.filter(entry => getHistoryEntrySavedAt(entry) > Number(seenByClub[clubName] || 0)).length;
 
                 const summary = document.createElement('summary');
                 const heading = document.createElement('div');
@@ -7183,6 +7190,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 count.className = 'admin-history-club-count';
                 count.textContent = `정산 ${clubEntries.length}건`;
                 heading.append(title, count);
+                if (newEntryCount > 0) {
+                    const newBadge = document.createElement('span');
+                    newBadge.className = 'admin-history-new-badge';
+                    newBadge.textContent = `신규 등록 ${newEntryCount}건`;
+                    heading.appendChild(newBadge);
+                }
 
                 const summaryButton = document.createElement('button');
                 summaryButton.type = 'button';
@@ -7202,8 +7215,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 group.append(summary, list);
                 container.appendChild(group);
                 groupContainers.set(clubName, list);
+                group.addEventListener('toggle', () => {
+                    if (!group.open || newEntryCount === 0) return;
+                    seenByClub[clubName] = Math.max(Number(seenByClub[clubName] || 0), latestSavedAt);
+                    saveAdminHistorySeenByClub(seenByClub);
+                    group.querySelector('.admin-history-new-badge')?.remove();
+                });
             });
-        }
+        if (needsSeenSave) saveAdminHistorySeenByClub(seenByClub);
 
         filtered.forEach(entry => {
             const div = document.createElement('div');
@@ -7250,7 +7269,6 @@ document.addEventListener('DOMContentLoaded', () => {
             div.innerHTML = `
                 <div class="history-header">
                     <div style="display:flex;align-items:center;gap:0.4rem;flex-wrap:wrap;">
-                        ${isGroupedByClub ? '' : `<strong>${AppState.escapeHtml(entry.clubName || t('label.default_club'))}</strong>`}
                         <span class="history-club admin-edit-creator" data-id="${entry.id}" style="color:var(--color-secondary);cursor:pointer;text-decoration:underline dotted;" title="탭하여 정산인 이름 수정">${t('label.settler')}: ${AppState.escapeHtml(entry.creatorName || t('status.offline'))}</span>
                         ${editedBadgeAdmin}
                     </div>
@@ -7300,8 +7318,13 @@ document.addEventListener('DOMContentLoaded', () => {
             `;
             
             const clubName = entry.clubName || t('label.default_club');
-            const targetContainer = isGroupedByClub ? groupContainers.get(clubName) : container;
+            const targetContainer = groupContainers.get(clubName);
             (targetContainer || container).appendChild(div);
+        });
+
+        groupContainers.forEach((list, clubName) => {
+            if (list.childElementCount > 0) return;
+            list.innerHTML = `<div class="empty-state admin-history-club-empty"><p>${AppState.escapeHtml(clubName)} 클럽의 정산 이력이 없습니다.</p></div>`;
         });
         
         // 정산인 이름 수정 (관리자 전용)
