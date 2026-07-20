@@ -42,7 +42,7 @@
 | 유저 세션 데이터 | `settlements/{PIN}` | 유저 본인 |
 
 **유저 Firebase(`settlements/{PIN}`) 저장 항목 (세션 데이터만):**
-- `memberCount`, `expenseItems`, `attendees`, `directory`, `clubName`, `clubId`, `reportEmail`, `settlementHistory`, `eventPhoto`
+- `memberCount`, `expenseItems`, `attendees`, `directory`, `clubName`, `clubId`, `reportEmail`, `settlementHistory`, `eventPhotos`
 - `rules`, `annualBudget`, `usedBudget`, `previousPrizeTotal` → **저장·로드 금지** (관리자 경로 기준)
 
 ---
@@ -258,15 +258,17 @@ previousPrizeTotal = clubRegistry[clubId].prizeUsed  (관리자 기준 단일 �
 2. SettlementCalculator.calculate() 실행
 3. SettlementValidator.validate() 자동 교차 검증
 4. 엑셀 파일 생성 (lib/template.xlsx 기반)
-5. 정산 이력 저장:
-   - AppState.settlementHistory.unshift(newHistoryItem)  [유저 개인 이력]
-   - Firebase globalHistory/{id}.set(newHistoryItem)     [관리자 전체 이력]
-6. recalculateDirectoryCounts() — 명부 누적 카운트 재계산
-7. usedBudget += finalSupportAmount
-8. clubRegistry[clubId].prizeUsed += 이번 상품비 (상품비 > 0일 때만)
-9. 세션 초기화: expenseItems=[], attendees=[], memberCount=0, lastCalculatedSelfPay=0, eventPhoto=null
-10. previousPrizeTotal = clubRegistry[clubId].prizeUsed (갱신 후 값)
-11. 정산 이력 탭으로 자동 전환
+5. Firebase 루트 다중 경로 update로 한 번에 원자 저장:
+   - globalHistory/{id}                       [관리자 전체 이력, eventPhotos 포함]
+   - settlements/{PIN}/settlementHistory      [유저 개인 이력]
+   - settlements/{PIN}/directory               [사번 기준 올해 누적 재집계]
+   - clubRegistry/{clubId}.usedBudget/prizeUsed [서버 증분]
+   - 개인 세션 비용·참석자·사진 초기화
+6. 원격 저장 성공을 await — 실패 시 현재 입력을 유지하고 성공 처리 금지
+7. 로컬 이력·명부·클럽 누적값 갱신
+8. 세션 초기화: expenseItems=[], attendees=[], memberCount=0, lastCalculatedSelfPay=0, eventPhotos=[]
+9. previousPrizeTotal = clubRegistry[clubId].prizeUsed (갱신 후 값)
+10. 정산 이력 탭으로 자동 전환
 ```
 
 **엑셀 저장 완료 alert 문구:**
@@ -358,7 +360,7 @@ diff < 0: "최소 자부담 비용 미달. {-diff}원 추가 자부담 필요."
 
 | 사진 종류 | 시트 | 위치 | 크기 |
 |---|---|---|---|
-| 행사 사진 | sheet3.xml | B3 | 240×180px |
+| 행사 사진(여러 장) | sheet3.xml | B3부터 5열 간격 | 장당 240×180px |
 | 법인카드 영수증 | sheet4.xml | B5부터 16행 간격 | 220×300px |
 | 개인카드 영수증 | sheet4.xml | D5부터 16행 간격 | 220×300px |
 
@@ -386,7 +388,8 @@ directory[이름] = {
 
 ### 12-3. 누적 카운트 관리
 
-- **정산 확정 시**: `recalculateDirectoryCounts()` 실행 → settlementHistory 기반 재산정
+- **정산 확정·이력 수정·삭제 시**: 남은 현재 연도 이력 전체를 사번 기준으로 재집계해 `count`와 `counts[사번]` 동기화
+- **관리자 이력 수정·삭제 시**: 관리자 전체 명부와 정산 작성자의 개인 명부를 이력 변경과 함께 원자 저장
 - **새해 첫 로그인 시**: 전년도 카운트를 `history[연도]`에 보관 후 count=0으로 리셋 (삭제 아님)
 - **관리자 전용**: 화면에서 카운트 숫자 직접 수정 가능 (입력 필드 표시)
 - 일반 유저: 카운트 숫자만 표시 (수정 불가)

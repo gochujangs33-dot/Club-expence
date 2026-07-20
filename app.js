@@ -1,7 +1,7 @@
 /**
  * Club Expense Settlement App - Main JavaScript Logic
  */
-const APP_VERSION      = '1.6.239';
+const APP_VERSION      = '1.6.240';
 const APP_VERSION_DATE = '2026.07.20';
 
 // 인당 자부담 비용에 따라 강조 박스의 아이콘/색상을 전환 (100원 이상이면 🔥, 0이면 😊)
@@ -89,6 +89,15 @@ function getHistoryPrizeCost(entry) {
         }, 0);
     }
     return Math.max(0, parseAmount(entry.prizeCost));
+}
+
+// 정산 이력 행사 사진 호환 헬퍼: 다중 사진(eventPhotos) + 구버전 단일 사진(eventPhoto)
+function getHistoryEventPhotos(entry) {
+    if (!entry || typeof entry !== 'object') return [];
+    if (Array.isArray(entry.eventPhotos)) return entry.eventPhotos.filter(Boolean);
+    if (entry.eventPhotos) return [entry.eventPhotos];
+    if (entry.eventPhoto) return [entry.eventPhoto];
+    return [];
 }
 
 function getHistoryEntryYear(entry) {
@@ -595,8 +604,8 @@ const AppState = {
 
     // 아직 로컬 상태에 넣지 않은 신규 이력까지 포함해 저장용 명부 카운트를 계산한다.
     // 기존 명부 객체는 건드리지 않으며, 사번 없는 참석자는 반드시 스킵한다(v1.6.198 불변량).
-    buildDirectoryCountsForHistory(historyList) {
-        const directory = JSON.parse(JSON.stringify(this.directory || {}));
+    buildDirectoryCountsForHistory(historyList, sourceDirectory = this.directory) {
+        const directory = JSON.parse(JSON.stringify(sourceDirectory || {}));
         const currentYear = new Date().getFullYear();
         const idToName = {};
 
@@ -623,8 +632,10 @@ const AppState = {
 
         const seenIds = new Set();
         (historyList || []).forEach(historyEntry => {
-            if (!historyEntry || !historyEntry.id || seenIds.has(historyEntry.id)) return;
-            seenIds.add(historyEntry.id);
+            if (!historyEntry || !historyEntry.id) return;
+            const historyId = String(historyEntry.id);
+            if (seenIds.has(historyId)) return;
+            seenIds.add(historyId);
             if (getHistoryEntryYear(historyEntry) !== currentYear) return;
             (historyEntry.attendees || []).forEach(attendee => {
                 if (!attendee || !attendee.name) return;
@@ -2422,6 +2433,7 @@ const AppState = {
         const prev = {
             memberCount: this.memberCount, expenseItems: this.expenseItems,
             attendees: this.attendees, clubName: this.clubName, clubId: this.clubId,
+            eventPhotos: this.eventPhotos,
             lastCalculatedSelfPay: this.lastCalculatedSelfPay,
             selfPayManuallyOverridden: this.selfPayManuallyOverridden,
             previousPrizeTotal: this.previousPrizeTotal,
@@ -2432,6 +2444,8 @@ const AppState = {
             this.memberCount = entry.memberCount || (entry.attendees ? entry.attendees.length : 0);
             this.expenseItems = JSON.parse(JSON.stringify(entry.expenseItems || []));
             this.attendees = JSON.parse(JSON.stringify(entry.attendees || []));
+            // 구버전 이력은 빈 배열로 명시해 현재 작성 중인 다른 정산 사진이 섞이지 않게 한다.
+            this.eventPhotos = JSON.parse(JSON.stringify(getHistoryEventPhotos(entry)));
             this.clubName = entry.clubName || '';
             this.clubId = entry.clubId || '';
             // 이력에 이미 저장된 "실제" 자부담을 그대로 재사용 (항목에서 재계산하지 않음 — 과거 저장값 그대로 재현)
@@ -2452,6 +2466,7 @@ const AppState = {
         } finally {
             this.memberCount = prev.memberCount; this.expenseItems = prev.expenseItems;
             this.attendees = prev.attendees; this.clubName = prev.clubName;
+            this.eventPhotos = prev.eventPhotos;
             this.clubId = prev.clubId; this.lastCalculatedSelfPay = prev.lastCalculatedSelfPay;
             this.selfPayManuallyOverridden = prev.selfPayManuallyOverridden;
             this.previousPrizeTotal = prev.previousPrizeTotal;
@@ -2489,6 +2504,7 @@ const AppState = {
                     selfPayRatio: result.totalCost > 0 ? finalTotalSelfPay / result.totalCost : 0,
                     expenseItems: JSON.parse(JSON.stringify(this.expenseItems)),
                     attendees: JSON.parse(JSON.stringify(this.attendees)),
+                    eventPhotos: JSON.parse(JSON.stringify(this.eventPhotos || [])),
                     clubName: this.clubName,
                     clubId: this.clubId || '',
                 };
@@ -2564,6 +2580,7 @@ const AppState = {
             .reduce((s, i) => s + (i.amount || 0), 0);
         this.expenseItems = JSON.parse(JSON.stringify(entry.expenseItems || []));
         this.attendees = JSON.parse(JSON.stringify(entry.attendees || []));
+        this.eventPhotos = JSON.parse(JSON.stringify(getHistoryEventPhotos(entry)));
         // memberCount가 없으면 attendees 수로 보완 (구버전 데이터 호환)
         this.memberCount = entry.memberCount || (entry.attendees ? entry.attendees.length : 0);
         if (entry.clubName) this.clubName = entry.clubName;
@@ -2629,9 +2646,52 @@ const AppState = {
         const deltaSupport = (merged.finalSupportAmount || 0) - (oldEntry.finalSupportAmount || 0);
         const deltaPrize = newPrize - oldPrize;
         let persistedClub = null;
+        let nextDirectory = nextSettlementHistory
+            ? this.buildDirectoryCountsForHistory(nextSettlementHistory)
+            : null;
+        let creatorHistory = null;
+        let creatorDirectory = null;
 
         try {
             if (this.firebaseDb) {
+                // 관리자는 개인 이력이 아닌 전체 공유 이력을 기준으로 명부 누적 횟수를 계산한다.
+                if (this.currentPin === '000000') {
+                    const [historySnapshot, deletedSnapshot] = await Promise.all([
+                        this.firebaseDb.ref('globalHistory').once('value'),
+                        this.firebaseDb.ref('deletedHistoryIds').once('value')
+                    ]);
+                    const deletedIds = new Set(Object.keys(deletedSnapshot.val() || {}));
+                    const globalHistory = [];
+                    historySnapshot.forEach(child => {
+                        if (deletedIds.has(String(child.key))) return;
+                        const historyEntry = child.val();
+                        if (!historyEntry) return;
+                        globalHistory.push(String(historyEntry.id) === String(id) ? merged : historyEntry);
+                    });
+                    nextDirectory = this.buildDirectoryCountsForHistory(globalHistory);
+
+                    // 관리자가 다른 작성자의 참석자/사진을 수정한 경우 작성자 개인 이력과 명부도 동기화한다.
+                    const creatorPin = merged.creatorPin || oldEntry.creatorPin;
+                    if (creatorPin && String(creatorPin) !== String(this.currentPin)) {
+                        const creatorSnapshot = await this.firebaseDb.ref(`settlements/${creatorPin}`).once('value');
+                        const creatorData = creatorSnapshot.val() || {};
+                        const rawHistory = creatorData.settlementHistory;
+                        if (rawHistory) {
+                            const historyArray = Array.isArray(rawHistory) ? rawHistory : Object.values(rawHistory);
+                            const creatorIndex = historyArray.findIndex(entry => entry && String(entry.id) === String(id));
+                            if (creatorIndex >= 0) {
+                                creatorHistory = historyArray.map((entry, index) => index === creatorIndex ? merged : entry);
+                                if (creatorData.directory) {
+                                    creatorDirectory = this.buildDirectoryCountsForHistory(
+                                        creatorHistory,
+                                        creatorData.directory
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
+
                 // 공유 이력·개인 이력·클럽 누적액을 한 번의 원자적 update로 저장한다.
                 // 누적액은 서버 증분을 사용해 동시 수정/정산이 서로의 값을 덮어쓰지 않게 한다.
                 const firebaseUpdates = {};
@@ -2639,10 +2699,20 @@ const AppState = {
                 Object.entries(globalUpdate).forEach(([key, value]) => {
                     firebaseUpdates[`globalHistory/${id}/${key}`] = value;
                 });
-                // 본인이 작성한 이력일 때만 개인 settlementHistory 배열도 갱신
-                // (다른 회원의 개인 이력 배열은 전체 내용을 알 수 없으므로 건드리지 않음 — v1.6.69~73 계정 간 병합 사고 재발 방지)
+                // 현재 로그인 계정이 보유한 개인 이력이면 해당 배열도 갱신한다.
+                // 관리자가 다른 작성자의 이력을 수정하는 경우에는 위에서 그 작성자 데이터만 직접 읽어 별도로 동기화한다.
                 if (nextSettlementHistory && this.currentPin) {
                     firebaseUpdates[`settlements/${this.currentPin}/settlementHistory`] = nextSettlementHistory;
+                }
+                if (nextDirectory && this.currentPin) {
+                    firebaseUpdates[`settlements/${this.currentPin}/directory`] = nextDirectory;
+                }
+                const creatorPin = merged.creatorPin || oldEntry.creatorPin;
+                if (creatorHistory && creatorPin) {
+                    firebaseUpdates[`settlements/${creatorPin}/settlementHistory`] = creatorHistory;
+                }
+                if (creatorDirectory && creatorPin) {
+                    firebaseUpdates[`settlements/${creatorPin}/directory`] = creatorDirectory;
                 }
                 // 클럽 예산·상품비는 반드시 수정 전/후 차액(delta)만 반영한다.
                 if (club) {
@@ -2667,6 +2737,7 @@ const AppState = {
             // 원격 저장이 끝난 뒤에만 로컬 캐시를 갱신한다.
             if (clubIdx >= 0) this.clubHistory[clubIdx] = merged;
             if (ownIdx >= 0) this.settlementHistory = nextSettlementHistory;
+            if (nextDirectory) this.directory = nextDirectory;
             if (club) {
                 if (persistedClub) {
                     this.clubRegistry[clubId] = { ...club, ...persistedClub };
@@ -2786,6 +2857,7 @@ const AppState = {
                 selfPayRatio: finalSelfPayRatio,
                 expenseItems: JSON.parse(JSON.stringify(this.expenseItems)),
                 attendees: JSON.parse(JSON.stringify(this.attendees)),
+                eventPhotos: JSON.parse(JSON.stringify(this.eventPhotos || [])),
             };
             const nextSettlementHistory = [newHistoryItem, ...(this.settlementHistory || [])];
             const nextDirectory = this.buildDirectoryCountsForHistory(nextSettlementHistory);
@@ -3132,6 +3204,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     selfPayRatio: result.totalCost > 0 ? finalTotalSelfPay / result.totalCost : 0,
                     expenseItems: JSON.parse(JSON.stringify(AppState.expenseItems)),
                     attendees: JSON.parse(JSON.stringify(AppState.attendees)),
+                    eventPhotos: JSON.parse(JSON.stringify(AppState.eventPhotos || [])),
                     clubName: AppState.clubName,
                     clubId: AppState.clubId || '',
                     settlementDate,
@@ -4652,6 +4725,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 변경이력 모달
     const CHANGELOG = [
+        { ver: '1.6.240', date: '2026.07.20', items: ['정산 이력의 참석자 수정·삭제 시 이름이 아닌 사번 기준으로 올해 누적 참석 횟수를 전체 재집계하고 관리자·작성자 명부에 함께 반영', '관리자가 다른 사용자의 이력을 수정할 때 작성자 개인 이력도 공유 이력과 함께 동기화', '행사 사진을 신규·수정 정산 이력에 저장하고 과거 이력 엑셀에는 해당 이력의 사진만 삽입하도록 개선'] },
         { ver: '1.6.239', date: '2026.07.20', items: ['정산 확정 시 공유 이력·개인 이력·클럽 누적액·세션 초기화를 Firebase에 원자적으로 저장하고, 저장 성공 후에만 입력 내용을 초기화하도록 개선', '동시 정산·이력 수정 시 클럽 사용액과 상품비 누적액이 서로 덮어써지지 않도록 서버 증분 방식 적용', '이력 수정 저장 실패가 성공으로 처리되던 문제를 수정해 실패 시 수정 화면과 입력 내용을 그대로 유지'] },
         { ver: '1.6.238', date: '2026.07.20', items: ['모바일 가입 회원 관리 표를 회원별 카드형 행으로 재배치해 가입일·최근 접속 날짜가 한 글자씩 줄바꿈되지 않고 수정·삭제 버튼이 안정적으로 보이도록 개선'] },
         { ver: '1.6.237', date: '2026.07.20', items: ['일반 사용자 정산 이력에서 선택한 클럽의 이력이 0건일 때 다른 클럽의 개인 이력 전체가 표시되던 문제 수정', '상품비가 있는 정산 이력의 간단 요약에 상품비 금액 표시', '구버전 정산 이력의 expenseItems에서 상품비를 역산해 누적액을 복구하고, 신규·수정 이력에는 prizeCost를 명시 저장하도록 개선'] },
@@ -6463,72 +6537,94 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (!entry) return;
                 showConfirmModal(
                     `이 정산 기록을 삭제하시겠습니까?\n참석자 ${entry.memberCount}명의 누적 참석 횟수도 함께 차감됩니다.`,
-                    () => {
-
-                if (entry.attendees) {
-                    entry.attendees.forEach(att => {
-                        const cur = AppState.directory[att.name];
-                        if (cur && typeof cur === 'object') {
-                            cur.count = Math.max(0, (cur.count || 0) - 1);
-                        }
-                    });
-                    AppState.save();
-                }
-
-                if (firebaseDb) {
-                    const tasks = [
-                        // globalHistory에서 제거
-                        firebaseDb.ref(`globalHistory/${entry.id}`).remove(),
-                        // Tombstone 기록 — 구버전 앱의 backfill이나 어떤 경로로도 복원되지 않도록
-                        firebaseDb.ref(`deletedHistoryIds/${entry.id}`).set(true)
-                    ];
-
-                    // 정산을 등록한 사용자의 개인 정산 이력에서도 동일 항목 제거 (관리자만 삭제 가능)
-                    // Firebase는 배열을 객체({0:...,1:...})로 저장하므로 Array.isArray 대신 Object.values 정규화 필요
-                    if (entry.creatorPin) {
-                        tasks.push(
-                            firebaseDb.ref(`settlements/${entry.creatorPin}/settlementHistory`).once('value').then(snap => {
-                                const raw = snap.val();
-                                if (!raw) return;
-                                const historyArr = Array.isArray(raw) ? raw : Object.values(raw);
-                                const filtered = historyArr.filter(h => h && String(h.id) !== String(id));
-                                return firebaseDb.ref(`settlements/${entry.creatorPin}/settlementHistory`).set(filtered);
-                            })
-                        );
-                    }
-
-                    Promise.all(tasks).then(() => {
-                        cachedDeletedIds[String(id)] = true; // 즉시 메모리 캐시에 반영
-                        lastHistoryList = lastHistoryList.filter(e => String(e.id) !== String(id));
-
-                        // 삭제된 항목의 클럽 상품비 누적액을 globalHistory 기준으로 재계산 후 Firebase 갱신
-                        const _year = new Date().getFullYear();
-                        const _clubName = entry.clubName;
-                        const _clubId   = entry.clubId;
-                        const _yearFiltered = lastHistoryList.filter(e => {
-                            return historyMatchesClub(e, _clubId, _clubName) && getHistoryEntryYear(e) === _year;
-                        });
-                        const _newPrize = _yearFiltered.reduce((s, e) => s + getHistoryPrizeCost(e), 0);
-                        const _newUsed  = _yearFiltered.reduce((s, e) => s + (e.finalSupportAmount || 0), 0);
-                        const _regEntry = _clubId
-                            ? AppState.clubRegistry[_clubId]
-                            : Object.values(AppState.clubRegistry).find(c => c.name === _clubName);
-                        const _regClubId = _clubId || Object.keys(AppState.clubRegistry).find(k => AppState.clubRegistry[k] === _regEntry);
-                        if (_regEntry && _regClubId && firebaseDb) {
-                            _regEntry.prizeUsed  = _newPrize;
-                            _regEntry.usedBudget = _newUsed;
-                            firebaseDb.ref(`clubRegistry/${_regClubId}`).update({
-                                prizeUsed:  _newPrize,
-                                usedBudget: _newUsed
-                            }).catch(() => {});
+                    async () => {
+                        if (!firebaseDb) {
+                            alert(t('alert.delete_failed_network'));
+                            return;
                         }
 
-                        renderAdminHistory(lastHistoryList);
-                        renderAllCharts(lastHistoryList);
-                        updateChartsBudgetStats(lastHistoryList);
-                        renderClubManagement();
-                    }).catch(() => alert(t('alert.delete_failed_network')));
-                }
+                        btn.disabled = true;
+                        try {
+                            const nextHistoryList = lastHistoryList.filter(e => String(e.id) !== String(id));
+                            // 관리자가 보는 누적 횟수는 삭제 후 남은 전체 공유 이력을 사번 기준으로 재집계한다.
+                            const nextAdminDirectory = AppState.buildDirectoryCountsForHistory(nextHistoryList);
+                            let creatorHistory = null;
+                            let creatorDirectory = null;
+
+                            // 작성자 개인 이력과 개인 명부 누적값도 함께 맞춘다.
+                            if (entry.creatorPin) {
+                                const creatorSnapshot = await firebaseDb.ref(`settlements/${entry.creatorPin}`).once('value');
+                                const creatorData = creatorSnapshot.val() || {};
+                                const rawHistory = creatorData.settlementHistory;
+                                if (rawHistory) {
+                                    const historyArr = Array.isArray(rawHistory) ? rawHistory : Object.values(rawHistory);
+                                    creatorHistory = historyArr.filter(h => h && String(h.id) !== String(id));
+                                    if (String(entry.creatorPin) !== '000000' && creatorData.directory) {
+                                        creatorDirectory = AppState.buildDirectoryCountsForHistory(
+                                            creatorHistory,
+                                            creatorData.directory
+                                        );
+                                    }
+                                }
+                            }
+
+                            // 현재 연도 이력 삭제분만 서버 증분으로 차감해 동시 정산 누적액을 덮어쓰지 않는다.
+                            const currentYear = new Date().getFullYear();
+                            const clubName = entry.clubName;
+                            const clubId = entry.clubId;
+                            const affectsCurrentYear = getHistoryEntryYear(entry) === currentYear;
+                            const supportDelta = affectsCurrentYear ? -(entry.finalSupportAmount || 0) : 0;
+                            const prizeDelta = affectsCurrentYear ? -getHistoryPrizeCost(entry) : 0;
+                            const registryEntry = clubId
+                                ? AppState.clubRegistry[clubId]
+                                : Object.values(AppState.clubRegistry).find(club => club.name === clubName);
+                            const registryClubId = clubId
+                                || Object.keys(AppState.clubRegistry).find(key => AppState.clubRegistry[key] === registryEntry);
+
+                            // 이력 삭제·tombstone·양쪽 명부·클럽 누적액을 원자적으로 반영한다.
+                            const firebaseUpdates = {
+                                [`globalHistory/${entry.id}`]: null,
+                                [`deletedHistoryIds/${entry.id}`]: true,
+                                'settlements/000000/directory': nextAdminDirectory
+                            };
+                            if (creatorHistory) {
+                                firebaseUpdates[`settlements/${entry.creatorPin}/settlementHistory`] = creatorHistory;
+                            }
+                            if (creatorDirectory) {
+                                firebaseUpdates[`settlements/${entry.creatorPin}/directory`] = creatorDirectory;
+                            }
+                            if (registryEntry && registryClubId) {
+                                if (prizeDelta !== 0) {
+                                    firebaseUpdates[`clubRegistry/${registryClubId}/prizeUsed`] = firebase.database.ServerValue.increment(prizeDelta);
+                                }
+                                if (supportDelta !== 0) {
+                                    firebaseUpdates[`clubRegistry/${registryClubId}/usedBudget`] = firebase.database.ServerValue.increment(supportDelta);
+                                }
+                            }
+                            await firebaseDb.ref().update(firebaseUpdates);
+
+                            cachedDeletedIds[String(id)] = true;
+                            lastHistoryList = nextHistoryList;
+                            AppState.directory = nextAdminDirectory;
+                            if (creatorHistory && String(entry.creatorPin) === String(AppState.currentPin)) {
+                                AppState.settlementHistory = creatorHistory;
+                            }
+                            if (registryEntry && registryClubId) {
+                                const currentRegistryEntry = AppState.clubRegistry[registryClubId] || registryEntry;
+                                currentRegistryEntry.prizeUsed = Math.max(0, (currentRegistryEntry.prizeUsed || 0) + prizeDelta);
+                                currentRegistryEntry.usedBudget = Math.max(0, (currentRegistryEntry.usedBudget || 0) + supportDelta);
+                            }
+                            AppState.save(false);
+                            AppState.render();
+                            renderAdminHistory(lastHistoryList);
+                            renderAllCharts(lastHistoryList);
+                            updateChartsBudgetStats(lastHistoryList);
+                        } catch (err) {
+                            console.error('정산 이력 삭제 실패:', err);
+                            alert(t('alert.delete_failed_network'));
+                        } finally {
+                            btn.disabled = false;
+                        }
                     } // end showConfirmModal callback
                 ); // end showConfirmModal
             });

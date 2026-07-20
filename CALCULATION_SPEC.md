@@ -179,7 +179,8 @@ calculateSelfPayPerPerson(cost, rules) {
   - 이유: `inlineStr("")`은 `COUNTA`에서 "비어있지 않은 셀"로 카운트되어 `K4`(참석자 수) 등의 집계가 틀어짐.
 
 ### 5-2. 사진 삽입 위치 (sheet3.xml / sheet4.xml)
-- **행사 사진** (`AppState.eventPhoto`): `sheet3.xml`의 `B3`부터, 크기 240×180px
+- **행사 사진** (`AppState.eventPhotos`): `sheet3.xml`의 `B3`부터 5열 간격으로 배치, 장당 240×180px.
+  과거 정산 엑셀은 해당 이력의 `eventPhotos`만 사용하며 사진 필드가 없는 구버전 이력은 빈 사진으로 처리한다.
 - **영수증 사진**: `sheet4.xml`
   - 법인카드 영수증: `B5`부터 아래로 (행 간격 16행), 크기 220×300px
   - 개인카드 영수증: `D5`부터 아래로 (행 간격 16행), 크기 220×300px
