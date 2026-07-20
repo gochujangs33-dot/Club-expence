@@ -1,7 +1,7 @@
 /**
  * Club Expense Settlement App - Main JavaScript Logic
  */
-const APP_VERSION      = '1.6.238';
+const APP_VERSION      = '1.6.239';
 const APP_VERSION_DATE = '2026.07.20';
 
 // 인당 자부담 비용에 따라 강조 박스의 아이콘/색상을 전환 (100원 이상이면 🔥, 0이면 😊)
@@ -293,6 +293,7 @@ const AppState = {
     clubRegistry: {},
     clubTotalBudget: 0,
     editingHistoryId: null,   // 수정 모드 중인 이력 항목 ID
+    _finalizeInProgress: false,
 
     // Load initial state if storage exists (optional local storage helper)
     load() {
@@ -592,7 +593,55 @@ const AppState = {
         });
     },
 
-    save() {
+    // 아직 로컬 상태에 넣지 않은 신규 이력까지 포함해 저장용 명부 카운트를 계산한다.
+    // 기존 명부 객체는 건드리지 않으며, 사번 없는 참석자는 반드시 스킵한다(v1.6.198 불변량).
+    buildDirectoryCountsForHistory(historyList) {
+        const directory = JSON.parse(JSON.stringify(this.directory || {}));
+        const currentYear = new Date().getFullYear();
+        const idToName = {};
+
+        Object.entries(directory).forEach(([name, entry]) => {
+            const ids = (entry && typeof entry === 'object' && entry.ids)
+                ? entry.ids.map(String)
+                : (entry && typeof entry === 'object' && entry.id
+                    ? [String(entry.id)]
+                    : (entry !== null && entry !== undefined && typeof entry !== 'object' ? [String(entry)] : []));
+            const counts = {};
+            ids.forEach(id => {
+                if (id && id !== 'undefined' && id !== 'null') {
+                    counts[id] = 0;
+                    idToName[id] = name;
+                }
+            });
+            if (entry && typeof entry === 'object') {
+                entry.count = 0;
+                entry.counts = counts;
+            } else {
+                directory[name] = { id: entry, count: 0, counts };
+            }
+        });
+
+        const seenIds = new Set();
+        (historyList || []).forEach(historyEntry => {
+            if (!historyEntry || !historyEntry.id || seenIds.has(historyEntry.id)) return;
+            seenIds.add(historyEntry.id);
+            if (getHistoryEntryYear(historyEntry) !== currentYear) return;
+            (historyEntry.attendees || []).forEach(attendee => {
+                if (!attendee || !attendee.name) return;
+                const employeeId = attendee && attendee.employeeId ? String(attendee.employeeId) : '';
+                if (!employeeId) return;
+                const directoryKey = idToName[employeeId];
+                const directoryEntry = directoryKey ? directory[directoryKey] : null;
+                if (!directoryEntry || typeof directoryEntry !== 'object') return;
+                directoryEntry.counts[employeeId] = (directoryEntry.counts[employeeId] || 0) + 1;
+                directoryEntry.count = Object.values(directoryEntry.counts).reduce((sum, value) => sum + value, 0);
+            });
+        });
+
+        return directory;
+    },
+
+    save(syncFirebase = true) {
         // 1. 로컬 백업 저장 (오프라인 상태 대비)
         try {
             localStorage.setItem('club_expense_items', JSON.stringify(this.expenseItems));
@@ -617,7 +666,7 @@ const AppState = {
         }
 
         // 2. Firebase 온라인 실시간 클라우드 동기화
-        if (this.isLoggedIn && this.firebaseDb && this.currentPin) {
+        if (syncFirebase && this.isLoggedIn && this.firebaseDb && this.currentPin) {
             const dataToSync = {
                 // 세션 데이터만 유저별 저장
                 memberCount: this.memberCount,
@@ -2564,54 +2613,74 @@ const AppState = {
         // clubHistory(클럽 전체 이력)에서 우선 조회 — 관리자가 다른 회원이 작성한 이력을 수정하는 경우도 포함
         const clubIdx = (this.clubHistory || []).findIndex(e => String(e.id) === String(id));
         const oldEntry = clubIdx >= 0 ? this.clubHistory[clubIdx] : (this.settlementHistory || []).find(e => String(e.id) === String(id));
-        if (!oldEntry) return;
+        if (!oldEntry) throw new Error('수정할 정산 이력을 찾을 수 없습니다.');
 
         const editedAt = new Date().toISOString();
         const merged = { ...oldEntry, ...updatedFields, isEdited: true, editedAt };
-        // 세션 캐시 즉시 갱신 — 저장 직후 화면의 잔여예산 계산이 수정된 값을 바로 사용하도록
-        if (clubIdx >= 0) this.clubHistory[clubIdx] = merged;
-
         const ownIdx = (this.settlementHistory || []).findIndex(e => String(e.id) === String(id));
-        if (ownIdx >= 0) {
-            this.settlementHistory[ownIdx] = merged;
-            this.save();
-        }
+        const nextSettlementHistory = ownIdx >= 0
+            ? this.settlementHistory.map((entry, index) => index === ownIdx ? merged : entry)
+            : null;
+        const sumPrize = items => (items || []).reduce((s, it) => s + (it.category === 'PRIZE' ? (it.amount || 0) : 0), 0);
+        const oldPrize = sumPrize(oldEntry.expenseItems);
+        const newPrize = sumPrize(merged.expenseItems);
+        const clubId = merged.clubId || (Object.entries(this.clubRegistry || {}).find(([, c]) => c.name === merged.clubName) || [])[0];
+        const club = clubId ? this.clubRegistry[clubId] : null;
+        const deltaSupport = (merged.finalSupportAmount || 0) - (oldEntry.finalSupportAmount || 0);
+        const deltaPrize = newPrize - oldPrize;
+        let persistedClub = null;
 
-        if (!this.firebaseDb) return;
         try {
-            // globalHistory: 개별 필드 업데이트
-            const globalUpdate = { ...updatedFields, isEdited: true, editedAt };
-            await this.firebaseDb.ref(`globalHistory/${id}`).update(globalUpdate);
-
-            // 본인이 작성한 이력일 때만 개인 settlementHistory 배열도 갱신
-            // (다른 회원의 개인 이력 배열은 전체 내용을 알 수 없으므로 건드리지 않음 — v1.6.69~73 계정 간 병합 사고 재발 방지)
-            if (ownIdx >= 0) {
-                await this.firebaseDb.ref(`settlements/${this.currentPin}/settlementHistory`).set(this.settlementHistory);
-            }
-
-            // 클럽 예산(usedBudget)·상품비 사용(prizeUsed) 보정 — 수정 전/후 차액만큼만 반영
-            // finalizeSettlement()의 신규 생성 시 증분 로직과 대칭. 이 보정이 없으면 이력을 수정해도
-            // clubRegistry가 갱신되지 않아 "수정한 금액이 예산에 반영되지 않는다" 문제가 생김.
-            const sumPrize = items => (items || []).reduce((s, it) => s + (it.category === 'PRIZE' ? (it.amount || 0) : 0), 0);
-            const oldPrize = sumPrize(oldEntry.expenseItems);
-            const newPrize = sumPrize(merged.expenseItems);
-            const clubId = merged.clubId || (Object.entries(this.clubRegistry || {}).find(([, c]) => c.name === merged.clubName) || [])[0];
-            if (clubId && this.clubRegistry[clubId]) {
-                const club = this.clubRegistry[clubId];
-                const deltaSupport = (merged.finalSupportAmount || 0) - (oldEntry.finalSupportAmount || 0);
-                const deltaPrize = newPrize - oldPrize;
-                if (deltaSupport !== 0 || deltaPrize !== 0) {
-                    club.usedBudget = Math.max(0, (club.usedBudget || 0) + deltaSupport);
-                    club.prizeUsed = Math.max(0, (club.prizeUsed || 0) + deltaPrize);
-                    await this.firebaseDb.ref(`clubRegistry/${clubId}`).update({
-                        usedBudget: club.usedBudget,
-                        prizeUsed: club.prizeUsed
-                    });
+            if (this.firebaseDb) {
+                // 공유 이력·개인 이력·클럽 누적액을 한 번의 원자적 update로 저장한다.
+                // 누적액은 서버 증분을 사용해 동시 수정/정산이 서로의 값을 덮어쓰지 않게 한다.
+                const firebaseUpdates = {};
+                const globalUpdate = { ...updatedFields, isEdited: true, editedAt };
+                Object.entries(globalUpdate).forEach(([key, value]) => {
+                    firebaseUpdates[`globalHistory/${id}/${key}`] = value;
+                });
+                // 본인이 작성한 이력일 때만 개인 settlementHistory 배열도 갱신
+                // (다른 회원의 개인 이력 배열은 전체 내용을 알 수 없으므로 건드리지 않음 — v1.6.69~73 계정 간 병합 사고 재발 방지)
+                if (nextSettlementHistory && this.currentPin) {
+                    firebaseUpdates[`settlements/${this.currentPin}/settlementHistory`] = nextSettlementHistory;
+                }
+                // 클럽 예산·상품비는 반드시 수정 전/후 차액(delta)만 반영한다.
+                if (club) {
+                    if (deltaSupport !== 0) {
+                        firebaseUpdates[`clubRegistry/${clubId}/usedBudget`] = firebase.database.ServerValue.increment(deltaSupport);
+                    }
+                    if (deltaPrize !== 0) {
+                        firebaseUpdates[`clubRegistry/${clubId}/prizeUsed`] = firebase.database.ServerValue.increment(deltaPrize);
+                    }
+                }
+                await this.firebaseDb.ref().update(firebaseUpdates);
+                if (club) {
+                    try {
+                        const clubSnapshot = await this.firebaseDb.ref(`clubRegistry/${clubId}`).once('value');
+                        persistedClub = clubSnapshot.val();
+                    } catch (readErr) {
+                        console.warn('수정 후 클럽 누적값 재조회 실패:', readErr);
+                    }
                 }
             }
+
+            // 원격 저장이 끝난 뒤에만 로컬 캐시를 갱신한다.
+            if (clubIdx >= 0) this.clubHistory[clubIdx] = merged;
+            if (ownIdx >= 0) this.settlementHistory = nextSettlementHistory;
+            if (club) {
+                if (persistedClub) {
+                    this.clubRegistry[clubId] = { ...club, ...persistedClub };
+                } else if (deltaSupport !== 0 || deltaPrize !== 0) {
+                    const currentClub = this.clubRegistry[clubId] || club;
+                    currentClub.usedBudget = Math.max(0, (currentClub.usedBudget || 0) + deltaSupport);
+                    currentClub.prizeUsed = Math.max(0, (currentClub.prizeUsed || 0) + deltaPrize);
+                }
+            }
+            this.save(false);
+            return merged;
         } catch (err) {
             console.error('이력 수정 저장 실패:', err);
-            alert(t('alert.save_error_network'));
+            throw err;
         }
     },
 
@@ -2676,102 +2745,134 @@ const AppState = {
         }
     },
 
-    finalizeSettlement(skipConfirm = false) {
+    async finalizeSettlement(skipConfirm = false) {
         if (this.editingHistoryId) {
             alert('수정 모드에서는 엑셀 다운로드 시 이력이 업데이트됩니다. 수정을 취소하려면 "수정 취소" 버튼을 누르세요.');
-            return;
+            return false;
         }
-        if (!skipConfirm && !confirm(t('confirm.finalize_settlement'))) return;
+        if (!skipConfirm && !confirm(t('confirm.finalize_settlement'))) return false;
+        if (this._finalizeInProgress) return false;
+        this._finalizeInProgress = true;
 
-        const result = SettlementCalculator.calculate(
-            this.memberCount, this.expenseItems, this.previousPrizeTotal, this.rules
-        );
+        try {
+            const result = SettlementCalculator.calculate(
+                this.memberCount, this.expenseItems, this.previousPrizeTotal, this.rules
+            );
 
-        // Use manually adjusted self-pay if user changed it, otherwise use item-based sum (v1.6.215+)
-        const finalTotalSelfPay = this.selfPayManuallyOverridden ? this.lastCalculatedSelfPay : Math.round(result.itemSelfPay);
-        const finalPerPersonSelfPay = this.memberCount > 0 ? finalTotalSelfPay / this.memberCount : result.perPersonSelfPay;
-        const finalSelfPayRatio = result.totalCost > 0 ? finalTotalSelfPay / result.totalCost : 0;
+            // Use manually adjusted self-pay if user changed it, otherwise use item-based sum (v1.6.215+)
+            const finalTotalSelfPay = this.selfPayManuallyOverridden ? this.lastCalculatedSelfPay : Math.round(result.itemSelfPay);
+            const finalPerPersonSelfPay = this.memberCount > 0 ? finalTotalSelfPay / this.memberCount : result.perPersonSelfPay;
+            const finalSelfPayRatio = result.totalCost > 0 ? finalTotalSelfPay / result.totalCost : 0;
 
-        // 사용자가 지정한 정산 날짜 (미입력 시 오늘)
-        const settleDateInput = document.getElementById('settlement-date-input');
-        const settleDateVal   = settleDateInput ? settleDateInput.value : '';
-        const settlementDate  = settleDateVal || new Date().toISOString().slice(0, 10);
+            // 사용자가 지정한 정산 날짜 (미입력 시 오늘)
+            const settleDateInput = document.getElementById('settlement-date-input');
+            const settleDateVal   = settleDateInput ? settleDateInput.value : '';
+            const settlementDate  = settleDateVal || new Date().toISOString().slice(0, 10);
 
-        const newHistoryItem = {
-            id: Date.now(),
-            date: new Date().toISOString(),
-            settlementDate,
-            creatorPin: this.currentPin || "offline",
-            creatorName: this.userName || "오프라인 사용자",
-            clubName: this.clubName || "기본 클럽",
-            clubId: this.clubId || '',
-            memberCount: this.memberCount,
-            totalCost: result.totalCost,
-            prizeCost: result.prizeCost,
-            finalSupportAmount: result.totalCost - finalTotalSelfPay,
-            totalSelfPay: finalTotalSelfPay,
-            perPersonSelfPay: finalPerPersonSelfPay,
-            selfPayRatio: finalSelfPayRatio,
-            expenseItems: JSON.parse(JSON.stringify(this.expenseItems)),
-            attendees: JSON.parse(JSON.stringify(this.attendees)),
-        };
-
-        // Save to local history
-        this.settlementHistory.unshift(newHistoryItem);
-        // clubHistory에도 즉시 반영 (로드돼 있는 경우)
-        if (this.clubHistory.length > 0) this.clubHistory.unshift(newHistoryItem);
-
-        // Save to Firebase global history
-        if (this.isLoggedIn && this.firebaseDb) {
-            this.firebaseDb.ref(`globalHistory/${newHistoryItem.id}`).set(newHistoryItem)
-                .catch(err => console.error("Global history push failed:", err));
-        }
-
-        // 명부 누적 카운트는 정산 이력 기준으로 재계산 (잘못된 잔여 카운트가 누적되지 않도록)
-        this.recalculateDirectoryCounts();
-
-        // Update used budget (사용자가 수정한 자부담 기준 실제 지원금과 동일한 값 사용)
-        this.usedBudget = Math.max(0, this.usedBudget + newHistoryItem.finalSupportAmount);
-
-        // 클럽 레지스트리 업데이트: usedBudget + prizeUsed 동시 갱신 (경쟁 조건 방지를 위해 해당 클럽만 update)
-        if (this.clubId && this.clubRegistry[this.clubId]) {
-            const club = this.clubRegistry[this.clubId];
-            club.usedBudget = (club.usedBudget || 0) + newHistoryItem.finalSupportAmount;
+            const newHistoryItem = {
+                id: Date.now(),
+                date: new Date().toISOString(),
+                settlementDate,
+                creatorPin: this.currentPin || "offline",
+                creatorName: this.userName || "오프라인 사용자",
+                clubName: this.clubName || "기본 클럽",
+                clubId: this.clubId || '',
+                memberCount: this.memberCount,
+                totalCost: result.totalCost,
+                prizeCost: result.prizeCost,
+                finalSupportAmount: result.totalCost - finalTotalSelfPay,
+                totalSelfPay: finalTotalSelfPay,
+                perPersonSelfPay: finalPerPersonSelfPay,
+                selfPayRatio: finalSelfPayRatio,
+                expenseItems: JSON.parse(JSON.stringify(this.expenseItems)),
+                attendees: JSON.parse(JSON.stringify(this.attendees)),
+            };
+            const nextSettlementHistory = [newHistoryItem, ...(this.settlementHistory || [])];
+            const nextDirectory = this.buildDirectoryCountsForHistory(nextSettlementHistory);
             const prizeThisSession = result.prizeCost || 0;
-            if (prizeThisSession > 0) {
-                club.prizeUsed = (club.prizeUsed || 0) + prizeThisSession;
-            }
-            // "85,000원 초과 승인"은 1회성 — 정산 1건이 확정되면 사용 여부와 무관하게 자동으로 미승인 상태로 되돌림
-            const _overLimitWasOn = !!club.allowOverLimitSupport;
-            if (_overLimitWasOn) club.allowOverLimitSupport = false;
-            if (this.firebaseDb) {
-                const _clubUpdate = {
-                    usedBudget: club.usedBudget,
-                    prizeUsed: club.prizeUsed || 0
+            const registryClub = this.clubId ? this.clubRegistry[this.clubId] : null;
+            let persistedClub = null;
+
+            // 공유 이력·개인 이력·세션 초기화·클럽 누적액을 한 번에 저장한다.
+            // 쓰기가 실패하면 아래 로컬 초기화 구간에 도달하지 않으므로 입력 내용이 그대로 유지된다.
+            if (this.isLoggedIn && this.firebaseDb) {
+                const firebaseUpdates = {
+                    [`globalHistory/${newHistoryItem.id}`]: newHistoryItem,
                 };
-                if (_overLimitWasOn) _clubUpdate.allowOverLimitSupport = false;
-                this.firebaseDb.ref(`clubRegistry/${this.clubId}`).update(_clubUpdate).catch(() => {});
+                if (this.currentPin) {
+                    const settlementPath = `settlements/${this.currentPin}`;
+                    firebaseUpdates[`${settlementPath}/memberCount`] = 0;
+                    firebaseUpdates[`${settlementPath}/expenseItems`] = [];
+                    firebaseUpdates[`${settlementPath}/attendees`] = [];
+                    firebaseUpdates[`${settlementPath}/directory`] = nextDirectory;
+                    firebaseUpdates[`${settlementPath}/settlementHistory`] = nextSettlementHistory;
+                    firebaseUpdates[`${settlementPath}/eventPhotos`] = null;
+                    firebaseUpdates[`${settlementPath}/lastUpdated`] = firebase.database.ServerValue.TIMESTAMP;
+                }
+                if (registryClub) {
+                    firebaseUpdates[`clubRegistry/${this.clubId}/usedBudget`] = firebase.database.ServerValue.increment(newHistoryItem.finalSupportAmount);
+                    firebaseUpdates[`clubRegistry/${this.clubId}/prizeUsed`] = firebase.database.ServerValue.increment(prizeThisSession);
+                    // 85,000원 초과 승인은 정산 1건마다 무조건 해제한다.
+                    firebaseUpdates[`clubRegistry/${this.clubId}/allowOverLimitSupport`] = false;
+                }
+                await this.firebaseDb.ref().update(firebaseUpdates);
+                if (registryClub) {
+                    try {
+                        const clubSnapshot = await this.firebaseDb.ref(`clubRegistry/${this.clubId}`).once('value');
+                        persistedClub = clubSnapshot.val();
+                    } catch (readErr) {
+                        console.warn('정산 후 클럽 누적값 재조회 실패:', readErr);
+                    }
+                }
             }
+
+            // 원격 저장 성공 후에만 로컬 이력과 누적값을 반영한다.
+            this.settlementHistory = nextSettlementHistory;
+            if (this.clubHistory.length > 0) this.clubHistory.unshift(newHistoryItem);
+
+            // 명부 누적 카운트는 정산 이력 기준으로 재계산 (잘못된 잔여 카운트가 누적되지 않도록)
+            this.directory = nextDirectory;
+
+            // Update used budget (사용자가 수정한 자부담 기준 실제 지원금과 동일한 값 사용)
+            this.usedBudget = Math.max(0, this.usedBudget + newHistoryItem.finalSupportAmount);
+
+            if (registryClub) {
+                if (persistedClub) {
+                    this.clubRegistry[this.clubId] = { ...registryClub, ...persistedClub, allowOverLimitSupport: false };
+                } else {
+                    const currentClub = this.clubRegistry[this.clubId] || registryClub;
+                    currentClub.usedBudget = (currentClub.usedBudget || 0) + newHistoryItem.finalSupportAmount;
+                    currentClub.prizeUsed = (currentClub.prizeUsed || 0) + prizeThisSession;
+                    currentClub.allowOverLimitSupport = false;
+                }
+            }
+
+            // Reset current session
+            this.expenseItems = [];
+            this.attendees = [];
+            this.memberCount = 0;
+            this.previousPrizeTotal = this.clubId && this.clubRegistry[this.clubId]
+                ? (this.clubRegistry[this.clubId].prizeUsed || 0)
+                : 0;
+            this.lastCalculatedSelfPay = 0;
+            this.selfPayManuallyOverridden = false;
+            this.eventPhotos = [];
+            this.editingItemId = null;
+            this.editingAttendeeId = null;
+            const _sdi = document.getElementById('settlement-date-input');
+            if (_sdi) _sdi.value = new Date().toISOString().slice(0, 10);
+            if (typeof window._onSettleDateReset === 'function') window._onSettleDateReset();
+
+            // Firebase에는 위 원자적 update로 이미 저장했으므로 로컬 백업만 갱신한다.
+            this.save(false);
+            this.render();
+            return true;
+        } catch (err) {
+            console.error('정산 확정 저장 실패:', err);
+            throw err;
+        } finally {
+            this._finalizeInProgress = false;
         }
-
-        // Reset current session
-        this.expenseItems = [];
-        this.attendees = [];
-        this.memberCount = 0;
-        this.previousPrizeTotal = this.clubId && this.clubRegistry[this.clubId]
-            ? (this.clubRegistry[this.clubId].prizeUsed || 0)
-            : 0;
-        this.lastCalculatedSelfPay = 0;
-        this.selfPayManuallyOverridden = false;
-        this.eventPhotos = [];
-        this.editingItemId = null;
-        this.editingAttendeeId = null;
-        const _sdi = document.getElementById('settlement-date-input');
-        if (_sdi) _sdi.value = new Date().toISOString().slice(0, 10);
-        if (typeof window._onSettleDateReset === 'function') window._onSettleDateReset();
-
-        this.save();
-        this.render();
     },
 
     escapeHtml(str) {
@@ -3805,13 +3906,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 '엑셀 파일로 저장하고 정산을 완료하시겠습니까?\n확인 시 현재 데이터가 초기화됩니다.',
                 async () => {
                     const originalText = sendEmailBtn.innerHTML;
+                    let excelDownloaded = false;
                     sendEmailBtn.innerHTML = `<span class='btn-icon'>⏳</span> ${t('state.generating')}`;
                     sendEmailBtn.disabled = true;
                     try {
                         await AppState.downloadExcelOnly();
-                        sendEmailBtn.innerHTML = `<span class='btn-icon'>✓</span> ${t('state.saved')}`;
+                        excelDownloaded = true;
+                        sendEmailBtn.innerHTML = '<span class="btn-icon">⏳</span> 저장 중...';
                         const todayStr = new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' });
-                        runFinalizeSettlement(true);
+                        const completed = await runFinalizeSettlement(true);
+                        if (!completed) return;
+                        sendEmailBtn.innerHTML = `<span class='btn-icon'>✓</span> ${t('state.saved')}`;
                         alert(
                             `📂 ${todayStr} 정산 엑셀 파일이 생성되어 다운로드 폴더에 저장되었습니다.\n\n` +
                             `✅ 전체 항목이 초기화되었습니다.\n` +
@@ -3821,6 +3926,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     } catch (err) {
                         console.error(err);
                         sendEmailBtn.innerHTML = `<span class='btn-icon'>❌</span> ${t('state.save_failed')}`;
+                        // 엑셀 생성 실패는 downloadExcelOnly()가 이미 안내한다. 원격 정산 저장 실패만 여기서 안내한다.
+                        if (excelDownloaded) alert(t('alert.save_error_network'));
                     } finally {
                         setTimeout(() => {
                             sendEmailBtn.innerHTML = originalText;
@@ -3844,8 +3951,9 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    function runFinalizeSettlement(skipConfirm = false) {
-        AppState.finalizeSettlement(skipConfirm);
+    async function runFinalizeSettlement(skipConfirm = false) {
+        const completed = await AppState.finalizeSettlement(skipConfirm);
+        if (!completed) return false;
         if (emailReportModal) emailReportModal.classList.add('hidden');
         // Reset form UI state
         document.getElementById('expense-desc-input').value = '';
@@ -3862,11 +3970,31 @@ document.addEventListener('DOMContentLoaded', () => {
         document.querySelectorAll('.tab-pane').forEach(p => p.classList.add('hidden'));
         const histTab = document.querySelector('[data-tab="tab-history"]');
         if (histTab) { histTab.classList.add('active'); document.getElementById('tab-history').classList.remove('hidden'); }
+        return true;
     }
 
     const finalizeBtn = document.getElementById('finalize-settlement-btn');
     if (finalizeBtn) {
-        finalizeBtn.addEventListener('click', runFinalizeSettlement);
+        finalizeBtn.addEventListener('click', async () => {
+            const originalText = finalizeBtn.innerHTML;
+            let completed = false;
+            finalizeBtn.disabled = true;
+            try {
+                completed = await runFinalizeSettlement(false);
+                if (completed) finalizeBtn.innerHTML = `<span class='btn-icon'>✓</span> ${t('state.saved')}`;
+            } catch (err) {
+                console.error(err);
+                finalizeBtn.innerHTML = `<span class='btn-icon'>❌</span> ${t('state.save_failed')}`;
+                alert(t('alert.save_error_network'));
+            } finally {
+                const restoreButton = () => {
+                    finalizeBtn.innerHTML = originalText;
+                    finalizeBtn.disabled = false;
+                };
+                if (completed) setTimeout(restoreButton, 2000);
+                else restoreButton();
+            }
+        });
     }
 
 
@@ -3897,9 +4025,17 @@ document.addEventListener('DOMContentLoaded', () => {
     const excelSavedResetBtn = document.getElementById('excel-saved-reset-btn');
     const excelSavedKeepBtn = document.getElementById('excel-saved-keep-btn');
     if (excelSavedResetBtn) {
-        excelSavedResetBtn.addEventListener('click', () => {
-            excelSavedModal.classList.add('hidden');
-            runFinalizeSettlement(true);
+        excelSavedResetBtn.addEventListener('click', async () => {
+            excelSavedResetBtn.disabled = true;
+            try {
+                const completed = await runFinalizeSettlement(true);
+                if (completed) excelSavedModal.classList.add('hidden');
+            } catch (err) {
+                console.error(err);
+                alert(t('alert.save_error_network'));
+            } finally {
+                excelSavedResetBtn.disabled = false;
+            }
         });
     }
     if (excelSavedKeepBtn) {
@@ -4516,6 +4652,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 변경이력 모달
     const CHANGELOG = [
+        { ver: '1.6.239', date: '2026.07.20', items: ['정산 확정 시 공유 이력·개인 이력·클럽 누적액·세션 초기화를 Firebase에 원자적으로 저장하고, 저장 성공 후에만 입력 내용을 초기화하도록 개선', '동시 정산·이력 수정 시 클럽 사용액과 상품비 누적액이 서로 덮어써지지 않도록 서버 증분 방식 적용', '이력 수정 저장 실패가 성공으로 처리되던 문제를 수정해 실패 시 수정 화면과 입력 내용을 그대로 유지'] },
         { ver: '1.6.238', date: '2026.07.20', items: ['모바일 가입 회원 관리 표를 회원별 카드형 행으로 재배치해 가입일·최근 접속 날짜가 한 글자씩 줄바꿈되지 않고 수정·삭제 버튼이 안정적으로 보이도록 개선'] },
         { ver: '1.6.237', date: '2026.07.20', items: ['일반 사용자 정산 이력에서 선택한 클럽의 이력이 0건일 때 다른 클럽의 개인 이력 전체가 표시되던 문제 수정', '상품비가 있는 정산 이력의 간단 요약에 상품비 금액 표시', '구버전 정산 이력의 expenseItems에서 상품비를 역산해 누적액을 복구하고, 신규·수정 이력에는 prizeCost를 명시 저장하도록 개선'] },
         { ver: '1.6.236', date: '2026.07.17', items: ['"행사별 참석 인원" 차트를 가로 목록형으로 개편 — 한 줄에 "클럽명 날짜 → 인원수"가 바로 읽히도록 (최근 15건, 최신순)'] },
