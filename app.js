@@ -1,7 +1,7 @@
 /**
  * Club Expense Settlement App - Main JavaScript Logic
  */
-const APP_VERSION      = '1.6.248';
+const APP_VERSION      = '1.6.249';
 const APP_VERSION_DATE = '2026.07.20';
 
 // 인당 자부담 비용에 따라 강조 박스의 아이콘/색상을 전환 (100원 이상이면 🔥, 0이면 😊)
@@ -5046,6 +5046,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 변경이력 모달
     const CHANGELOG = [
+        { ver: '1.6.249', date: '2026.07.20', items: ['참석자 이름·사번이 길어 차트 툴팁에서 잘리던 문제를 수정해, 두 참석 인원 차트의 막대를 클릭하면 스크롤 가능한 명단 팝업을 열고 명단 복사도 가능하도록 개선'] },
         { ver: '1.6.248', date: '2026.07.20', items: ['행사별 참석 인원과 클럽별 참석 인원(중복 제외) 차트의 막대에 마우스를 올리면 해당 참석자의 이름과 사번 목록을 함께 표시'] },
         { ver: '1.6.247', date: '2026.07.20', items: ['관리자 시작 안내에서 전사원 명부 관리를 제외하고, 클럽·예산 설정과 정산 기준 확인을 다시 누르면 해당 설정 카드를 접는 토글 방식으로 개선'] },
         { ver: '1.6.246', date: '2026.07.20', items: ['관리자 첫 화면에 시작 안내와 바로가기 4단계를 추가해 클럽·예산 설정, 정산 기준 확인, 명부 관리, 차트 확인의 순서를 한눈에 안내'] },
@@ -6577,22 +6578,79 @@ document.addEventListener('DOMContentLoaded', () => {
     // 한 줄에서 바로 읽히도록 세로 막대 → 가로 목록형으로 변경 (v1.6.236). 최근 행사가 위.
     const EVENT_ATTENDANCE_MAX_ROWS = 10;
 
-    // 차트 툴팁의 참석자 목록은 2명씩 묶어, 인원이 많은 행사도 화면을 과도하게 가리지 않도록 한다.
-    function formatAttendeeTooltipLines(attendees) {
-        const people = (attendees || [])
-            .map(attendee => {
-                const name = String(attendee?.name || '이름 없음').trim();
-                const employeeId = String(attendee?.employeeId || '').trim();
-                return employeeId ? `${name} (${employeeId})` : `${name} (사번 없음)`;
-            })
-            .sort((a, b) => a.localeCompare(b, 'ko-KR'));
-        if (people.length === 0) return ['참석자 정보가 저장되지 않았습니다.'];
+    function normalizeChartAttendees(attendees) {
+        return (attendees || [])
+            .map(attendee => ({
+                name: String(attendee?.name || '이름 없음').trim(),
+                employeeId: String(attendee?.employeeId ?? '').trim()
+            }))
+            .sort((a, b) => `${a.name}${a.employeeId}`.localeCompare(`${b.name}${b.employeeId}`, 'ko-KR'));
+    }
 
-        const lines = ['참석자 (이름 / 사번)'];
-        for (let index = 0; index < people.length; index += 2) {
-            lines.push(people.slice(index, index + 2).join(' · '));
+    function formatChartAttendee(attendee) {
+        return attendee.employeeId ? `${attendee.name} (${attendee.employeeId})` : `${attendee.name} (사번 없음)`;
+    }
+
+    let attendanceRosterCopyText = '';
+    function closeAttendanceRosterModal() {
+        document.getElementById('attendance-roster-modal')?.classList.add('hidden');
+    }
+
+    function openAttendanceRosterModal(title, summary, attendees) {
+        const modal = document.getElementById('attendance-roster-modal');
+        const titleEl = document.getElementById('attendance-roster-title');
+        const summaryEl = document.getElementById('attendance-roster-summary');
+        const listEl = document.getElementById('attendance-roster-list');
+        const copyStatusEl = document.getElementById('attendance-roster-copy-status');
+        const copyBtn = document.getElementById('copy-attendance-roster-btn');
+        if (!modal || !titleEl || !summaryEl || !listEl || !copyStatusEl || !copyBtn) return;
+
+        const people = normalizeChartAttendees(attendees);
+        titleEl.textContent = title;
+        summaryEl.textContent = summary;
+        listEl.innerHTML = '';
+        copyStatusEl.textContent = '';
+        attendanceRosterCopyText = `${title}\n${summary}\n\n${people.map((person, index) => `${index + 1}. ${formatChartAttendee(person)}`).join('\n')}`;
+
+        if (people.length === 0) {
+            const empty = document.createElement('p');
+            empty.className = 'attendance-roster-empty';
+            empty.textContent = '이 이력에는 참석자 상세 정보가 저장되지 않았습니다.';
+            listEl.appendChild(empty);
+            copyBtn.disabled = true;
+        } else {
+            people.forEach((person, index) => {
+                const item = document.createElement('div');
+                item.className = 'attendance-roster-person';
+                item.textContent = `${index + 1}. ${formatChartAttendee(person)}`;
+                listEl.appendChild(item);
+            });
+            copyBtn.disabled = false;
         }
-        return lines;
+        modal.classList.remove('hidden');
+        document.getElementById('close-attendance-roster-modal')?.focus();
+    }
+
+    async function copyAttendanceRoster() {
+        if (!attendanceRosterCopyText) return;
+        const statusEl = document.getElementById('attendance-roster-copy-status');
+        try {
+            if (navigator.clipboard?.writeText) {
+                await navigator.clipboard.writeText(attendanceRosterCopyText);
+            } else {
+                const textarea = document.createElement('textarea');
+                textarea.value = attendanceRosterCopyText;
+                textarea.style.cssText = 'position:fixed;opacity:0;pointer-events:none;';
+                document.body.appendChild(textarea);
+                textarea.select();
+                document.execCommand('copy');
+                textarea.remove();
+            }
+            if (statusEl) statusEl.textContent = '명단을 클립보드에 복사했습니다.';
+        } catch (error) {
+            console.error('참석자 명단 복사 실패:', error);
+            if (statusEl) statusEl.textContent = '복사하지 못했습니다. 다시 시도해 주세요.';
+        }
     }
 
     function renderEventAttendanceChart(historyList) {
@@ -6645,10 +6703,8 @@ document.addEventListener('DOMContentLoaded', () => {
                                 const en = entries[items[0].dataIndex];
                                 return `${en.club} · ${en.dateKey}`;
                             },
-                            label: ctx => {
-                                const en = entries[ctx.dataIndex];
-                                return [`참석 ${ctx.parsed.x}명`, ...formatAttendeeTooltipLines(en.attendees)];
-                            }
+                            label: ctx => `참석 ${ctx.parsed.x}명 · 막대를 클릭해 명단 확인`,
+                            footer: () => '이름과 사번을 확인하거나 명단을 복사할 수 있습니다.'
                         }
                     },
                     chartValueLabel: {
@@ -6659,6 +6715,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 scales: {
                     x: { ticks: { color: '#94a3b8', stepSize: 1 }, grid: { color: 'rgba(255,255,255,0.04)' }, beginAtZero: true, suggestedMax: Math.max(...counts, 1) + 2 },
                     y: { ticks: { color: '#cbd5e1', font: { size: 11 }, autoSkip: false }, grid: { display: false } }
+                },
+                onHover: (_event, elements) => { canvas.style.cursor = elements.length ? 'pointer' : 'default'; },
+                onClick: (_event, elements) => {
+                    const selected = elements[0];
+                    if (!selected) return;
+                    const entry = entries[selected.index];
+                    openAttendanceRosterModal(
+                        `${entry.club} ${entry.dateKey || ''} 참석자 명단`.trim(),
+                        `참석 ${entry.members}명`,
+                        entry.attendees
+                    );
                 }
             }
         });
@@ -6727,10 +6794,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     tooltip: {
                         callbacks: {
                             title: items => `${sorted[items[0].dataIndex][0]} · 올해 고유 참석자`,
-                            label: ctx => {
-                                const attendees = sorted[ctx.dataIndex][2];
-                                return [`서로 다른 참석자 ${ctx.parsed.x}명`, ...formatAttendeeTooltipLines(attendees)];
-                            }
+                            label: ctx => `서로 다른 참석자 ${ctx.parsed.x}명 · 막대를 클릭해 명단 확인`,
+                            footer: () => '이름과 사번을 확인하거나 명단을 복사할 수 있습니다.'
                         }
                     },
                     chartValueLabel: {
@@ -6741,10 +6806,32 @@ document.addEventListener('DOMContentLoaded', () => {
                 scales: {
                     x: { ticks: { color: '#94a3b8', stepSize: 1 }, grid: { color: 'rgba(255,255,255,0.04)' }, beginAtZero: true, suggestedMax: Math.max(...counts, 1) + 1 },
                     y: { ticks: { color: '#cbd5e1', font: { size: 11 } }, grid: { display: false } }
+                },
+                onHover: (_event, elements) => { canvas.style.cursor = elements.length ? 'pointer' : 'default'; },
+                onClick: (_event, elements) => {
+                    const selected = elements[0];
+                    if (!selected) return;
+                    const [club, count, attendees] = sorted[selected.index];
+                    openAttendanceRosterModal(`${club} 올해 고유 참석자 명단`, `서로 다른 참석자 ${count}명`, attendees);
                 }
             }
         });
     }
+
+    function initAttendanceRosterModal() {
+        const modal = document.getElementById('attendance-roster-modal');
+        if (!modal) return;
+        document.getElementById('close-attendance-roster-modal')?.addEventListener('click', closeAttendanceRosterModal);
+        document.getElementById('dismiss-attendance-roster-btn')?.addEventListener('click', closeAttendanceRosterModal);
+        document.getElementById('copy-attendance-roster-btn')?.addEventListener('click', copyAttendanceRoster);
+        modal.addEventListener('click', event => {
+            if (event.target === modal) closeAttendanceRosterModal();
+        });
+        document.addEventListener('keydown', event => {
+            if (event.key === 'Escape' && !modal.classList.contains('hidden')) closeAttendanceRosterModal();
+        });
+    }
+    initAttendanceRosterModal();
 
     // 차트 탭의 모든 그래프를 한 번에 갱신
     function renderAllCharts(historyList) {

@@ -659,7 +659,7 @@
                         <span class="card-icon">🙋</span>
                         <div>
                             <h2>행사별 참석 인원</h2>
-                            <div class="chart-subtitle">어떤 클럽이 며칠 행사에 몇 명 참석했는지 — 최근 10건, 최신순</div>
+                            <div class="chart-subtitle">최근 10건, 최신순 · 막대를 클릭하면 참석자 명단을 확인·복사할 수 있습니다</div>
                         </div>
                     </div>
                     <div class="card-body">
@@ -675,7 +675,7 @@
                         <span class="card-icon">👥</span>
                         <div>
                             <h2>클럽별 참석 인원 (중복 제외)</h2>
-                            <div class="chart-subtitle">올해 각 클럽 행사에 참석한 서로 다른 인원수 — 많은 순</div>
+                            <div class="chart-subtitle">올해 각 클럽 행사에 참석한 서로 다른 인원수 — 막대를 클릭하면 명단 확인·복사</div>
                         </div>
                     </div>
                     <div class="card-body">
@@ -883,6 +883,26 @@
         <span class="modal-close">&times;</span>
         <img class="modal-content" id="modal-img" alt="영수증 원본 이미지">
         <div id="modal-caption"></div>
+    </div>
+
+    <!-- 차트 참석자 명단 모달 -->
+    <div id="attendance-roster-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="attendance-roster-title">
+        <div class="modal-content-card card attendance-roster-modal-card">
+            <div class="card-header">
+                <span class="card-icon">👥</span>
+                <h2 id="attendance-roster-title">참석자 명단</h2>
+                <button type="button" id="close-attendance-roster-modal" class="attendance-roster-close" aria-label="참석자 명단 닫기">&times;</button>
+            </div>
+            <div class="card-body">
+                <p id="attendance-roster-summary" class="attendance-roster-summary"></p>
+                <div id="attendance-roster-list" class="attendance-roster-list"></div>
+                <p id="attendance-roster-copy-status" class="attendance-roster-copy-status" role="status"></p>
+                <div class="form-actions attendance-roster-actions">
+                    <button type="button" id="copy-attendance-roster-btn" class="btn-primary">📋 명단 복사</button>
+                    <button type="button" id="dismiss-attendance-roster-btn" class="btn-secondary">닫기</button>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Email Report Modal -->

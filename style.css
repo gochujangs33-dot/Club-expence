@@ -1249,6 +1249,86 @@ input[aria-invalid="true"] {
     display: none !important;
 }
 
+.attendance-roster-modal-card {
+    width: min(94vw, 560px);
+    max-height: min(82vh, 760px);
+    margin: auto;
+    background: var(--bg-dark);
+    border: 1px solid rgba(139, 92, 246, 0.48);
+    display: flex;
+    flex-direction: column;
+}
+
+.attendance-roster-modal-card .card-body {
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.attendance-roster-close {
+    margin-left: auto;
+    padding: 0;
+    border: 0;
+    color: var(--text-secondary);
+    background: transparent;
+    font-size: 1.9rem;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.attendance-roster-close:hover { color: var(--text-primary); }
+
+.attendance-roster-summary {
+    margin: 0 0 0.75rem;
+    color: var(--color-secondary);
+    font-size: 0.9rem;
+    font-weight: 700;
+}
+
+.attendance-roster-list {
+    max-height: 46vh;
+    overflow-y: auto;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.45rem;
+    padding: 0.7rem;
+    border: 1px solid var(--card-border);
+    border-radius: 12px;
+    background: rgba(15, 23, 42, 0.58);
+}
+
+.attendance-roster-person {
+    min-width: 0;
+    padding: 0.55rem 0.65rem;
+    border-radius: 8px;
+    color: var(--text-primary);
+    font-size: 0.86rem;
+    background: rgba(255, 255, 255, 0.05);
+    overflow-wrap: anywhere;
+}
+
+.attendance-roster-empty {
+    grid-column: 1 / -1;
+    padding: 0.85rem;
+    color: var(--text-secondary);
+    text-align: center;
+    font-size: 0.86rem;
+}
+
+.attendance-roster-copy-status {
+    min-height: 1.2rem;
+    margin: 0.55rem 0 0;
+    color: var(--color-secondary);
+    font-size: 0.78rem;
+    text-align: center;
+}
+
+.attendance-roster-actions { margin-top: 0.25rem; }
+
+@media (max-width: 480px) {
+    .attendance-roster-list { grid-template-columns: 1fr; max-height: 50vh; }
+}
+
 .modal-content {
     margin: auto;
     display: block;
