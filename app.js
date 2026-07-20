@@ -1,7 +1,7 @@
 /**
  * Club Expense Settlement App - Main JavaScript Logic
  */
-const APP_VERSION      = '1.6.254';
+const APP_VERSION      = '1.6.255';
 const APP_VERSION_DATE = '2026.07.21';
 
 // 인당 자부담 비용에 따라 강조 박스의 아이콘/색상을 전환 (100원 이상이면 🔥, 0이면 😊)
@@ -2308,9 +2308,10 @@ const AppState = {
                     const card = document.createElement('div');
                     card.className = 'history-entry';
 
-                    const itemsHtml = (entry.expenseItems || []).map(it =>
-                        `<li>${this.escapeHtml(it.description)} <span style="color:var(--color-secondary)">${SettlementCalculator.formatCurrency(it.amount)}</span></li>`
-                    ).join('');
+                    const itemsHtml = (entry.expenseItems || []).map(it => {
+                        const categoryLabel = categoryNameMap[it.category] || '미분류';
+                        return `<li><span>${this.escapeHtml(it.description)} (${categoryLabel})</span><span style="color:var(--color-secondary)">${SettlementCalculator.formatCurrency(it.amount)}</span></li>`;
+                    }).join('');
                     const attendeesHtml = (entry.attendees || []).map(a => {
                         const empIdStr = a.employeeId ? `<span style="font-size:0.68rem;color:var(--text-muted);margin-left:2px;">(${AppState.escapeHtml(String(a.employeeId))})</span>` : '';
                         return `<span class="expense-category-badge">${this.escapeHtml(a.name)}${empIdStr}</span>`;
@@ -5046,6 +5047,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 변경이력 모달
     const CHANGELOG = [
+        { ver: '1.6.255', date: '2026.07.21', items: ['일반 사용자 정산 이력의 상세 내역에도 행사비·시설 및 장비 이용료·상품비 카테고리를 관리자 화면과 동일하게 표시'] },
         { ver: '1.6.254', date: '2026.07.21', items: ['월별 지출 현황 차트의 세로축과 막대 합계 금액을 K·M 대신 한국 원화 단위(억·만·천·원)로 표시'] },
         { ver: '1.6.253', date: '2026.07.21', items: ['클럽 사용 요약 팝업에 관리자 클럽 레지스트리 기준의 클럽 총 예산과 현재 잔여 예산을 추가'] },
         { ver: '1.6.252', date: '2026.07.21', items: ['자부담·회사지원금 추이 카드에 총 회사 지원금과 총 자부담 비용 누적 요약을 추가', '클럽별 정산 횟수 차트의 막대를 클릭하면 올해 행사별 날짜·참석 인원·비용 카테고리·회사 지원금·자부담·총 비용을 표로 확인하도록 개선'] },
