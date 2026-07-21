@@ -1,8 +1,8 @@
 /**
  * Club Expense Settlement App - Main JavaScript Logic
  */
-const APP_VERSION      = '1.6.264';
-const APP_VERSION_DATE = '2026.07.21';
+const APP_VERSION      = '1.6.265';
+const APP_VERSION_DATE = '2026.07.22';
 
 // 인당 자부담 비용에 따라 강조 박스의 아이콘/색상을 전환 (100원 이상이면 🔥, 0이면 😊)
 function updatePerPersonSelfPayIcon(perPersonSelfPay) {
@@ -2295,7 +2295,7 @@ const AppState = {
             if (historyList.length === 0) {
                 historyContainer.innerHTML = `<div class="empty-state"><span class="empty-icon">📋</span><p>${t('empty.history')}</p></div>`;
             } else if (typeof window.createInlineClubUsageSummary === 'function') {
-                // 사용자도 클럽별 사용 요약을 바로 확인한다. 수정·엑셀은 본인 이력에만 제공한다.
+                // 사용자는 선택한 클럽의 공유 이력을 바로 확인하고, 로그인한 회원은 작성자와 관계없이 수정할 수 있다.
                 const entriesByClub = new Map();
                 historyList.forEach(entry => {
                     const clubName = entry.clubName || t('label.default_club');
@@ -2303,7 +2303,7 @@ const AppState = {
                     entriesByClub.get(clubName).push(entry);
                 });
                 const currentYear = new Date().getFullYear();
-                const isMyHistoryEntry = entry => !entry.creatorPin || String(entry.creatorPin) === String(this.currentPin);
+                const canEditSharedHistory = this.isLoggedIn;
 
                 entriesByClub.forEach((clubEntries, clubName) => {
                     const currentYearEntries = clubEntries.filter(entry => getHistoryEntryYear(entry) === currentYear);
@@ -2323,8 +2323,9 @@ const AppState = {
                     clubCard.append(
                         header,
                         window.createInlineClubUsageSummary(clubName, currentYearEntries, currentYear, {
-                            editableDates: isMyHistoryEntry,
-                            excelDownloads: isMyHistoryEntry
+                            editableDates: canEditSharedHistory,
+                            // 엑셀 다시 받기는 기존처럼 본인이 작성한 이력만 제공한다.
+                            excelDownloads: entry => !entry.creatorPin || String(entry.creatorPin) === String(this.currentPin)
                         })
                     );
                     historyContainer.appendChild(clubCard);
@@ -2416,13 +2417,13 @@ const AppState = {
                         : '';
 
                     // 정산인 표시 (본인이면 '나', 타인이면 이름)
-                    const isMyEntry = !entry.creatorPin || entry.creatorPin === this.currentPin;
+                    const canEditHistory = this.isLoggedIn;
                     const creatorLabel = entry.creatorName
                         ? `<span style="font-size:0.72rem;color:var(--text-muted);white-space:nowrap;">👤 ${this.escapeHtml(entry.creatorName)}</span>`
                         : '';
 
-                    // 수정 버튼은 본인 항목에만 표시
-                    const editBtnHtml = isMyEntry
+                    // 로그인한 회원은 선택한 클럽의 공유 이력을 수정할 수 있다. 삭제는 관리자 전용이다.
+                    const editBtnHtml = canEditHistory
                         ? `<button class="btn-edit-history" data-id="${entry.id}" style="font-size:0.75rem;padding:0.2rem 0.6rem;background:rgba(99,102,241,0.15);border:1px solid rgba(99,102,241,0.4);color:#a5b4fc;border-radius:0.3rem;cursor:pointer;white-space:nowrap;">✏️ ${t('btn.edit')}</button>`
                         : '';
 
@@ -2923,6 +2924,9 @@ const AppState = {
 
     // 이력 항목을 현재 정산 폼으로 복원 (수정 모드 진입)
     async loadHistoryEntryForEdit(entry) {
+        if (!this.isLoggedIn) {
+            throw new Error('로그인 후 정산 이력을 수정할 수 있습니다.');
+        }
         if (!entry || typeof entry !== 'object' || !entry.id) {
             console.error('loadHistoryEntryForEdit: 유효하지 않은 이력 항목', entry);
             return;
@@ -2948,6 +2952,12 @@ const AppState = {
             const match = Object.entries(this.clubRegistry || {}).find(([, c]) => c.name === entry.clubName);
             this.clubId = match ? match[0] : '';
         }
+        // 수정 대상의 기존 상품비는 이미 확정 누적액에 포함돼 있다. 수정 중에는 이 항목 몫을
+        // 제외한 "다른 이력의 누적액"만 기준으로 계산해야 260,000원 → 264,000원이 524,000원으로
+        // 합산되지 않고 실제 차액(+4,000원)만 반영된다.
+        const editingClub = this.clubId ? this.clubRegistry[this.clubId] : null;
+        const registeredPrizeUsed = editingClub ? (editingClub.prizeUsed || 0) : this.previousPrizeTotal;
+        this.previousPrizeTotal = Math.max(0, registeredPrizeUsed - this._editingOriginalPrize);
         // 이력에 저장된 "실제" 자부담을 그대로 불러옴(오버라이드로 취급) — 항목을 건드리기 전까지는
         // 항목 합계로 재계산하지 않고 저장된 값을 그대로 유지 (과거에 수동 조정했던 값도 보존됨)
         this.lastCalculatedSelfPay = entry.totalSelfPay || 0;
@@ -3003,6 +3013,7 @@ const AppState = {
         const club = clubId ? this.clubRegistry[clubId] : null;
         const deltaSupport = (merged.finalSupportAmount || 0) - (oldEntry.finalSupportAmount || 0);
         const deltaPrize = newPrize - oldPrize;
+        const creatorPin = merged.creatorPin || oldEntry.creatorPin;
         let persistedClub = null;
         let nextDirectory = nextSettlementHistory
             ? this.buildDirectoryCountsForHistory(nextSettlementHistory)
@@ -3028,23 +3039,24 @@ const AppState = {
                     });
                     nextDirectory = this.buildDirectoryCountsForHistory(globalHistory);
 
-                    // 관리자가 다른 작성자의 참석자/사진을 수정한 경우 작성자 개인 이력과 명부도 동기화한다.
-                    const creatorPin = merged.creatorPin || oldEntry.creatorPin;
-                    if (creatorPin && String(creatorPin) !== String(this.currentPin)) {
-                        const creatorSnapshot = await this.firebaseDb.ref(`settlements/${creatorPin}`).once('value');
-                        const creatorData = creatorSnapshot.val() || {};
-                        const rawHistory = creatorData.settlementHistory;
-                        if (rawHistory) {
-                            const historyArray = Array.isArray(rawHistory) ? rawHistory : Object.values(rawHistory);
-                            const creatorIndex = historyArray.findIndex(entry => entry && String(entry.id) === String(id));
-                            if (creatorIndex >= 0) {
-                                creatorHistory = historyArray.map((entry, index) => index === creatorIndex ? merged : entry);
-                                if (creatorData.directory) {
-                                    creatorDirectory = this.buildDirectoryCountsForHistory(
-                                        creatorHistory,
-                                        creatorData.directory
-                                    );
-                                }
+                }
+
+                // 다른 회원이 공유 이력을 수정해도 원 작성자의 개인 이력과 참석 누적 횟수는
+                // 함께 갱신한다. 현재 로그인 계정의 명부에 타인의 이력을 섞지 않는다.
+                if (creatorPin && String(creatorPin) !== String(this.currentPin)) {
+                    const creatorSnapshot = await this.firebaseDb.ref(`settlements/${creatorPin}`).once('value');
+                    const creatorData = creatorSnapshot.val() || {};
+                    const rawHistory = creatorData.settlementHistory;
+                    if (rawHistory) {
+                        const historyArray = Array.isArray(rawHistory) ? rawHistory : Object.values(rawHistory);
+                        const creatorIndex = historyArray.findIndex(entry => entry && String(entry.id) === String(id));
+                        if (creatorIndex >= 0) {
+                            creatorHistory = historyArray.map((entry, index) => index === creatorIndex ? merged : entry);
+                            if (creatorData.directory) {
+                                creatorDirectory = this.buildDirectoryCountsForHistory(
+                                    creatorHistory,
+                                    creatorData.directory
+                                );
                             }
                         }
                     }
@@ -3065,7 +3077,6 @@ const AppState = {
                 if (nextDirectory && this.currentPin) {
                     firebaseUpdates[`settlements/${this.currentPin}/directory`] = nextDirectory;
                 }
-                const creatorPin = merged.creatorPin || oldEntry.creatorPin;
                 if (creatorHistory && creatorPin) {
                     firebaseUpdates[`settlements/${creatorPin}/settlementHistory`] = this.buildPersonalHistoryForSync(creatorHistory);
                 }
@@ -4239,11 +4250,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 .filter(i => i.category === ExpenseCategory.PRIZE && i.id !== editingId)
                 .reduce((s, i) => s + (i.amount || 0), 0);
             const prizeLimit = AppState.rules.prizeLimit || 500000;
-            // 이력 수정 모드: 이 이력이 원래 기여했던 상품비는 "이미 사용한 상품비"에서 제외
-            let _priorPrizeForCheck = AppState.previousPrizeTotal || 0;
-            if (AppState.editingHistoryId) {
-                _priorPrizeForCheck = Math.max(0, _priorPrizeForCheck - (AppState._editingOriginalPrize || 0));
-            }
+            // 수정 모드의 previousPrizeTotal은 대상 이력의 기존 상품비를 이미 제외한 값이다.
+            const _priorPrizeForCheck = AppState.previousPrizeTotal || 0;
             const remaining = prizeLimit - existingPrize - _priorPrizeForCheck;
 
             if (memberCount < 10) {
@@ -5133,6 +5141,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 변경이력 모달
     const CHANGELOG = [
+        { ver: '1.6.265', date: '2026.07.22', items: ['일반 사용자도 선택한 클럽의 공유 정산 이력을 작성자와 관계없이 수정하고, 원 작성자 이력·참석 누적을 함께 동기화', '상품비 이력 수정 시 기존 금액을 누적 기준에서 먼저 제외해 변경 차액만 반영'] },
         { ver: '1.6.264', date: '2026.07.21', items: ['전 화면 공통 모바일 레이아웃 점검 및 보강: 클럽 관리·입력 폼·모달·긴 표의 가로 넘침 제거', '모바일 차트의 많은 항목과 버튼·입력 영역을 터치하기 쉬운 크기와 세로 흐름으로 조정'] },
         { ver: '1.6.263', date: '2026.07.21', items: ['모바일 클럽별 정산 이력을 행사별 세로 정보 카드로 전환해 가로 잘림 없이 확인', '모바일에서도 행사 날짜 수정·참석자 명단·엑셀 다시 받기 버튼을 한 행에서 사용 가능'] },
         { ver: '1.6.262', date: '2026.07.21', items: ['일반 사용자 정산 이력도 클럽별 사용 요약·총 상품비·날짜 수정·참석자 명단 확인 방식으로 통일', '사용자 본인 정산 행에 엑셀 다시 받기 버튼 추가'] },
