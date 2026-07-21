@@ -1,7 +1,7 @@
 /**
  * Club Expense Settlement App - Main JavaScript Logic
  */
-const APP_VERSION      = '1.6.265';
+const APP_VERSION      = '1.6.266';
 const APP_VERSION_DATE = '2026.07.22';
 
 // 인당 자부담 비용에 따라 강조 박스의 아이콘/색상을 전환 (100원 이상이면 🔥, 0이면 😊)
@@ -5141,6 +5141,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 변경이력 모달
     const CHANGELOG = [
+        { ver: '1.6.266', date: '2026.07.22', items: ['관리자 클럽별 정산 사용 요약의 각 행사 행에 삭제 버튼 복원', '정산 날짜 선택 시 같은 클럽의 동일 날짜 이력을 즉시 안내(수정 중인 이력 자신은 제외)'] },
         { ver: '1.6.265', date: '2026.07.22', items: ['일반 사용자도 선택한 클럽의 공유 정산 이력을 작성자와 관계없이 수정하고, 원 작성자 이력·참석 누적을 함께 동기화', '상품비 이력 수정 시 기존 금액을 누적 기준에서 먼저 제외해 변경 차액만 반영'] },
         { ver: '1.6.264', date: '2026.07.21', items: ['전 화면 공통 모바일 레이아웃 점검 및 보강: 클럽 관리·입력 폼·모달·긴 표의 가로 넘침 제거', '모바일 차트의 많은 항목과 버튼·입력 영역을 터치하기 쉬운 크기와 세로 흐름으로 조정'] },
         { ver: '1.6.263', date: '2026.07.21', items: ['모바일 클럽별 정산 이력을 행사별 세로 정보 카드로 전환해 가로 잘림 없이 확인', '모바일에서도 행사 날짜 수정·참석자 명단·엑셀 다시 받기 버튼을 한 행에서 사용 가능'] },
@@ -5751,6 +5752,34 @@ document.addEventListener('DOMContentLoaded', () => {
     let selectedOverallClubs = null; // null = 전체 표시, Set이면 해당 클럽만 표시
     const ADMIN_HISTORY_SEEN_STORAGE_KEY = 'admin_history_seen_by_club';
 
+    // 날짜 선택 직후 같은 클럽에 이미 등록된 정산 이력이 있는지 안내한다.
+    // 수정 중인 이력 자신은 제외하므로 기존 날짜를 그대로 유지해도 경고가 뜨지 않는다.
+    const settlementDateInputForDuplicateCheck = document.getElementById('settlement-date-input');
+    if (settlementDateInputForDuplicateCheck) {
+        settlementDateInputForDuplicateCheck.addEventListener('settlement-date-selected', event => {
+            const selectedDate = event?.detail?.date || settlementDateInputForDuplicateCheck.value;
+            if (!AppState.isLoggedIn || !selectedDate || (!AppState.clubId && !AppState.clubName)) return;
+
+            const candidates = [
+                ...(lastHistoryList || []),
+                ...(AppState.clubHistory || []),
+                ...(AppState.settlementHistory || [])
+            ];
+            const seenIds = new Set();
+            const duplicateEntry = candidates.find(entry => {
+                if (!entry || !entry.id || seenIds.has(String(entry.id))) return false;
+                seenIds.add(String(entry.id));
+                if (AppState.editingHistoryId && String(entry.id) === String(AppState.editingHistoryId)) return false;
+                return historyMatchesClub(entry, AppState.clubId, AppState.clubName)
+                    && formatHistoryUsageDate(entry) === selectedDate;
+            });
+            if (!duplicateEntry) return;
+
+            const clubLabel = duplicateEntry.clubName || AppState.clubName || '선택한 클럽';
+            alert(`⚠️ ${selectedDate}에 ${clubLabel} 정산 이력이 이미 등록되어 있습니다.\n날짜를 다시 확인해 주세요.`);
+        });
+    }
+
     function getHistoryEntrySavedAt(entry) {
         const idTime = Number(entry?.id);
         if (Number.isFinite(idTime) && idTime > 100000000000) return idTime;
@@ -5771,6 +5800,103 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             localStorage.setItem(ADMIN_HISTORY_SEEN_STORAGE_KEY, JSON.stringify(seenByClub));
         } catch (_) {}
+    }
+
+    // 관리자 전용 이력 삭제: 공유 이력·작성자 개인 이력·참석 누적·클럽 누적액을 함께 갱신한다.
+    function deleteAdminHistoryEntry(entry, triggerButton) {
+        if (AppState.currentPin !== '000000' || !entry || !entry.id) return;
+        showConfirmModal(
+            `이 정산 기록을 삭제하시겠습니까?\n참석자 ${entry.memberCount}명의 누적 참석 횟수도 함께 차감됩니다.`,
+            async () => {
+                if (!firebaseDb) {
+                    alert(t('alert.delete_failed_network'));
+                    return;
+                }
+
+                if (triggerButton) triggerButton.disabled = true;
+                try {
+                    const id = entry.id;
+                    const nextHistoryList = lastHistoryList.filter(historyEntry => String(historyEntry.id) !== String(id));
+                    // 관리자가 보는 누적 횟수는 삭제 후 남은 전체 공유 이력을 사번 기준으로 재집계한다.
+                    const nextAdminDirectory = AppState.buildDirectoryCountsForHistory(nextHistoryList);
+                    let creatorHistory = null;
+                    let creatorDirectory = null;
+
+                    // 작성자 개인 이력과 개인 명부 누적값도 함께 맞춘다.
+                    if (entry.creatorPin) {
+                        const creatorSnapshot = await firebaseDb.ref(`settlements/${entry.creatorPin}`).once('value');
+                        const creatorData = creatorSnapshot.val() || {};
+                        const rawHistory = creatorData.settlementHistory;
+                        if (rawHistory) {
+                            const historyArr = Array.isArray(rawHistory) ? rawHistory : Object.values(rawHistory);
+                            creatorHistory = historyArr.filter(historyEntry => historyEntry && String(historyEntry.id) !== String(id));
+                            if (String(entry.creatorPin) !== '000000' && creatorData.directory) {
+                                creatorDirectory = AppState.buildDirectoryCountsForHistory(
+                                    creatorHistory,
+                                    creatorData.directory
+                                );
+                            }
+                        }
+                    }
+
+                    // 현재 연도 이력 삭제분만 서버 증분으로 차감해 동시 정산 누적액을 덮어쓰지 않는다.
+                    const currentYear = new Date().getFullYear();
+                    const clubName = entry.clubName;
+                    const clubId = entry.clubId;
+                    const affectsCurrentYear = getHistoryEntryYear(entry) === currentYear;
+                    const supportDelta = affectsCurrentYear ? -(entry.finalSupportAmount || 0) : 0;
+                    const prizeDelta = affectsCurrentYear ? -getHistoryPrizeCost(entry) : 0;
+                    const registryEntry = clubId
+                        ? AppState.clubRegistry[clubId]
+                        : Object.values(AppState.clubRegistry).find(club => club.name === clubName);
+                    const registryClubId = clubId
+                        || Object.keys(AppState.clubRegistry).find(key => AppState.clubRegistry[key] === registryEntry);
+
+                    const firebaseUpdates = {
+                        [`globalHistory/${id}`]: null,
+                        [`deletedHistoryIds/${id}`]: true,
+                        'settlements/000000/directory': nextAdminDirectory
+                    };
+                    if (creatorHistory) {
+                        firebaseUpdates[`settlements/${entry.creatorPin}/settlementHistory`] = AppState.buildPersonalHistoryForSync(creatorHistory);
+                    }
+                    if (creatorDirectory) {
+                        firebaseUpdates[`settlements/${entry.creatorPin}/directory`] = creatorDirectory;
+                    }
+                    if (registryEntry && registryClubId) {
+                        if (prizeDelta !== 0) {
+                            firebaseUpdates[`clubRegistry/${registryClubId}/prizeUsed`] = firebase.database.ServerValue.increment(prizeDelta);
+                        }
+                        if (supportDelta !== 0) {
+                            firebaseUpdates[`clubRegistry/${registryClubId}/usedBudget`] = firebase.database.ServerValue.increment(supportDelta);
+                        }
+                    }
+                    await firebaseDb.ref().update(firebaseUpdates);
+
+                    cachedDeletedIds[String(id)] = true;
+                    lastHistoryList = nextHistoryList;
+                    AppState.directory = nextAdminDirectory;
+                    if (creatorHistory && String(entry.creatorPin) === String(AppState.currentPin)) {
+                        AppState.settlementHistory = creatorHistory;
+                    }
+                    if (registryEntry && registryClubId) {
+                        const currentRegistryEntry = AppState.clubRegistry[registryClubId] || registryEntry;
+                        currentRegistryEntry.prizeUsed = Math.max(0, (currentRegistryEntry.prizeUsed || 0) + prizeDelta);
+                        currentRegistryEntry.usedBudget = Math.max(0, (currentRegistryEntry.usedBudget || 0) + supportDelta);
+                    }
+                    AppState.save(false);
+                    AppState.render();
+                    renderAdminHistory(lastHistoryList);
+                    renderAllCharts(lastHistoryList);
+                    updateChartsBudgetStats(lastHistoryList);
+                } catch (err) {
+                    console.error('정산 이력 삭제 실패:', err);
+                    alert(t('alert.delete_failed_network'));
+                } finally {
+                    if (triggerButton) triggerButton.disabled = false;
+                }
+            }
+        );
     }
 
     const clubTotalBudgetInput = document.getElementById('club-total-budget-input');
@@ -6720,13 +6846,13 @@ document.addEventListener('DOMContentLoaded', () => {
         return { rows, totals, hasAssignedBudget, clubBudget, clubRemaining };
     }
 
-    function appendClubUsageRows(listEl, rows, year, { clickableAttendees = false, editableDates = false, excelDownloads = false } = {}) {
+    function appendClubUsageRows(listEl, rows, year, { clickableAttendees = false, editableDates = false, excelDownloads = false, deleteEntries = false } = {}) {
         listEl.innerHTML = '';
         const columnLabels = ['행사 날짜', '참석 인원', '행사비', '시설·장비 이용료', '상품비', '회사 지원금', '자부담 비용', '총 비용'];
         if (rows.length === 0) {
             const row = document.createElement('tr');
             const cell = document.createElement('td');
-            cell.colSpan = excelDownloads ? 9 : 8;
+            cell.colSpan = 8 + (excelDownloads ? 1 : 0) + (deleteEntries ? 1 : 0);
             cell.className = 'club-usage-summary-empty';
             cell.textContent = `${year}년 정산 이력이 없습니다.`;
             row.appendChild(cell);
@@ -6810,12 +6936,31 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 row.appendChild(excelCell);
             }
+            if (deleteEntries) {
+                const deleteCell = document.createElement('td');
+                deleteCell.dataset.label = '삭제';
+                const canDelete = typeof deleteEntries === 'function'
+                    ? deleteEntries(rowData.entry)
+                    : deleteEntries;
+                if (canDelete) {
+                    const deleteButton = document.createElement('button');
+                    deleteButton.type = 'button';
+                    deleteButton.className = 'club-usage-delete-button';
+                    deleteButton.textContent = '삭제';
+                    deleteButton.title = '이 정산 이력 삭제';
+                    deleteButton.addEventListener('click', () => deleteAdminHistoryEntry(rowData.entry, deleteButton));
+                    deleteCell.appendChild(deleteButton);
+                } else {
+                    deleteCell.textContent = '-';
+                }
+                row.appendChild(deleteCell);
+            }
             listEl.appendChild(row);
         });
     }
 
     function createInlineClubUsageSummary(clubName, entries, year, options = {}) {
-        const { editableDates = false, excelDownloads = false } = options;
+        const { editableDates = false, excelDownloads = false, deleteEntries = false } = options;
         const data = getClubUsageSummaryData(clubName, entries);
         const summary = document.createElement('section');
         summary.className = 'inline-club-usage-summary';
@@ -6841,10 +6986,10 @@ document.addEventListener('DOMContentLoaded', () => {
         table.className = 'club-usage-summary-table';
         table.innerHTML = `
             <thead><tr>
-                <th>행사 날짜</th><th>참석 인원</th><th>행사비</th><th>시설·장비 이용료</th><th>상품비</th><th>회사 지원금</th><th>자부담 비용</th><th>총 비용</th>${excelDownloads ? '<th>엑셀</th>' : ''}
+                <th>행사 날짜</th><th>참석 인원</th><th>행사비</th><th>시설·장비 이용료</th><th>상품비</th><th>회사 지원금</th><th>자부담 비용</th><th>총 비용</th>${excelDownloads ? '<th>엑셀</th>' : ''}${deleteEntries ? '<th>삭제</th>' : ''}
             </tr></thead>`;
         const listEl = document.createElement('tbody');
-        appendClubUsageRows(listEl, data.rows, year, { clickableAttendees: true, editableDates, excelDownloads });
+        appendClubUsageRows(listEl, data.rows, year, { clickableAttendees: true, editableDates, excelDownloads, deleteEntries });
         table.appendChild(listEl);
         tableWrap.appendChild(table);
         summary.append(totalsEl, tableWrap);
@@ -7354,7 +7499,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 heading.appendChild(newBadge);
             }
             header.appendChild(heading);
-            clubCard.append(header, createInlineClubUsageSummary(clubName, currentYearEntries, currentYear, { editableDates: true }));
+            clubCard.append(header, createInlineClubUsageSummary(clubName, currentYearEntries, currentYear, {
+                editableDates: true,
+                deleteEntries: true
+            }));
             container.appendChild(clubCard);
         });
         if (needsSeenSave) saveAdminHistorySeenByClub(seenByClub);
@@ -7500,98 +7648,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const id = btn.getAttribute('data-id');
                 const entry = historyList.find(e => String(e.id) === String(id));
                 if (!entry) return;
-                showConfirmModal(
-                    `이 정산 기록을 삭제하시겠습니까?\n참석자 ${entry.memberCount}명의 누적 참석 횟수도 함께 차감됩니다.`,
-                    async () => {
-                        if (!firebaseDb) {
-                            alert(t('alert.delete_failed_network'));
-                            return;
-                        }
-
-                        btn.disabled = true;
-                        try {
-                            const nextHistoryList = lastHistoryList.filter(e => String(e.id) !== String(id));
-                            // 관리자가 보는 누적 횟수는 삭제 후 남은 전체 공유 이력을 사번 기준으로 재집계한다.
-                            const nextAdminDirectory = AppState.buildDirectoryCountsForHistory(nextHistoryList);
-                            let creatorHistory = null;
-                            let creatorDirectory = null;
-
-                            // 작성자 개인 이력과 개인 명부 누적값도 함께 맞춘다.
-                            if (entry.creatorPin) {
-                                const creatorSnapshot = await firebaseDb.ref(`settlements/${entry.creatorPin}`).once('value');
-                                const creatorData = creatorSnapshot.val() || {};
-                                const rawHistory = creatorData.settlementHistory;
-                                if (rawHistory) {
-                                    const historyArr = Array.isArray(rawHistory) ? rawHistory : Object.values(rawHistory);
-                                    creatorHistory = historyArr.filter(h => h && String(h.id) !== String(id));
-                                    if (String(entry.creatorPin) !== '000000' && creatorData.directory) {
-                                        creatorDirectory = AppState.buildDirectoryCountsForHistory(
-                                            creatorHistory,
-                                            creatorData.directory
-                                        );
-                                    }
-                                }
-                            }
-
-                            // 현재 연도 이력 삭제분만 서버 증분으로 차감해 동시 정산 누적액을 덮어쓰지 않는다.
-                            const currentYear = new Date().getFullYear();
-                            const clubName = entry.clubName;
-                            const clubId = entry.clubId;
-                            const affectsCurrentYear = getHistoryEntryYear(entry) === currentYear;
-                            const supportDelta = affectsCurrentYear ? -(entry.finalSupportAmount || 0) : 0;
-                            const prizeDelta = affectsCurrentYear ? -getHistoryPrizeCost(entry) : 0;
-                            const registryEntry = clubId
-                                ? AppState.clubRegistry[clubId]
-                                : Object.values(AppState.clubRegistry).find(club => club.name === clubName);
-                            const registryClubId = clubId
-                                || Object.keys(AppState.clubRegistry).find(key => AppState.clubRegistry[key] === registryEntry);
-
-                            // 이력 삭제·tombstone·양쪽 명부·클럽 누적액을 원자적으로 반영한다.
-                            const firebaseUpdates = {
-                                [`globalHistory/${entry.id}`]: null,
-                                [`deletedHistoryIds/${entry.id}`]: true,
-                                'settlements/000000/directory': nextAdminDirectory
-                            };
-                            if (creatorHistory) {
-                                firebaseUpdates[`settlements/${entry.creatorPin}/settlementHistory`] = AppState.buildPersonalHistoryForSync(creatorHistory);
-                            }
-                            if (creatorDirectory) {
-                                firebaseUpdates[`settlements/${entry.creatorPin}/directory`] = creatorDirectory;
-                            }
-                            if (registryEntry && registryClubId) {
-                                if (prizeDelta !== 0) {
-                                    firebaseUpdates[`clubRegistry/${registryClubId}/prizeUsed`] = firebase.database.ServerValue.increment(prizeDelta);
-                                }
-                                if (supportDelta !== 0) {
-                                    firebaseUpdates[`clubRegistry/${registryClubId}/usedBudget`] = firebase.database.ServerValue.increment(supportDelta);
-                                }
-                            }
-                            await firebaseDb.ref().update(firebaseUpdates);
-
-                            cachedDeletedIds[String(id)] = true;
-                            lastHistoryList = nextHistoryList;
-                            AppState.directory = nextAdminDirectory;
-                            if (creatorHistory && String(entry.creatorPin) === String(AppState.currentPin)) {
-                                AppState.settlementHistory = creatorHistory;
-                            }
-                            if (registryEntry && registryClubId) {
-                                const currentRegistryEntry = AppState.clubRegistry[registryClubId] || registryEntry;
-                                currentRegistryEntry.prizeUsed = Math.max(0, (currentRegistryEntry.prizeUsed || 0) + prizeDelta);
-                                currentRegistryEntry.usedBudget = Math.max(0, (currentRegistryEntry.usedBudget || 0) + supportDelta);
-                            }
-                            AppState.save(false);
-                            AppState.render();
-                            renderAdminHistory(lastHistoryList);
-                            renderAllCharts(lastHistoryList);
-                            updateChartsBudgetStats(lastHistoryList);
-                        } catch (err) {
-                            console.error('정산 이력 삭제 실패:', err);
-                            alert(t('alert.delete_failed_network'));
-                        } finally {
-                            btn.disabled = false;
-                        }
-                    } // end showConfirmModal callback
-                ); // end showConfirmModal
+                deleteAdminHistoryEntry(entry, btn);
             });
         });
 

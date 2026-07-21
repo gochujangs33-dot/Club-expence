@@ -1440,13 +1440,16 @@
             var nxt = document.getElementById('cal-next-month');
             if (!hi || !btn || !cal) return;
 
-            function setDate(ymd) {
+            function setDate(ymd, notifyDuplicate) {
                 selectedYMD = ymd;
                 hi.value = ymd;
                 txt.textContent = fmtDisplay(ymd);
                 var p = ymd.split('-');
                 calYear  = parseInt(p[0]);
                 calMonth = parseInt(p[1]);
+                if (notifyDuplicate) {
+                    hi.dispatchEvent(new CustomEvent('settlement-date-selected', { detail: { date: ymd } }));
+                }
             }
 
             function renderGrid() {
@@ -1469,7 +1472,7 @@
                         if (ymd === today) el.classList.add('cal-today');
                         if (ymd === selectedYMD) el.classList.add('cal-selected');
                         el.addEventListener('click', function() {
-                            setDate(ymd);
+                            setDate(ymd, true);
                             cal.classList.add('hidden');
                             renderGrid();
                         });
@@ -1478,11 +1481,11 @@
                 }
             }
 
-            setDate(hi.value || todayYMD());
+            setDate(hi.value || todayYMD(), false);
 
             btn.addEventListener('click', function(e) {
                 e.stopPropagation();
-                if (hi.value && hi.value !== selectedYMD) setDate(hi.value);
+                if (hi.value && hi.value !== selectedYMD) setDate(hi.value, false);
                 renderGrid();
                 cal.classList.toggle('hidden');
             });
@@ -1499,8 +1502,8 @@
             cal.addEventListener('click', function(e) { e.stopPropagation(); });
             document.addEventListener('click', function() { cal.classList.add('hidden'); });
 
-            window._onSettleDateReset  = function() { setDate(todayYMD()); };
-            window._onSettleDateChange = function(ymd) { setDate(ymd); };
+            window._onSettleDateReset  = function() { setDate(todayYMD(), false); };
+            window._onSettleDateChange = function(ymd) { setDate(ymd, false); };
         }
 
         if (document.readyState === 'loading') {

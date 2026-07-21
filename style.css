@@ -1490,7 +1490,8 @@ input[aria-invalid="true"] {
     .inline-club-usage-summary .club-usage-summary-empty { display: block !important; text-align: center !important; }
     .inline-club-usage-summary .club-usage-summary-empty::before { display: none; }
     .inline-club-usage-summary .club-usage-attendee-button,
-    .inline-club-usage-summary .club-usage-excel-button { min-height: 2rem; }
+    .inline-club-usage-summary .club-usage-excel-button,
+    .inline-club-usage-summary .club-usage-delete-button { min-height: 2rem; }
 }
 
 @media (max-width: 360px) {
@@ -1756,6 +1757,19 @@ input[aria-invalid="true"] {
 
 .club-usage-excel-button:hover:not(:disabled) { background: rgba(16, 185, 129, 0.28); }
 .club-usage-excel-button:disabled { cursor: wait; opacity: 0.62; }
+
+.club-usage-delete-button {
+    padding: 0.2rem 0.45rem;
+    border: 1px solid rgba(248, 113, 113, 0.48);
+    border-radius: 6px;
+    background: rgba(127, 29, 29, 0.2);
+    color: #fca5a5;
+    font-size: 0.76rem;
+    font-weight: 700;
+    cursor: pointer;
+}
+.club-usage-delete-button:hover:not(:disabled) { background: rgba(127, 29, 29, 0.4); }
+.club-usage-delete-button:disabled { cursor: wait; opacity: 0.62; }
 
 .club-usage-date-button {
     padding: 0;
@@ -2740,7 +2754,8 @@ body:has(.update-banner:not(.hidden)) {
     .club-usage-summary-empty { display: block !important; text-align: center !important; }
     .club-usage-summary-empty::before { display: none; }
     .club-usage-attendee-button,
-    .club-usage-excel-button { min-height: 2rem; }
+    .club-usage-excel-button,
+    .club-usage-delete-button { min-height: 2rem; }
 
     .admin-start-guide-heading { align-items: flex-start; }
     .update-banner { flex-wrap: wrap; gap: 0.4rem 0.65rem; }
