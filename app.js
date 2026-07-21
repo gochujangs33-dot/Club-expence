@@ -1,7 +1,7 @@
 /**
  * Club Expense Settlement App - Main JavaScript Logic
  */
-const APP_VERSION      = '1.6.266';
+const APP_VERSION      = '1.6.267';
 const APP_VERSION_DATE = '2026.07.22';
 
 // 인당 자부담 비용에 따라 강조 박스의 아이콘/색상을 전환 (100원 이상이면 🔥, 0이면 😊)
@@ -383,6 +383,7 @@ const AppState = {
     clubRegistry: {},
     clubTotalBudget: 0,
     editingHistoryId: null,   // 수정 모드 중인 이력 항목 ID
+    _editingHistoryOriginal: null, // 현재 수정 중인 공유 이력 원본 (관리자 요약 화면 저장용)
     _finalizeInProgress: false,
 
     // Load initial state if storage exists (optional local storage helper)
@@ -2933,6 +2934,9 @@ const AppState = {
         }
         entry = await this.hydrateHistoryMedia(entry);
         this.editingHistoryId = entry.id;
+        // 관리자 전체 요약에서 연 이력은 현재 clubHistory에 없을 수 있다. 저장 시에도 동일한
+        // 수정 전 값을 기준으로 차액을 계산할 수 있도록 원본을 별도로 보관한다.
+        this._editingHistoryOriginal = JSON.parse(JSON.stringify(entry));
         // 이 이력이 원래 기여했던 지원금·상품비 — 예산 한도 검사 시 "이미 사용한 금액"에서
         // 이 항목 자신의 몫을 빼줘야 수정 중 재검증이 자기 자신과 충돌해 잔여예산 초과로 막히지 않음
         this._editingOriginalSupport = entry.finalSupportAmount || 0;
@@ -2996,7 +3000,14 @@ const AppState = {
     async updateHistoryEntry(id, updatedFields) {
         // clubHistory(클럽 전체 이력)에서 우선 조회 — 관리자가 다른 회원이 작성한 이력을 수정하는 경우도 포함
         const clubIdx = (this.clubHistory || []).findIndex(e => String(e.id) === String(id));
-        const oldEntry = clubIdx >= 0 ? this.clubHistory[clubIdx] : (this.settlementHistory || []).find(e => String(e.id) === String(id));
+        const personalEntry = (this.settlementHistory || []).find(e => String(e.id) === String(id));
+        const editingOriginal = this._editingHistoryOriginal
+            && String(this._editingHistoryOriginal.id) === String(id)
+            ? this._editingHistoryOriginal
+            : null;
+        // 관리자 전체 요약 → 수정 화면 진입 시에는 clubHistory/개인 이력에 없는 항목도 있으므로,
+        // 수정 시작 때 보관한 원본을 마지막 조회 기준으로 사용한다.
+        const oldEntry = clubIdx >= 0 ? this.clubHistory[clubIdx] : (personalEntry || editingOriginal);
         if (!oldEntry) throw new Error('수정할 정산 이력을 찾을 수 없습니다.');
 
         const editedAt = new Date().toISOString();
@@ -3127,6 +3138,7 @@ const AppState = {
     // 수정 모드 해제
     cancelEditMode() {
         this.editingHistoryId = null;
+        this._editingHistoryOriginal = null;
         this._editingOriginalSupport = 0;
         this._editingOriginalPrize = 0;
         const banner = document.getElementById('edit-mode-banner');
@@ -5141,6 +5153,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 변경이력 모달
     const CHANGELOG = [
+        { ver: '1.6.267', date: '2026.07.22', items: ['관리자 전체 사용 요약에서 선택한 이력 원본을 수정 모드 동안 보관해 날짜·금액 수정 저장 오류 해결'] },
         { ver: '1.6.266', date: '2026.07.22', items: ['관리자 클럽별 정산 사용 요약의 각 행사 행에 삭제 버튼 복원', '정산 날짜 선택 시 같은 클럽의 동일 날짜 이력을 즉시 안내(수정 중인 이력 자신은 제외)'] },
         { ver: '1.6.265', date: '2026.07.22', items: ['일반 사용자도 선택한 클럽의 공유 정산 이력을 작성자와 관계없이 수정하고, 원 작성자 이력·참석 누적을 함께 동기화', '상품비 이력 수정 시 기존 금액을 누적 기준에서 먼저 제외해 변경 차액만 반영'] },
         { ver: '1.6.264', date: '2026.07.21', items: ['전 화면 공통 모바일 레이아웃 점검 및 보강: 클럽 관리·입력 폼·모달·긴 표의 가로 넘침 제거', '모바일 차트의 많은 항목과 버튼·입력 영역을 터치하기 쉬운 크기와 세로 흐름으로 조정'] },
