@@ -1,6 +1,6 @@
 # 클럽 비용 정산기 — 전체 앱 명세서
 
-> 버전: v1.6.141 | 최종 업데이트: 2026-06-25  
+> 버전: v1.6.268 | 최종 업데이트: 2026-07-27
 > **이 문서는 앱의 모든 계산 방법, 경우의 수, 예외 사항, 팝업 문구를 정리한 기준 문서입니다.**  
 > **계산 관련 항목은 관리자의 명시적 서면 승인 없이 코드 수정 절대 금지.**
 
@@ -145,12 +145,11 @@ previousPrizeTotal = clubRegistry[clubId].prizeUsed  (관리자 기준 단일 �
 | 입력금액 > 잔여 한도 | `상품비 연 한도 50만원을 초과할 수 없습니다. 최대 {잔여}원까지 입력 가능합니다.` | ⚠️ | 확인 시 금액 자동으로 잔여 한도값 입력 |
 | 클럽 예산 잔여 < 상품비 | `클럽 잔여 예산이 부족합니다. 잔여 예산: {금액}원 상품비는 클럽 예산 내에서만 지출 가능합니다.` | 🚫 | 추가 불가 (return) |
 
-### 4-4. 정산 결과 경고 (warnings 배열)
+### 4-4. 상품비 검증 위치
 
-| 조건 | 경고 문구 |
-|---|---|
-| 상품비 > 0 이고 참석자 < 10명 | `정회원 10명 이상 참석 시에만 상품비 사용이 가능합니다.` |
-| 상품비 + 누적액 > prizeLimit | `상품비 연 한도 50만원을 초과할 수 없습니다.` |
+- 참석자 10명 미만 제한은 상품 카테고리 선택·항목 추가 UI에서 즉시 차단한다.
+- `SettlementCalculator.calculate()`의 `warnings`에는 상품비 연 한도 초과만 기록한다.
+- 같은 조건을 계산기와 UI 양쪽에서 서로 다른 문구로 중복 경고하지 않는다.
 
 ### 4-5. 연간 누적 추적 흐름
 
@@ -204,14 +203,17 @@ previousPrizeTotal = clubRegistry[clubId].prizeUsed  (관리자 기준 단일 �
 ```
 연간 배정 예산 = clubRegistry[clubId].budget            (관리자 설정)
 이전 사용 기준 = clubRegistry[clubId].priorUsed         (관리자 설정)
-이번 연도 사용 = settlementHistory 중 올해 항목의 finalSupportAmount 합계
+올해 이력 사용 = 현재 클럽의 globalHistory 중 올해 finalSupportAmount 합계
+동기화 사용액   = clubRegistry[clubId].usedBudget
+이번 연도 사용 = max(올해 이력 사용, 동기화 사용액)
 총 사용 금액   = 이전 사용 기준 + 이번 연도 사용
 잔여 예산      = 연간 배정 예산 − 총 사용 금액
 ```
 
 - 잔여 예산 < 0 이면 경고색(빨강) 표시
 - `getClubBudget()` → `clubRegistry[clubId].budget` 기준 반환
-- `getClubUsedBudget()` → priorUsed + 올해 settlementHistory 합산
+- `getClubUsedBudget()` → `priorUsed + max(올해 공유 이력 합계, usedBudget)`
+  (공유 이력 로드 전에는 개인 이력을 임시 대체값으로 사용하며, 이력 수정 중에는 수정 대상의 기존 지원금을 제외)
 
 ### 6-2. 표시 위치
 
@@ -233,10 +235,10 @@ previousPrizeTotal = clubRegistry[clubId].prizeUsed  (관리자 기준 단일 �
 
 | 표시 항목 | 계산 출처 | 비고 |
 |---|---|---|
-| 최종 지원금 (지원 한도 내) | `totalCost − totalSelfPay` | 자부담 수정 전 자동값 |
-| 총 자부담 금액 (수정 가능) | `totalSelfPay` → `lastCalculatedSelfPay` | 직접 수정 가능 |
+| 최종 지원금 (지원 한도 내) | `totalCost − finalSelfPay` | 실제 카드 배정 및 수동 수정 반영 |
+| 총 자부담 금액 (수정 가능) | 기본 `itemSelfPay`, 수동 수정 시 `lastCalculatedSelfPay` | 직접 수정 가능, 0원도 유효 |
 | 인당 자부담 비용 | `perPersonSelfPay` | 수정 불가, 자동 계산 |
-| 자부담 비율 | `totalSelfPay / totalCost` | |
+| 자부담 비율 | `finalSelfPay / totalCost` | |
 | 총 소요 비용 | 모든 항목 합계 | |
 | 행사비 합계 | EVENT 항목 합계 | |
 | 시설 및 장비 합계 | FACILITY 항목 합계 | |
@@ -251,11 +253,12 @@ previousPrizeTotal = clubRegistry[clubId].prizeUsed  (관리자 기준 단일 �
 
 - 정산 결과 화면에서 "총 자부담 금액(수정 가능)" 필드 직접 입력 가능
 - 수정값 → `AppState.lastCalculatedSelfPay`에 저장
+- 수동 수정 여부 → `AppState.selfPayManuallyOverridden`에 저장
 - `finalSelfPay` 결정 규칙:
   ```
-  finalSelfPay = lastCalculatedSelfPay > 0
-      ? lastCalculatedSelfPay   // 수동 수정값 우선
-      : totalSelfPay            // 자동 계산값
+  finalSelfPay = selfPayManuallyOverridden
+      ? lastCalculatedSelfPay   // 수동 수정값 우선 (0원 포함)
+      : itemSelfPay             // 항목별 개인카드 금액 합계
   ```
 - `finalSelfPay`가 엑셀 K24/K25/K30, L25 안내 문구에 반영됨
 

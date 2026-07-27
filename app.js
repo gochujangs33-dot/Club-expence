@@ -1,8 +1,8 @@
 /**
  * Club Expense Settlement App - Main JavaScript Logic
  */
-const APP_VERSION      = '1.6.267';
-const APP_VERSION_DATE = '2026.07.22';
+const APP_VERSION      = '1.6.268';
+const APP_VERSION_DATE = '2026.07.27';
 
 // 인당 자부담 비용에 따라 강조 박스의 아이콘/색상을 전환 (100원 이상이면 🔥, 0이면 😊)
 function updatePerPersonSelfPayIcon(perPersonSelfPay) {
@@ -5153,6 +5153,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 변경이력 모달
     const CHANGELOG = [
+        { ver: '1.6.268', date: '2026.07.27', items: ['현재 클럽별 사용 요약으로 대체되어 실행되지 않던 구형 관리자 정산 이력 렌더링 코드 제거', '계산·데이터 출처 명세를 현재 실제 자부담 및 예산 산정 방식에 맞게 정비'] },
         { ver: '1.6.267', date: '2026.07.22', items: ['관리자 전체 사용 요약에서 선택한 이력 원본을 수정 모드 동안 보관해 날짜·금액 수정 저장 오류 해결'] },
         { ver: '1.6.266', date: '2026.07.22', items: ['관리자 클럽별 정산 사용 요약의 각 행사 행에 삭제 버튼 복원', '정산 날짜 선택 시 같은 클럽의 동일 날짜 이력을 즉시 안내(수정 중인 이력 자신은 제외)'] },
         { ver: '1.6.265', date: '2026.07.22', items: ['일반 사용자도 선택한 클럽의 공유 정산 이력을 작성자와 관계없이 수정하고, 원 작성자 이력·참석 누적을 함께 동기화', '상품비 이력 수정 시 기존 금액을 누적 기준에서 먼저 제외해 변경 차액만 반영'] },
@@ -7451,13 +7452,12 @@ document.addEventListener('DOMContentLoaded', () => {
         const selectedUser = userSelect ? userSelect.value : '';
         container.innerHTML = '';
 
-        let filtered = historyList.filter(entry => {
+        const filtered = historyList.filter(entry => {
             if (!selectedUser) return true;
             return entry.creatorName === selectedUser;
         });
 
         // 클럽 선택 없이 모든 등록 클럽을 기본 접힘 그룹으로 표시한다.
-        const groupContainers = new Map();
         const entriesByClub = new Map();
         Object.values(AppState.clubRegistry || {})
             .map(club => club.name)
@@ -7520,176 +7520,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         if (needsSeenSave) saveAdminHistorySeenByClub(seenByClub);
 
-        // 행사 날짜를 눌러 바로 수정 화면으로 진입하는 요약 전용 레이아웃이다.
-        return;
-
-        filtered.forEach(entry => {
-            const div = document.createElement('div');
-            div.className = 'history-entry';
-
-            let receiptHtml = '';
-            if (entry.expenseItems) {
-                entry.expenseItems.forEach(item => {
-                    if (item.receiptImage) {
-                        receiptHtml += `
-                            <div style="display:inline-block; margin-top:0.5rem; margin-right:0.5rem; position:relative; text-align:center;">
-                                <img src="${item.receiptImage}" class="receipt-thumbnail" alt="영수증 미리보기" data-desc="${AppState.escapeHtml(item.description)}">
-                                <span style="display:block; font-size:0.75rem; color:var(--text-muted); margin-top:0.2rem;">${AppState.escapeHtml(item.description)}</span>
-                            </div>
-                        `;
-                    }
-                });
-            }
-            
-            let attendeesHtml = '';
-            if (entry.attendees) {
-                attendeesHtml = entry.attendees.map(att => {
-                    const idPart = att.employeeId ? ` (${AppState.escapeHtml(String(att.employeeId))})` : '';
-                    return AppState.escapeHtml(att.name) + idPart;
-                }).join(', ');
-            }
-            
-            let itemsHtml = '';
-            if (entry.expenseItems) {
-                itemsHtml = entry.expenseItems.map(item => `
-                    <li>
-                        <span>${AppState.escapeHtml(item.description)} (${categoryNameMap[item.category]})</span> 
-                        <strong>${SettlementCalculator.formatCurrency(item.amount)}</strong>
-                    </li>
-                `).join('');
-            }
-            const historyPrizeCost = getHistoryPrizeCost(entry);
-            const prizeSummaryHtml = historyPrizeCost > 0
-                ? `<div class="history-stat history-stat-prize"><span>${t('hist.prize_cost')}</span><strong>${SettlementCalculator.formatCurrency(historyPrizeCost)}</strong></div>`
-                : '';
-            
-            const editedBadgeAdmin = entry.isEdited
-                ? `<span class="badge-edited">${t('badge.edited')}</span>` : '';
-            div.innerHTML = `
-                <div class="history-header">
-                    <div style="display:flex;align-items:center;gap:0.4rem;flex-wrap:wrap;">
-                        <span class="history-club admin-edit-creator" data-id="${entry.id}" style="color:var(--color-secondary);cursor:pointer;text-decoration:underline dotted;" title="탭하여 정산인 이름 수정">${t('label.settler')}: ${AppState.escapeHtml(entry.creatorName || t('status.offline'))}</span>
-                        ${editedBadgeAdmin}
-                    </div>
-                    <div style="display:flex;align-items:center;gap:0.4rem;">
-                        <span class="history-date">${entry.settlementDate
-                            ? (() => {
-                                const [y,m,d] = entry.settlementDate.split('-');
-                                const savedTime = new Date(entry.id).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});
-                                return `${y}년 ${Number(m)}월 ${Number(d)}일 (저장 ${savedTime})`;
-                              })()
-                            : new Date(entry.id).toLocaleString()}</span>
-                        <button class="btn-edit-history-admin" data-id="${entry.id}" style="font-size:0.75rem;padding:0.2rem 0.6rem;background:rgba(99,102,241,0.15);border:1px solid rgba(99,102,241,0.4);color:#a5b4fc;border-radius:0.3rem;cursor:pointer;white-space:nowrap;">✏️ ${t('btn.edit')}</button>
-                        <button class="btn-delete-history btn-text-danger" data-id="${entry.id}" style="padding:0.25rem 0.5rem; font-size:0.75rem;">${t('btn.delete')}</button>
-                    </div>
-                </div>
-                <div class="history-summary">
-                    <div class="history-stat">
-                        <span>${t('hist.total_cost')}</span>
-                        <strong>${SettlementCalculator.formatCurrency(entry.totalCost)}</strong>
-                    </div>
-                    <div class="history-stat">
-                        <span>${t('hist.final_support')}</span>
-                        <strong>${SettlementCalculator.formatCurrency(entry.finalSupportAmount)}</strong>
-                    </div>
-                    <div class="history-stat">
-                        <span>${t('hist.self_pay')}</span>
-                        <strong>${SettlementCalculator.formatCurrency(entry.totalSelfPay)}</strong>
-                    </div>
-                    <div class="history-stat">
-                        <span>${t('hist.per_person_self_pay')} (${t('hist.attendees')}: ${entry.memberCount}${t('unit.person')})</span>
-                        <strong>${SettlementCalculator.formatCurrency(entry.perPersonSelfPay)}</strong>
-                    </div>
-                    ${prizeSummaryHtml}
-                </div>
-                <div class="history-details" style="margin-top:0.5rem;">
-                    <details>
-                        <summary style="font-size:0.82rem; color:var(--color-secondary); cursor:pointer;">${t('hist.view_details_admin')}</summary>
-                        <div style="padding:0.5rem 0; font-size:0.83rem; line-height:1.4;">
-                            <strong>${t('hist.attendees_label')}:</strong> <span style="color:var(--text-secondary);">${AppState.escapeHtml(attendeesHtml || t('hist.no_attendees'))}</span>
-                            <ul class="history-items" style="margin-top:0.5rem; border-top:1px solid rgba(255,255,255,0.05); padding-top:0.5rem; display:flex; flex-direction:column; gap:0.25rem;">
-                                ${itemsHtml}
-                            </ul>
-                            ${receiptHtml ? `<div style="margin-top:0.75rem; border-top:1px solid rgba(255,255,255,0.05); padding-top:0.5rem;"><strong>영수증:</strong><br>${receiptHtml}</div>` : ''}
-                        </div>
-                    </details>
-                </div>
-            `;
-            
-            const clubName = entry.clubName || t('label.default_club');
-            const targetContainer = groupContainers.get(clubName);
-            (targetContainer || container).appendChild(div);
-        });
-
-        // 정산인 이름 수정 (관리자 전용)
-        container.querySelectorAll('.admin-edit-creator').forEach(span => {
-            span.addEventListener('click', () => {
-                const id = span.getAttribute('data-id');
-                const entry = historyList.find(e => String(e.id) === String(id));
-                if (!entry) return;
-                const current = entry.creatorName || '';
-                showEditModal('정산인 이름 수정', '수정할 이름을 입력하세요', current, newName => {
-                    if (!newName || !newName.trim() || newName.trim() === current) return;
-                    const trimmed = newName.trim();
-                    if (!firebaseDb) { alert('Firebase 연결이 필요합니다.'); return; }
-                    firebaseDb.ref(`globalHistory/${id}/creatorName`).set(trimmed)
-                        .then(() => {
-                            entry.creatorName = trimmed;
-                            span.textContent = `정산인: ${trimmed}`;
-                            // 해당 사용자의 개인 이력도 동기화
-                            if (entry.creatorPin) {
-                                firebaseDb.ref(`settlements/${entry.creatorPin}/settlementHistory`).once('value').then(snap => {
-                                    const raw = snap.val();
-                                    if (!raw) return;
-                                    const arr = Array.isArray(raw) ? raw : Object.values(raw);
-                                    const idx = arr.findIndex(h => h && String(h.id) === String(id));
-                                    if (idx >= 0) {
-                                        arr[idx].creatorName = trimmed;
-                                        firebaseDb.ref(`settlements/${entry.creatorPin}/settlementHistory`).set(arr).catch(() => {});
-                                    }
-                                }).catch(() => {});
-                            }
-                        })
-                        .catch(() => alert('저장 중 오류가 발생했습니다.'));
-                });
-            });
-        });
-
-        // 정산 기록 삭제 → globalHistory에서 제거 + 참석자 누적 참석 횟수 차감
-        container.querySelectorAll('.btn-delete-history').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const id = btn.getAttribute('data-id');
-                const entry = historyList.find(e => String(e.id) === String(id));
-                if (!entry) return;
-                deleteAdminHistoryEntry(entry, btn);
-            });
-        });
-
-        // 관리자 이력 수정 버튼
-        container.querySelectorAll('.btn-edit-history-admin').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const id = Number(btn.getAttribute('data-id'));
-                const entry = lastHistoryList.find(e => Number(e.id) === id);
-                if (entry) AppState.loadHistoryEntryForEdit(entry);
-            });
-        });
-
-        // Bind click handlers to receipt thumbnails in admin dashboard
-        container.querySelectorAll('.receipt-thumbnail').forEach(img => {
-            img.addEventListener('click', (e) => {
-                const src = e.target.getAttribute('src');
-                const desc = e.target.getAttribute('data-desc');
-                const modal = document.getElementById('receipt-modal');
-                const modalImg = document.getElementById('modal-img');
-                const captionText = document.getElementById('modal-caption');
-                
-                if (modal && modalImg && captionText) {
-                    modal.classList.remove('hidden');
-                    modalImg.src = src;
-                    captionText.textContent = desc ? `${desc} 영수증` : '영수증 원본';
-                }
-            });
-        });
     }
 
     // 만약 Firebase DB가 초기화되어 있지 않으면 로그인 버튼 숨기고 기본 오프라인 모드로 설정
