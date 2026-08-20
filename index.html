@@ -30,6 +30,12 @@
         text-align:left; cursor:pointer; display:flex; align-items:center; justify-content:space-between;
     }
     .settle-date-btn:hover { background:rgba(255,255,255,0.09); }
+    .settle-date-arrow { font-size:0.7rem; opacity:0.5; }
+    .custom-calendar {
+        position:absolute; top:calc(100% + 4px); left:0; right:0; z-index:9999;
+        background:#1e293b; border:1px solid rgba(255,255,255,0.15);
+        border-radius:0.75rem; padding:0.75rem; box-shadow:0 8px 32px rgba(0,0,0,0.5);
+    }
     .cal-nav { display:flex; justify-content:space-between; align-items:center; margin-bottom:0.5rem; gap:0.25rem; }
     .cal-nav-btn {
         background:rgba(255,255,255,0.08); border:none; color:var(--text-primary);
