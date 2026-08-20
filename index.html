@@ -112,6 +112,7 @@
             <button id="club-history-tab-btn" class="tab-btn hidden" data-tab="tab-club-history" data-i18n="tab.club_history" style="background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(239, 68, 68, 0.15)); border-color: rgba(245, 158, 11, 0.3); color: #fbbf24;">📋 클럽별 정산이력</button>
             <button id="charts-tab-btn" class="tab-btn hidden" data-tab="tab-charts" data-i18n="tab.charts" style="background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(239, 68, 68, 0.15)); border-color: rgba(245, 158, 11, 0.3); color: #fbbf24;">📈 차트</button>
             <button id="admin-tab-btn" class="tab-btn hidden" data-tab="tab-admin" data-i18n="tab.admin" style="background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(239, 68, 68, 0.15)); border-color: rgba(245, 158, 11, 0.3); color: #fbbf24;">👑 대시보드 관리</button>
+            <button id="audit-log-tab-btn" class="tab-btn hidden" data-tab="tab-audit-log" style="background: linear-gradient(135deg, rgba(14, 165, 233, 0.14), rgba(99, 102, 241, 0.16)); border-color: rgba(56, 189, 248, 0.34); color: #7dd3fc;">📜 로그 기록</button>
         </nav>
         <!-- Tab Content 1: Settlement Calculator -->
         <div id="tab-settlement" class="tab-pane active">
@@ -730,6 +731,9 @@
                     <button type="button" class="admin-start-action" data-admin-action="charts">
                         <span class="admin-start-step">3</span><span><strong>정산 현황 확인</strong><small>이력과 차트에서 운영 현황을 봅니다</small></span><span class="admin-start-arrow">→</span>
                     </button>
+                    <button type="button" class="admin-start-action" data-admin-action="audit">
+                        <span class="admin-start-step">4</span><span><strong>로그 기록 확인</strong><small>누가 무엇을 추가·수정·삭제했는지 확인합니다</small></span><span class="admin-start-arrow">→</span>
+                    </button>
                 </div>
             </section>
             <div class="admin-stats-grid">
@@ -878,6 +882,50 @@
                             <!-- Populated dynamically -->
                         </tbody>
                     </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab Content 8: 관리자 감사 로그 -->
+        <div id="tab-audit-log" class="tab-pane hidden">
+            <div class="audit-log-heading">
+                <div>
+                    <span class="admin-start-guide-eyebrow">관리자 전용</span>
+                    <h2>📜 전체 로그 기록</h2>
+                    <p>앞으로 발생하는 추가·수정·삭제 작업을 최신순으로 표시합니다. 로그 자체는 화면에서 수정하거나 삭제할 수 없습니다.</p>
+                </div>
+                <button type="button" id="audit-log-refresh-btn" class="btn-secondary">↻ 새로고침</button>
+            </div>
+            <div class="card audit-log-card">
+                <div class="audit-log-filters">
+                    <div class="input-group">
+                        <label for="audit-log-month-filter">연·월</label>
+                        <input type="month" id="audit-log-month-filter">
+                    </div>
+                    <div class="input-group">
+                        <label for="audit-log-action-filter">작업</label>
+                        <select id="audit-log-action-filter">
+                            <option value="">전체 작업</option>
+                            <option value="CREATE">추가</option>
+                            <option value="UPDATE">수정</option>
+                            <option value="DELETE">삭제</option>
+                        </select>
+                    </div>
+                    <div class="input-group audit-log-search-group">
+                        <label for="audit-log-search-input">작업자·대상·내용 검색</label>
+                        <input type="search" id="audit-log-search-input" placeholder="예: 관리자, 탁구, 정산 이력">
+                    </div>
+                    <button type="button" id="audit-log-reset-filter-btn" class="btn-text">필터 초기화</button>
+                </div>
+                <div class="audit-log-summary-bar">
+                    <span id="audit-log-count">표시 0건</span>
+                    <span id="audit-log-load-status" role="status"></span>
+                </div>
+                <div id="audit-log-list" class="audit-log-list">
+                    <div class="empty-state"><span class="empty-icon">📜</span><p>로그 기록을 불러오는 중입니다.</p></div>
+                </div>
+                <div class="audit-log-more-wrap">
+                    <button type="button" id="audit-log-load-more-btn" class="btn-secondary hidden">이전 기록 더 보기</button>
                 </div>
             </div>
         </div>

@@ -1,8 +1,8 @@
 /**
  * Club Expense Settlement App - Main JavaScript Logic
  */
-const APP_VERSION      = '1.6.268';
-const APP_VERSION_DATE = '2026.07.27';
+const APP_VERSION      = '1.6.269';
+const APP_VERSION_DATE = '2026.08.20';
 
 // 인당 자부담 비용에 따라 강조 박스의 아이콘/색상을 전환 (100원 이상이면 🔥, 0이면 😊)
 function updatePerPersonSelfPayIcon(perPersonSelfPay) {
@@ -356,6 +356,73 @@ const AppState = {
     isLoggedIn: false,
     currentPin: null,
     firebaseDb: firebaseDb,
+
+    // 감사 로그는 공유 데이터 변경의 원인 추적용이며 auditLogs/{pushKey}에 추가 전용으로 기록한다.
+    // 사진·영수증 원문이나 비밀값은 저장하지 않고, 화면에서 식별 가능한 요약과 숫자 변경값만 남긴다.
+    getAuditActor(actorOverride = null) {
+        const pin = String(actorOverride?.pin || this.currentPin || 'offline');
+        const name = String(actorOverride?.name || this.userName || (pin === '000000' ? '관리자' : '오프라인 사용자'));
+        const role = actorOverride?.role || (pin === '000000' ? '관리자' : (pin === '002531' ? '개발자' : (pin === 'offline' ? '오프라인' : '일반 회원')));
+        return { pin, name, role };
+    },
+
+    buildAuditEntry(event = {}, actorOverride = null) {
+        const actor = this.getAuditActor(actorOverride);
+        const cleanText = (value, max = 500) => String(value ?? '').replace(/\s+/g, ' ').trim().slice(0, max);
+        const details = {};
+        Object.entries(event.details || {}).slice(0, 30).forEach(([key, value]) => {
+            if (value === undefined) return;
+            const safeKey = cleanText(key, 80);
+            if (!safeKey || /password|secret|token|receipt|photo|image/i.test(safeKey)) return;
+            if (value === null || typeof value === 'number' || typeof value === 'boolean') {
+                details[safeKey] = value;
+            } else {
+                details[safeKey] = cleanText(value, 500);
+            }
+        });
+        return {
+            timestamp: (typeof firebase !== 'undefined' && firebase.database?.ServerValue?.TIMESTAMP) || Date.now(),
+            clientTimestamp: Date.now(),
+            actorPin: actor.pin,
+            actorName: cleanText(actor.name, 100),
+            actorRole: cleanText(actor.role, 30),
+            action: cleanText(event.action || 'UPDATE', 20).toUpperCase(),
+            targetType: cleanText(event.targetType || '기타', 80),
+            targetId: cleanText(event.targetId || '', 160),
+            targetLabel: cleanText(event.targetLabel || '', 200),
+            summary: cleanText(event.summary || '', 500),
+            clubId: cleanText(event.clubId !== undefined ? event.clubId : (this.clubId || ''), 160),
+            clubName: cleanText(event.clubName !== undefined ? event.clubName : (this.clubName || ''), 160),
+            details
+        };
+    },
+
+    appendAuditUpdate(updates, event, actorOverride = null) {
+        if (!this.firebaseDb || !updates || !event) return null;
+        const logKey = this.firebaseDb.ref('auditLogs').push().key;
+        if (!logKey) return null;
+        updates[`auditLogs/${logKey}`] = this.buildAuditEntry(event, actorOverride);
+        return logKey;
+    },
+
+    writeAuditLog(event, actorOverride = null) {
+        if (!this.firebaseDb || !event) return Promise.resolve(false);
+        const logKey = this.firebaseDb.ref('auditLogs').push().key;
+        if (!logKey) return Promise.resolve(false);
+        return this.firebaseDb.ref(`auditLogs/${logKey}`).set(this.buildAuditEntry(event, actorOverride))
+            .then(() => true)
+            .catch(err => {
+                console.error('감사 로그 저장 실패:', err);
+                return false;
+            });
+    },
+
+    writeAuditAfterSave(savePromise, event) {
+        Promise.resolve(savePromise).then(synced => {
+            if (synced) this.writeAuditLog(event);
+        }).catch(err => console.error('감사 로그 연결 실패:', err));
+        return savePromise;
+    },
 
     memberCount: 0,
     previousPrizeTotal: 0,
@@ -892,6 +959,13 @@ const AppState = {
             });
 
             if (Object.keys(updates).length > 0) {
+                this.appendAuditUpdate(updates, {
+                    action: 'DELETE',
+                    targetType: '만료 첨부',
+                    targetLabel: '보존기간 만료 사진·영수증',
+                    summary: `보존기간이 지난 첨부 자동 정리: 공유 ${cleanedGlobal}건, 개인 ${cleanedPersonal}건`,
+                    details: { 공유이력정리수: cleanedGlobal, 개인이력정리수: cleanedPersonal }
+                }, { pin: 'system', name: '시스템 자동 정리', role: '시스템' });
                 await this.firebaseDb.ref().update(updates);
             }
             return { cleanedGlobal, cleanedPersonal };
@@ -1115,16 +1189,33 @@ const AppState = {
         }, err => console.error('globalSettings 로딩 실패:', err));
     },
 
-    saveGlobalRules() {
-        if (!this.firebaseDb) return;
-        this.firebaseDb.ref('globalSettings/rules').set({ ...this.rules })
-            .catch(err => console.error('globalSettings 저장 실패:', err));
+    saveGlobalRules(auditEvent = null) {
+        if (!this.firebaseDb) return Promise.resolve(false);
+        const updates = { 'globalSettings/rules': { ...this.rules } };
+        if (auditEvent) this.appendAuditUpdate(updates, auditEvent);
+        return this.firebaseDb.ref().update(updates)
+            .then(() => true)
+            .catch(err => {
+                console.error('globalSettings 저장 실패:', err);
+                return false;
+            });
     },
 
     saveClubTotalBudget(value) {
+        const previousValue = this.clubTotalBudget || 0;
         this.clubTotalBudget = Math.max(0, value || 0);
+        if (previousValue === this.clubTotalBudget) return Promise.resolve(true);
         if (this.firebaseDb) {
-            return this.firebaseDb.ref('clubTotalBudget').set(this.clubTotalBudget)
+            const updates = { clubTotalBudget: this.clubTotalBudget };
+            this.appendAuditUpdate(updates, {
+                action: 'UPDATE',
+                targetType: '전체 클럽 예산',
+                targetLabel: '올해 사용 가능한 총 클럽비용',
+                summary: `전체 클럽 예산을 ${SettlementCalculator.formatCurrency(previousValue)}에서 ${SettlementCalculator.formatCurrency(this.clubTotalBudget)}으로 수정`,
+                details: { 이전금액: previousValue, 변경금액: this.clubTotalBudget }
+            });
+            return this.firebaseDb.ref().update(updates)
+                .then(() => true)
                 .catch(err => {
                     console.error("총 클럽비용 저장 실패:", err);
                     throw err;
@@ -1134,7 +1225,9 @@ const AppState = {
     },
 
     addOrUpdateClub(clubId, name, budget, priorUsed, prizeUsed) {
+        const hadExisting = !!this.clubRegistry[clubId];
         const existing = this.clubRegistry[clubId] || {};
+        const previous = { ...existing };
         this.clubRegistry[clubId] = {
             name: name.trim(),
             budget: Math.max(0, budget || 0),
@@ -1145,23 +1238,76 @@ const AppState = {
             allowOverLimitSupport: existing.allowOverLimitSupport || false
         };
         if (this.firebaseDb) {
-            this.firebaseDb.ref(`clubRegistry/${clubId}`).set(this.clubRegistry[clubId]).catch(err => console.error("클럽 저장 실패:", err));
+            const updates = { [`clubRegistry/${clubId}`]: this.clubRegistry[clubId] };
+            const changes = [];
+            if (hadExisting && previous.name !== this.clubRegistry[clubId].name) changes.push(`이름 ${previous.name || '-'} → ${this.clubRegistry[clubId].name}`);
+            if (hadExisting && (previous.budget || 0) !== this.clubRegistry[clubId].budget) changes.push(`예산 ${SettlementCalculator.formatCurrency(previous.budget || 0)} → ${SettlementCalculator.formatCurrency(this.clubRegistry[clubId].budget)}`);
+            if (hadExisting && (previous.priorUsed || 0) !== this.clubRegistry[clubId].priorUsed) changes.push(`기존 사용액 ${SettlementCalculator.formatCurrency(previous.priorUsed || 0)} → ${SettlementCalculator.formatCurrency(this.clubRegistry[clubId].priorUsed)}`);
+            this.appendAuditUpdate(updates, {
+                action: hadExisting ? 'UPDATE' : 'CREATE',
+                targetType: '클럽',
+                targetId: clubId,
+                targetLabel: this.clubRegistry[clubId].name,
+                summary: hadExisting
+                    ? `클럽 '${this.clubRegistry[clubId].name}' 수정${changes.length ? `: ${changes.join(', ')}` : ''}`
+                    : `클럽 '${this.clubRegistry[clubId].name}' 추가`,
+                clubId,
+                clubName: this.clubRegistry[clubId].name,
+                details: {
+                    이전이름: previous.name,
+                    변경이름: this.clubRegistry[clubId].name,
+                    이전예산: previous.budget || 0,
+                    변경예산: this.clubRegistry[clubId].budget,
+                    이전기존사용액: previous.priorUsed || 0,
+                    변경기존사용액: this.clubRegistry[clubId].priorUsed
+                }
+            });
+            this.firebaseDb.ref().update(updates).catch(err => console.error("클럽 저장 실패:", err));
         }
     },
 
     // 관리자 전용: 이 클럽의 인당 85,000원 초과 지원 승인 여부 토글 (다른 필드는 건드리지 않음)
     setClubOverLimitApproval(clubId, allowed) {
         if (!this.clubRegistry[clubId]) return;
+        const clubName = this.clubRegistry[clubId].name || '';
         this.clubRegistry[clubId].allowOverLimitSupport = !!allowed;
         if (this.firebaseDb) {
-            this.firebaseDb.ref(`clubRegistry/${clubId}`).update({ allowOverLimitSupport: !!allowed }).catch(err => console.error("승인 설정 저장 실패:", err));
+            const updates = { [`clubRegistry/${clubId}/allowOverLimitSupport`]: !!allowed };
+            this.appendAuditUpdate(updates, {
+                action: 'UPDATE',
+                targetType: '클럽 초과 지원 승인',
+                targetId: clubId,
+                targetLabel: clubName,
+                summary: `클럽 '${clubName}'의 85,000원 초과 지원을 ${allowed ? '승인' : '승인 취소'}`,
+                clubId,
+                clubName,
+                details: { 승인여부: !!allowed }
+            });
+            this.firebaseDb.ref().update(updates).catch(err => console.error("승인 설정 저장 실패:", err));
         }
     },
 
     deleteClub(clubId) {
+        const deletedClub = this.clubRegistry[clubId] ? { ...this.clubRegistry[clubId] } : null;
         delete this.clubRegistry[clubId];
         if (this.firebaseDb) {
-            this.firebaseDb.ref(`clubRegistry/${clubId}`).remove().catch(err => console.error("클럽 삭제 실패:", err));
+            const updates = { [`clubRegistry/${clubId}`]: null };
+            this.appendAuditUpdate(updates, {
+                action: 'DELETE',
+                targetType: '클럽',
+                targetId: clubId,
+                targetLabel: deletedClub?.name || '',
+                summary: `클럽 '${deletedClub?.name || clubId}' 삭제`,
+                clubId,
+                clubName: deletedClub?.name || '',
+                details: {
+                    배정예산: deletedClub?.budget || 0,
+                    기존사용액: deletedClub?.priorUsed || 0,
+                    사용지원금: deletedClub?.usedBudget || 0,
+                    상품비사용액: deletedClub?.prizeUsed || 0
+                }
+            });
+            this.firebaseDb.ref().update(updates).catch(err => console.error("클럽 삭제 실패:", err));
         }
     },
 
@@ -1187,7 +1333,16 @@ const AppState = {
         }
         // 단 한 번의 update() 호출로 모든 중복 삭제 → 리스너 재호출 1회로 제한 (깜빡임 방지)
         if (Object.keys(toRemove).length > 0 && this.firebaseDb) {
-            this.firebaseDb.ref('clubRegistry').update(toRemove).catch(() => {});
+            const rootUpdates = {};
+            Object.entries(toRemove).forEach(([id, value]) => { rootUpdates[`clubRegistry/${id}`] = value; });
+            this.appendAuditUpdate(rootUpdates, {
+                action: 'DELETE',
+                targetType: '중복 클럽 자동 정리',
+                targetLabel: `중복 클럽 ${Object.keys(toRemove).length}개`,
+                summary: `시스템이 중복 클럽 ${Object.keys(toRemove).length}개 자동 삭제`,
+                details: { 삭제클럽수: Object.keys(toRemove).length }
+            }, { pin: 'system', name: '시스템 자동 정리', role: '시스템' });
+            this.firebaseDb.ref().update(rootUpdates).catch(() => {});
         }
     },
 
@@ -1338,7 +1493,18 @@ const AppState = {
                 if (historyPrizeTotal > registryPrizeUsed) {
                     registryClub.prizeUsed = historyPrizeTotal;
                     this.previousPrizeTotal = historyPrizeTotal;
-                    this.firebaseDb.ref(`clubRegistry/${registryClubId}`).update({ prizeUsed: historyPrizeTotal })
+                    const recoveryUpdates = { [`clubRegistry/${registryClubId}/prizeUsed`]: historyPrizeTotal };
+                    this.appendAuditUpdate(recoveryUpdates, {
+                        action: 'UPDATE',
+                        targetType: '상품비 누적 자동 복구',
+                        targetId: registryClubId,
+                        targetLabel: registryClub.name || currentClubName,
+                        summary: `시스템이 '${registryClub.name || currentClubName}' 상품비 누적액 자동 복구`,
+                        clubId: registryClubId,
+                        clubName: registryClub.name || currentClubName,
+                        details: { 이전누적액: registryPrizeUsed, 복구누적액: historyPrizeTotal }
+                    }, { pin: 'system', name: '시스템 자동 복구', role: '시스템' });
+                    this.firebaseDb.ref().update(recoveryUpdates)
                         .catch(err => console.error('상품비 누적액 자동 복구 실패:', err));
                 } else {
                     this.previousPrizeTotal = registryPrizeUsed;
@@ -1364,6 +1530,10 @@ const AppState = {
 
     addExpense(description, amount, category, corpChecked, personalChecked, corporateAmountInput) {
         let cardType, corpAmount, personalAmount, receiptImage, corporateReceiptImage, personalReceiptImage;
+        const editingItemId = this.editingItemId;
+        const previousItem = editingItemId !== null
+            ? this.expenseItems.find(item => item.id === editingItemId)
+            : null;
 
         if (corpChecked) {
             corpAmount = Math.min(Math.max(corporateAmountInput || 0, 0), amount);
@@ -1430,25 +1600,68 @@ const AppState = {
         this.selfPayManuallyOverridden = false;
         this.cancelEdit();
         this.render();
-        return this.save();
+        const savedItem = editingItemId !== null
+            ? this.expenseItems.find(item => item.id === editingItemId)
+            : this.expenseItems[this.expenseItems.length - 1];
+        const savePromise = this.save();
+        return this.writeAuditAfterSave(savePromise, {
+            action: previousItem ? 'UPDATE' : 'CREATE',
+            targetType: '비용 항목',
+            targetId: savedItem?.id || editingItemId || '',
+            targetLabel: description,
+            summary: previousItem
+                ? `비용 항목 '${previousItem.description}'을(를) '${description}'으로 수정`
+                : `비용 항목 '${description}' 추가`,
+            details: {
+                이전금액: previousItem?.amount,
+                변경금액: amount,
+                이전구분: previousItem?.category,
+                변경구분: category,
+                결제방식: cardType,
+                법인카드금액: corpAmount || 0,
+                개인카드금액: personalAmount || 0
+            }
+        });
     },
 
     deleteExpense(id) {
+        const deletedItem = this.expenseItems.find(item => item.id === id);
         this.expenseItems = this.expenseItems.filter(item => item.id !== id);
         this.selfPayManuallyOverridden = false;
         if (this.editingItemId === id) {
             this.cancelEdit();
         }
-        this.save();
+        const savePromise = this.save();
+        this.writeAuditAfterSave(savePromise, {
+            action: 'DELETE',
+            targetType: '비용 항목',
+            targetId: id,
+            targetLabel: deletedItem?.description || '',
+            summary: `비용 항목 '${deletedItem?.description || id}' 삭제`,
+            details: {
+                금액: deletedItem?.amount,
+                구분: deletedItem?.category,
+                결제방식: deletedItem?.cardType
+            }
+        });
         this.render();
     },
 
     clearAll() {
+        const expenseCount = this.expenseItems.length;
+        const attendeeCount = this.attendees.length;
         this.expenseItems = [];
         this.attendees = [];
         this.memberCount = 0;
         this.cancelEdit();
-        this.save();
+        const savePromise = this.save();
+        this.writeAuditAfterSave(savePromise, {
+            action: 'DELETE',
+            targetType: '현재 정산',
+            targetLabel: this.clubName || '현재 정산',
+            summary: '현재 정산의 비용 항목과 참석자 전체 삭제',
+            details: { 삭제비용항목수: expenseCount, 삭제참석자수: attendeeCount }
+        });
         this.render();
     },
 
@@ -1539,6 +1752,10 @@ const AppState = {
     },
 
     addAttendee(name, employeeId) {
+        const editingAttendeeId = this.editingAttendeeId;
+        const previousAttendee = editingAttendeeId !== null
+            ? this.attendees.find(attendee => attendee.id === editingAttendeeId)
+            : null;
         const normalizedEmployeeId = String(employeeId || '').trim();
         const duplicateAttendee = normalizedEmployeeId
             ? this.attendees.find(attendee =>
@@ -1587,7 +1804,17 @@ const AppState = {
         this.memberCount = this.attendees.length;
 
         this.cancelEditAttendee();
-        this.save();
+        const savePromise = this.save();
+        this.writeAuditAfterSave(savePromise, {
+            action: previousAttendee ? 'UPDATE' : 'CREATE',
+            targetType: '현재 참석자',
+            targetId: editingAttendeeId || this.attendees[this.attendees.length - 1]?.id || '',
+            targetLabel: `${name} (${employeeId})`,
+            summary: previousAttendee
+                ? `현재 참석자 '${previousAttendee.name} (${previousAttendee.employeeId})'을(를) '${name} (${employeeId})'으로 수정`
+                : `현재 참석자 '${name} (${employeeId})' 추가`,
+            details: { 이전이름: previousAttendee?.name, 이전사번: previousAttendee?.employeeId, 변경이름: name, 변경사번: employeeId }
+        });
         this.render();
         this.updateDatalist();
         return true;
@@ -1619,20 +1846,37 @@ const AppState = {
     },
 
     deleteAttendee(id) {
+        const deletedAttendee = this.attendees.find(att => att.id === id);
         this.attendees = this.attendees.filter(att => att.id !== id);
         if (this.editingAttendeeId === id) {
             this.cancelEditAttendee();
         }
         this.memberCount = this.attendees.length;
-        this.save();
+        const savePromise = this.save();
+        this.writeAuditAfterSave(savePromise, {
+            action: 'DELETE',
+            targetType: '현재 참석자',
+            targetId: id,
+            targetLabel: deletedAttendee ? `${deletedAttendee.name} (${deletedAttendee.employeeId})` : '',
+            summary: `현재 참석자 '${deletedAttendee?.name || id}' 삭제`,
+            details: { 이름: deletedAttendee?.name, 사번: deletedAttendee?.employeeId }
+        });
         this.render();
     },
 
     clearAttendees() {
+        const deletedCount = this.attendees.length;
         this.attendees = [];
         this.cancelEditAttendee();
         this.memberCount = 0;
-        this.save();
+        const savePromise = this.save();
+        this.writeAuditAfterSave(savePromise, {
+            action: 'DELETE',
+            targetType: '현재 참석자',
+            targetLabel: this.clubName || '현재 참석자',
+            summary: `현재 참석자 ${deletedCount}명 전체 삭제`,
+            details: { 삭제인원수: deletedCount }
+        });
         this.render();
     },
 
@@ -1674,6 +1918,7 @@ const AppState = {
         }
         try {
             const entry = this.directory[name];
+            const deletedId = id || (typeof entry === 'object' ? entry?.id : entry);
             if (id && typeof entry === 'object' && Array.isArray(entry.ids) && entry.ids.length > 1) {
                 // 동명이인 중 특정 사번만 제거
                 entry.ids = entry.ids.filter(i => String(i) !== String(id));
@@ -1682,7 +1927,15 @@ const AppState = {
                 delete this.directory[name];
                 if (this.editingDirName === name) this.cancelEditDirectory();
             }
-            this.save();
+            const savePromise = this.save();
+            this.writeAuditAfterSave(savePromise, {
+                action: 'DELETE',
+                targetType: '전사원 명부',
+                targetId: deletedId || '',
+                targetLabel: `${name} (${deletedId || '-'})`,
+                summary: `전사원 명부에서 '${name} (${deletedId || '-'})' 삭제`,
+                details: { 이름: name, 사번: deletedId || '' }
+            });
             this.render();
             this.updateDatalist();
         } catch (error) {
@@ -1691,6 +1944,9 @@ const AppState = {
     },
 
     addDirectoryEntry(name, employeeId) {
+        const previousName = this.editingDirName;
+        const previousId = this.editingDirId;
+        const isEditing = previousName !== null;
         const eid = String(employeeId);
         if (this.editingDirName !== null) {
             const currentData = this.directory[this.editingDirName];
@@ -1734,7 +1990,17 @@ const AppState = {
             }
         }
         this.cancelEditDirectory();
-        this.save();
+        const savePromise = this.save();
+        this.writeAuditAfterSave(savePromise, {
+            action: isEditing ? 'UPDATE' : 'CREATE',
+            targetType: '전사원 명부',
+            targetId: eid,
+            targetLabel: `${name} (${eid})`,
+            summary: isEditing
+                ? `전사원 명부 '${previousName} (${previousId || '-'})'을(를) '${name} (${eid})'으로 수정`
+                : `전사원 명부에 '${name} (${eid})' 추가`,
+            details: { 이전이름: previousName, 이전사번: previousId, 변경이름: name, 변경사번: eid }
+        });
         this.render();
         this.updateDatalist();
     },
@@ -1779,20 +2045,71 @@ const AppState = {
     },
 
     updateRules(newRules) {
+        const previousRules = { ...this.rules };
         this.rules = { ...newRules };
         this.save();
-        this.saveGlobalRules();
+        this.saveGlobalRules({
+            action: 'UPDATE',
+            targetType: '정산 기준',
+            targetLabel: '전체 클럽 공통 정산 기준',
+            summary: '정산 구간·비율·상품비·시설비 한도 수정',
+            details: {
+                이전가한도: previousRules.limit1,
+                변경가한도: newRules.limit1,
+                이전나한도: previousRules.limit2,
+                변경나한도: newRules.limit2,
+                이전나비율: previousRules.rate2,
+                변경나비율: newRules.rate2,
+                이전다한도: previousRules.limit3,
+                변경다한도: newRules.limit3,
+                이전다비율: previousRules.rate3,
+                변경다비율: newRules.rate3,
+                이전라공제액: previousRules.deduction4,
+                변경라공제액: newRules.deduction4,
+                이전상품비한도: previousRules.prizeLimit,
+                변경상품비한도: newRules.prizeLimit,
+                이전시설비한도: previousRules.facilityLimit,
+                변경시설비한도: newRules.facilityLimit
+            }
+        });
         this.render();
     },
 
     resetRules() {
+        const previousRules = { ...this.rules };
         this.rules = { ...DefaultRules };
         this.save();
-        this.saveGlobalRules();
+        this.saveGlobalRules({
+            action: 'UPDATE',
+            targetType: '정산 기준',
+            targetLabel: '전체 클럽 공통 정산 기준',
+            summary: '정산 구간·비율·상품비·시설비 한도를 기본값으로 복원',
+            details: {
+                이전가한도: previousRules.limit1,
+                기본가한도: DefaultRules.limit1,
+                이전나한도: previousRules.limit2,
+                기본나한도: DefaultRules.limit2,
+                이전나비율: previousRules.rate2,
+                기본나비율: DefaultRules.rate2,
+                이전다한도: previousRules.limit3,
+                기본다한도: DefaultRules.limit3,
+                이전다비율: previousRules.rate3,
+                기본다비율: DefaultRules.rate3,
+                이전라공제액: previousRules.deduction4,
+                기본라공제액: DefaultRules.deduction4,
+                이전상품비한도: previousRules.prizeLimit,
+                기본상품비한도: DefaultRules.prizeLimit,
+                이전시설비한도: previousRules.facilityLimit,
+                기본시설비한도: DefaultRules.facilityLimit
+            }
+        });
         this.render();
     },
 
-    clearClubData() {
+    clearClubData(previousClub = null) {
+        const deletedExpenseCount = this.expenseItems.length;
+        const deletedAttendeeCount = this.attendees.length;
+        const deletedPhotoCount = this.eventPhotos.length;
         this.expenseItems = [];
         this.attendees = [];
         this.memberCount = 0;
@@ -1808,7 +2125,22 @@ const AppState = {
         this.selfPayManuallyOverridden = false;
         this.editingItemId = null;
         this.editingAttendeeId = null;
-        this.save();
+        const savePromise = this.save();
+        if (deletedExpenseCount || deletedAttendeeCount || deletedPhotoCount) {
+            this.writeAuditAfterSave(savePromise, {
+                action: 'DELETE',
+                targetType: '클럽 전환 전 임시 정산',
+                targetLabel: previousClub?.name || '이전 클럽 임시 정산',
+                summary: `클럽 전환으로 '${previousClub?.name || '이전 클럽'}'의 미확정 정산 내용 삭제`,
+                clubId: previousClub?.id || '',
+                clubName: previousClub?.name || '',
+                details: {
+                    삭제비용항목수: deletedExpenseCount,
+                    삭제참석자수: deletedAttendeeCount,
+                    삭제행사사진수: deletedPhotoCount
+                }
+            });
+        }
         this.render();
 
         const memberInput = document.getElementById('member-count-input');
@@ -2053,14 +2385,23 @@ const AppState = {
                         const index = this.expenseItems.findIndex(item => item.id === itemId);
                         if (index !== -1) {
                             const type = button.getAttribute('data-type');
+                            const item = this.expenseItems[index];
                             if (type === 'corporate') {
-                                this.expenseItems[index].corporateReceiptImage = null;
+                                item.corporateReceiptImage = null;
                             } else if (type === 'personal') {
-                                this.expenseItems[index].personalReceiptImage = null;
+                                item.personalReceiptImage = null;
                             } else {
-                                this.expenseItems[index].receiptImage = null;
+                                item.receiptImage = null;
                             }
-                            this.save();
+                            const savePromise = this.save();
+                            this.writeAuditAfterSave(savePromise, {
+                                action: 'DELETE',
+                                targetType: '비용 항목 영수증',
+                                targetId: itemId,
+                                targetLabel: item.description,
+                                summary: `비용 항목 '${item.description}'의 ${type === 'corporate' ? '법인카드' : (type === 'personal' ? '개인카드' : '')} 영수증 삭제`,
+                                details: { 비용항목: item.description, 영수증구분: type || '단일' }
+                            });
                             this.render();
                         }
                     }
@@ -2240,11 +2581,20 @@ const AppState = {
                             const curId = typeof cur === 'object' ? cur.id : cur;
                             const curIds = typeof cur === 'object' && Array.isArray(cur.ids) ? cur.ids : [curId];
                             const curCounts = (typeof cur === 'object' && cur.counts) ? Object.assign({}, cur.counts) : {};
+                            const previousCount = dirId ? (curCounts[dirId] || 0) : 0;
                             if (dirId) curCounts[dirId] = newCount;
                             // 전체 count는 사번별 counts 합산으로 갱신
                             const totalCount = Object.values(curCounts).reduce((s, v) => s + v, 0);
                             this.directory[dirName] = { id: curId, count: totalCount, ids: curIds, counts: curCounts };
-                            this.save();
+                            const savePromise = this.save();
+                            this.writeAuditAfterSave(savePromise, {
+                                action: 'UPDATE',
+                                targetType: '전사원 명부 참석 횟수',
+                                targetId: dirId || '',
+                                targetLabel: `${dirName} (${dirId || '-'})`,
+                                summary: `전사원 명부 '${dirName} (${dirId || '-'})'의 올해 누적 참석 횟수 수정`,
+                                details: { 이전횟수: previousCount, 변경횟수: newCount }
+                            });
                         }
                     });
                 });
@@ -3103,6 +3453,29 @@ const AppState = {
                         firebaseUpdates[`clubRegistry/${clubId}/prizeUsed`] = firebase.database.ServerValue.increment(deltaPrize);
                     }
                 }
+                this.appendAuditUpdate(firebaseUpdates, {
+                    action: 'UPDATE',
+                    targetType: '정산 이력',
+                    targetId: id,
+                    targetLabel: `${merged.clubName || '기본 클럽'} ${merged.settlementDate || ''}`.trim(),
+                    summary: `정산 이력 수정: ${oldEntry.clubName || '기본 클럽'} ${oldEntry.settlementDate || ''}`.trim(),
+                    clubId,
+                    clubName: merged.clubName || oldEntry.clubName || '',
+                    details: {
+                        작성자: `${oldEntry.creatorName || '-'} (${oldEntry.creatorPin || '-'})`,
+                        이전정산일: oldEntry.settlementDate || '',
+                        변경정산일: merged.settlementDate || '',
+                        이전총비용: oldEntry.totalCost || 0,
+                        변경총비용: merged.totalCost || 0,
+                        이전지원금: oldEntry.finalSupportAmount || 0,
+                        변경지원금: merged.finalSupportAmount || 0,
+                        이전자부담: oldEntry.totalSelfPay || 0,
+                        변경자부담: merged.totalSelfPay || 0,
+                        지원금차액: deltaSupport,
+                        상품비차액: deltaPrize,
+                        참석인원: merged.memberCount || 0
+                    }
+                });
                 await this.firebaseDb.ref().update(firebaseUpdates);
                 if (club) {
                     try {
@@ -3273,6 +3646,26 @@ const AppState = {
                     // 85,000원 초과 승인은 정산 1건마다 무조건 해제한다.
                     firebaseUpdates[`clubRegistry/${this.clubId}/allowOverLimitSupport`] = false;
                 }
+                this.appendAuditUpdate(firebaseUpdates, {
+                    action: 'CREATE',
+                    targetType: '정산 이력',
+                    targetId: newHistoryItem.id,
+                    targetLabel: `${newHistoryItem.clubName} ${newHistoryItem.settlementDate}`,
+                    summary: `정산 확정: ${newHistoryItem.clubName} ${newHistoryItem.settlementDate}`,
+                    clubId: newHistoryItem.clubId,
+                    clubName: newHistoryItem.clubName,
+                    details: {
+                        정산일: newHistoryItem.settlementDate,
+                        총비용: newHistoryItem.totalCost,
+                        지원금: newHistoryItem.finalSupportAmount,
+                        자부담: newHistoryItem.totalSelfPay,
+                        상품비: newHistoryItem.prizeCost || 0,
+                        참석인원: newHistoryItem.memberCount,
+                        비용항목수: newHistoryItem.expenseItems.length,
+                        행사사진수: newHistoryItem.eventPhotos.length,
+                        수동자부담수정: this.selfPayManuallyOverridden
+                    }
+                });
                 await this.firebaseDb.ref().update(firebaseUpdates);
                 if (registryClub) {
                     try {
@@ -3347,7 +3740,7 @@ const AppState = {
 
 // 현재 정산 세션(비용 항목/참석자/인원/상품비 누적 등)을 전부 초기화 — "정산 초기화" 버튼과
 // 정산 이력 수정 완료 후 공통으로 사용 (v1.6.229)
-function resetSettlementSession() {
+function resetSettlementSession(auditEvent = null) {
     AppState.expenseItems = [];
     AppState.attendees = [];
     AppState.memberCount = 0;
@@ -3370,8 +3763,10 @@ function resetSettlementSession() {
     const settleDateEl = document.getElementById('settlement-date-input');
     if (settleDateEl) settleDateEl.value = new Date().toISOString().slice(0, 10);
     if (typeof window._onSettleDateReset === 'function') window._onSettleDateReset();
-    AppState.save();
+    const savePromise = AppState.save();
+    if (auditEvent) AppState.writeAuditAfterSave(savePromise, auditEvent);
     AppState.render();
+    return savePromise;
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -3391,8 +3786,17 @@ document.addEventListener('DOMContentLoaded', () => {
             if (e.target === resetSessionModal) resetSessionModal.classList.add('hidden');
         });
         resetSessionConfirmBtn.addEventListener('click', () => {
+            const expenseCount = AppState.expenseItems.length;
+            const attendeeCount = AppState.attendees.length;
+            const photoCount = AppState.eventPhotos.length;
             resetSessionModal.classList.add('hidden');
-            resetSettlementSession();
+            resetSettlementSession({
+                action: 'DELETE',
+                targetType: '현재 정산 초기화',
+                targetLabel: AppState.clubName || '현재 정산',
+                summary: '사용자가 현재 정산 내용을 초기화',
+                details: { 삭제비용항목수: expenseCount, 삭제참석자수: attendeeCount, 삭제행사사진수: photoCount }
+            });
         });
     }
 
@@ -3493,6 +3897,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             if (newClubInputRow) newClubInputRow.classList.add('hidden');
             if (AppState.clubName !== clubNameInput.value) {
+                const previousClub = { id: AppState.clubId, name: AppState.clubName };
                 AppState.clubName = clubNameInput.value;
                 const selectedEntry = Object.entries(AppState.clubRegistry || {}).find(([, c]) => c.name === clubNameInput.value);
                 AppState.clubId = selectedEntry ? selectedEntry[0] : '';
@@ -3502,7 +3907,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (prizeInput) prizeInput.value = formatAmount(AppState.previousPrizeTotal);
                 AppState.usedBudget = 0;
                 AppState.clubHistory = [];
-                AppState.clearClubData();
+                AppState.clearClubData(previousClub);
             }
             AppState.syncBudgetFromClub(AppState.clubName);
             AppState.save();
@@ -3532,9 +3937,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 newClubId = 'club_' + Date.now();
                 AppState.addOrUpdateClub(newClubId, name, 0);
             }
+            const previousClub = { id: AppState.clubId, name: AppState.clubName };
             AppState.clubName = name;
             AppState.clubId = newClubId;
-            AppState.clearClubData();
+            AppState.clearClubData(previousClub);
             AppState.syncBudgetFromClub(name);
             AppState.save();
             newClubNameInput.value = '';
@@ -3652,6 +4058,135 @@ document.addEventListener('DOMContentLoaded', () => {
     // Initial Datalist rendering
     AppState.updateDatalist();
 
+    // ── 관리자 감사 로그 ────────────────────────────────────────────────
+    const AUDIT_LOG_PAGE_SIZE = 200;
+    let auditLogEntries = [];
+    let auditLogOldestKey = null;
+    let auditLogHasMore = true;
+    let auditLogLoading = false;
+
+    function getAuditLogDateParts(timestamp) {
+        const date = new Date(Number(timestamp) || 0);
+        if (!Number.isFinite(date.getTime())) return { date: '-', time: '-' };
+        return {
+            date: date.toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }),
+            time: date.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+        };
+    }
+
+    function renderAuditLogList() {
+        const listEl = document.getElementById('audit-log-list');
+        const countEl = document.getElementById('audit-log-count');
+        const loadMoreBtn = document.getElementById('audit-log-load-more-btn');
+        if (!listEl || !countEl) return;
+
+        const month = document.getElementById('audit-log-month-filter')?.value || '';
+        const action = document.getElementById('audit-log-action-filter')?.value || '';
+        const keyword = (document.getElementById('audit-log-search-input')?.value || '').trim().toLowerCase();
+        const filtered = auditLogEntries.filter(entry => {
+            const timestamp = Number(entry.timestamp || entry.clientTimestamp || 0);
+            if (month) {
+                const date = new Date(timestamp);
+                const entryMonth = Number.isFinite(date.getTime())
+                    ? `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+                    : '';
+                if (entryMonth !== month) return false;
+            }
+            if (action && entry.action !== action) return false;
+            if (keyword) {
+                const haystack = [entry.actorName, entry.actorPin, entry.actorRole, entry.targetType,
+                    entry.targetLabel, entry.summary, entry.clubName, ...Object.values(entry.details || {})]
+                    .join(' ').toLowerCase();
+                if (!haystack.includes(keyword)) return false;
+            }
+            return true;
+        });
+
+        countEl.textContent = `표시 ${filtered.length}건 · 불러온 기록 ${auditLogEntries.length}건`;
+        if (filtered.length === 0) {
+            listEl.innerHTML = `<div class="empty-state"><span class="empty-icon">📜</span><p>${auditLogEntries.length ? '조건에 맞는 로그 기록이 없습니다.' : '아직 저장된 로그 기록이 없습니다.'}</p></div>`;
+        } else {
+            const actionText = { CREATE: '추가', UPDATE: '수정', DELETE: '삭제' };
+            listEl.innerHTML = filtered.map(entry => {
+                const dateParts = getAuditLogDateParts(entry.timestamp || entry.clientTimestamp);
+                const detailPairs = Object.entries(entry.details || {});
+                const detailsHtml = detailPairs.length
+                    ? `<details class="audit-log-details"><summary>변경값 상세 보기</summary><dl>${detailPairs.map(([key, value]) => `<dt>${AppState.escapeHtml(key)}</dt><dd>${AppState.escapeHtml(value)}</dd>`).join('')}</dl></details>`
+                    : '';
+                const actionClass = String(entry.action || 'UPDATE').toLowerCase();
+                return `
+                    <article class="audit-log-item" data-log-key="${AppState.escapeHtml(entry.key || '')}">
+                        <div class="audit-log-time"><strong>${AppState.escapeHtml(dateParts.date)}</strong><small>${AppState.escapeHtml(dateParts.time)}</small></div>
+                        <div class="audit-log-actor"><strong>${AppState.escapeHtml(entry.actorName || '알 수 없음')}</strong><small>${AppState.escapeHtml(entry.actorRole || '')} · PIN ${AppState.escapeHtml(entry.actorPin || '-')}</small></div>
+                        <div><span class="audit-log-action-badge ${actionClass}">${AppState.escapeHtml(actionText[entry.action] || entry.action || '수정')}</span></div>
+                        <div class="audit-log-target">
+                            <strong>${AppState.escapeHtml(entry.summary || entry.targetLabel || '-')}</strong>
+                            <small>${AppState.escapeHtml(entry.targetType || '기타')}${entry.clubName ? ` · ${AppState.escapeHtml(entry.clubName)}` : ''}</small>
+                            ${detailsHtml}
+                        </div>
+                    </article>`;
+            }).join('');
+        }
+        if (loadMoreBtn) loadMoreBtn.classList.toggle('hidden', !auditLogHasMore || auditLogLoading);
+    }
+
+    async function loadAuditLogs({ reset = false } = {}) {
+        if (AppState.currentPin !== '000000' || !firebaseDb || auditLogLoading) return;
+        const statusEl = document.getElementById('audit-log-load-status');
+        const loadMoreBtn = document.getElementById('audit-log-load-more-btn');
+        auditLogLoading = true;
+        if (reset) {
+            auditLogEntries = [];
+            auditLogOldestKey = null;
+            auditLogHasMore = true;
+        }
+        if (statusEl) statusEl.textContent = '로그를 불러오는 중...';
+        if (loadMoreBtn) loadMoreBtn.classList.add('hidden');
+        try {
+            const pageLimit = auditLogOldestKey ? AUDIT_LOG_PAGE_SIZE + 1 : AUDIT_LOG_PAGE_SIZE;
+            let query = firebaseDb.ref('auditLogs').orderByKey();
+            if (auditLogOldestKey) query = query.endAt(auditLogOldestKey);
+            const snapshot = await query.limitToLast(pageLimit).once('value');
+            const page = [];
+            snapshot.forEach(child => page.push({ key: child.key, ...(child.val() || {}) }));
+            if (auditLogOldestKey && page.length && page[page.length - 1]?.key === auditLogOldestKey) {
+                page.pop();
+            } else if (auditLogOldestKey) {
+                const duplicateIndex = page.findIndex(entry => entry.key === auditLogOldestKey);
+                if (duplicateIndex >= 0) page.splice(duplicateIndex, 1);
+            }
+            const byKey = new Map(auditLogEntries.map(entry => [entry.key, entry]));
+            page.forEach(entry => byKey.set(entry.key, entry));
+            auditLogEntries = [...byKey.values()].sort((a, b) => String(b.key).localeCompare(String(a.key)));
+            auditLogOldestKey = auditLogEntries.length ? auditLogEntries[auditLogEntries.length - 1].key : null;
+            auditLogHasMore = page.length >= AUDIT_LOG_PAGE_SIZE;
+            if (statusEl) statusEl.textContent = auditLogHasMore ? '이전 기록을 더 불러올 수 있습니다.' : '가장 오래된 기록까지 불러왔습니다.';
+        } catch (err) {
+            console.error('감사 로그 조회 실패:', err);
+            if (statusEl) statusEl.textContent = '로그 조회에 실패했습니다. 네트워크를 확인해 주세요.';
+        } finally {
+            auditLogLoading = false;
+            renderAuditLogList();
+        }
+    }
+    window.loadAuditLogs = loadAuditLogs;
+
+    ['audit-log-month-filter', 'audit-log-action-filter', 'audit-log-search-input'].forEach(id => {
+        const element = document.getElementById(id);
+        if (element) element.addEventListener(id === 'audit-log-search-input' ? 'input' : 'change', renderAuditLogList);
+    });
+    document.getElementById('audit-log-refresh-btn')?.addEventListener('click', () => loadAuditLogs({ reset: true }));
+    document.getElementById('audit-log-load-more-btn')?.addEventListener('click', () => loadAuditLogs());
+    document.getElementById('audit-log-reset-filter-btn')?.addEventListener('click', () => {
+        const monthFilter = document.getElementById('audit-log-month-filter');
+        const actionFilter = document.getElementById('audit-log-action-filter');
+        const searchInput = document.getElementById('audit-log-search-input');
+        if (monthFilter) monthFilter.value = '';
+        if (actionFilter) actionFilter.value = '';
+        if (searchInput) searchInput.value = '';
+        renderAuditLogList();
+    });
+
     // Tab navigation switching logic
     document.querySelectorAll('.tab-nav .tab-btn').forEach(btn => {
         btn.addEventListener('click', () => {
@@ -3669,6 +4204,9 @@ document.addEventListener('DOMContentLoaded', () => {
             // 이력 탭 전환 시: 동일 클럽의 전체 사용자 이력 로드
             if (tabId === 'tab-history') {
                 AppState.loadClubHistory().then(() => AppState.render());
+            }
+            if (tabId === 'tab-audit-log') {
+                loadAuditLogs({ reset: true });
             }
             // 차트 탭 전환 시: 숨겨진 상태에서 렌더링 불가 → 탭이 보인 후 재렌더
             if (tabId === 'tab-charts' && typeof renderAllCharts === 'function') {
@@ -4611,6 +5149,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 AppState.render();
                 const synced = await AppState.save();
                 const totalBytes = accepted.reduce((sum, value) => sum + getMediaDataSize(value), 0);
+                if (synced) {
+                    AppState.writeAuditLog({
+                        action: 'CREATE',
+                        targetType: '행사 사진',
+                        targetLabel: AppState.clubName || '현재 정산',
+                        summary: `현재 정산에 행사 사진 ${accepted.length}장 추가`,
+                        details: { 추가사진수: accepted.length, 현재사진수: AppState.eventPhotos.length, 추가용량: formatMediaSize(totalBytes) }
+                    });
+                }
                 if (eventPhotoStatus) {
                     if (synced) {
                         eventPhotoStatus.textContent = `✓ ${accepted.length}장 서버 임시 저장 완료 (${formatMediaSize(totalBytes)})${rejected ? ` · ${rejected}장은 용량 초과로 제외` : ''}`;
@@ -4641,6 +5188,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 AppState.eventPhotos.splice(idx, 1);
                 AppState.render();
                 AppState.save().then(synced => {
+                    if (synced) {
+                        AppState.writeAuditLog({
+                            action: 'DELETE',
+                            targetType: '행사 사진',
+                            targetLabel: AppState.clubName || '현재 정산',
+                            summary: '현재 정산에서 행사 사진 1장 삭제',
+                            details: { 삭제위치: idx + 1, 남은사진수: AppState.eventPhotos.length }
+                        });
+                    }
                     if (!eventPhotoStatus) return;
                     eventPhotoStatus.textContent = synced
                         ? '✓ 행사 사진 삭제 내용이 서버에 반영됐습니다.'
@@ -4682,7 +5238,18 @@ document.addEventListener('DOMContentLoaded', () => {
             popupModal.classList.add('hidden');
             feedbackPopupShowing = false;
             if (firebaseDb) {
-                firebaseDb.ref(`requests/${req.key}/read`).set(true).then(() => renderFeedbackList());
+                const requestUpdates = { [`requests/${req.key}/read`]: true };
+                AppState.appendAuditUpdate(requestUpdates, {
+                    action: 'UPDATE',
+                    targetType: '요청사항',
+                    targetId: req.key,
+                    targetLabel: (req.message || '').slice(0, 80),
+                    summary: `요청사항 확인 완료 처리: ${(req.message || '').slice(0, 120)}`,
+                    details: { 요청자: req.userName || '', 요청자PIN: req.pin || '' }
+                });
+                firebaseDb.ref().update(requestUpdates).then(() => {
+                    renderFeedbackList();
+                });
             }
             const listOpenBtn = document.getElementById('feedback-list-open-btn');
             if (listOpenBtn) listOpenBtn.classList.remove('hidden');
@@ -4716,8 +5283,17 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             if (!confirm(`선택한 ${checked.length}건의 요청사항을 삭제하시겠습니까?`)) return;
             const updates = {};
-            checked.forEach(cb => { updates[cb.getAttribute('data-key')] = null; });
-            firebaseDb.ref('requests').update(updates).then(() => renderFeedbackList());
+            checked.forEach(cb => { updates[`requests/${cb.getAttribute('data-key')}`] = null; });
+            AppState.appendAuditUpdate(updates, {
+                action: 'DELETE',
+                targetType: '요청사항',
+                targetLabel: `선택 요청사항 ${checked.length}건`,
+                summary: `선택한 요청사항 ${checked.length}건 일괄 삭제`,
+                details: { 삭제건수: checked.length }
+            });
+            firebaseDb.ref().update(updates).then(() => {
+                renderFeedbackList();
+            });
         });
     }
 
@@ -4798,7 +5374,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 createdAt: Date.now()
             };
 
-            firebaseDb.ref('requests').push(requestData)
+            const requestKey = firebaseDb.ref('requests').push().key;
+            const requestUpdates = { [`requests/${requestKey}`]: requestData };
+            AppState.appendAuditUpdate(requestUpdates, {
+                action: 'CREATE',
+                targetType: '요청사항',
+                targetId: requestKey,
+                targetLabel: message.slice(0, 80),
+                summary: `요청사항 등록: ${message.slice(0, 120)}`,
+                details: { 첨부사진여부: !!feedbackPhotoData, 글자수: message.length }
+            });
+            firebaseDb.ref().update(requestUpdates)
                 .then(() => {
                     feedbackStatus.textContent = '요청이 전송되었습니다. 감사합니다!';
                     setTimeout(() => {
@@ -5028,7 +5614,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const clubNameWrapperEl = document.querySelector('.club-name-wrapper');
         if (clubNameWrapperEl) clubNameWrapperEl.classList.toggle('hidden', isAdmin);
 
-        const adminOnlyIds = ['admin-tab-btn', 'club-history-tab-btn', 'charts-tab-btn'];
+        const adminOnlyIds = ['admin-tab-btn', 'club-history-tab-btn', 'charts-tab-btn', 'audit-log-tab-btn'];
         const memberOnlyIds = ['settlement-tab-btn', 'attendees-tab-btn', 'history-tab-btn'];
         adminOnlyIds.forEach(id => {
             const el = document.getElementById(id);
@@ -5153,6 +5739,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 변경이력 모달
     const CHANGELOG = [
+        { ver: '1.6.269', date: '2026.08.20', items: ['사용자·개발자·관리자의 주요 추가·수정·삭제 작업과 시스템 자동 복구를 Firebase 감사 로그에 기록', '관리자 전용 로그 기록 탭에서 날짜·작업자·권한·대상·변경값 조회 및 연월·작업·검색 필터 제공'] },
         { ver: '1.6.268', date: '2026.07.27', items: ['현재 클럽별 사용 요약으로 대체되어 실행되지 않던 구형 관리자 정산 이력 렌더링 코드 제거', '계산·데이터 출처 명세를 현재 실제 자부담 및 예산 산정 방식에 맞게 정비'] },
         { ver: '1.6.267', date: '2026.07.22', items: ['관리자 전체 사용 요약에서 선택한 이력 원본을 수정 모드 동안 보관해 날짜·금액 수정 저장 오류 해결'] },
         { ver: '1.6.266', date: '2026.07.22', items: ['관리자 클럽별 정산 사용 요약의 각 행사 행에 삭제 버튼 복원', '정산 날짜 선택 시 같은 클럽의 동일 날짜 이력을 즉시 안내(수정 중인 이력 자신은 제외)'] },
@@ -5413,10 +6000,19 @@ document.addEventListener('DOMContentLoaded', () => {
                 regError.classList.remove('hidden');
             } else {
                 // Register User
-                firebaseDb.ref(`users/${pin}`).set({
-                    name: name,
-                    registeredAt: Date.now()
-                }).then(() => {
+                const registeredAt = Date.now();
+                const registrationUpdates = {
+                    [`users/${pin}`]: { name, registeredAt }
+                };
+                AppState.appendAuditUpdate(registrationUpdates, {
+                    action: 'CREATE',
+                    targetType: '회원',
+                    targetId: pin,
+                    targetLabel: `${name} (${pin})`,
+                    summary: `신규 회원 '${name} (${pin})' 가입`,
+                    details: { 이름: name, PIN: pin }
+                }, { pin, name, role: '일반 회원' });
+                firebaseDb.ref().update(registrationUpdates).then(() => {
                     alert(`${name}${t('alert.register_success')}`);
                     
                     // Automatically log in
@@ -5481,21 +6077,35 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!newName) { errEl.textContent = '이름을 입력해주세요.'; errEl.style.display = 'block'; return; }
             if (!/^\d{6}$/.test(newPin)) { errEl.textContent = t('alert.pin_digit_required'); errEl.style.display = 'block'; return; }
             close();
+            const auditEvent = {
+                action: 'UPDATE',
+                targetType: '회원',
+                targetId: newPin,
+                targetLabel: `${newName} (${newPin})`,
+                summary: `회원 정보 수정: '${currentName} (${oldPin})' → '${newName} (${newPin})'`,
+                details: { 이전이름: currentName, 변경이름: newName, 이전PIN: oldPin, 변경PIN: newPin }
+            };
             firebaseDb.ref(`users/${oldPin}`).once('value').then(snap => {
                 const userData = snap.val() || {};
                 userData.name = newName;
                 if (newPin === oldPin) {
-                    return firebaseDb.ref(`users/${oldPin}`).update({ name: userData.name });
+                    const updates = { [`users/${oldPin}/name`]: userData.name };
+                    AppState.appendAuditUpdate(updates, auditEvent);
+                    return firebaseDb.ref().update(updates);
                 }
                 return firebaseDb.ref(`users/${newPin}`).once('value').then(existing => {
                     if (existing.exists()) { alert(t('alert.pin_already_used')); return Promise.reject(new Error('duplicate-pin')); }
                     return firebaseDb.ref(`settlements/${oldPin}`).once('value').then(settlementSnap => {
-                        const tasks = [firebaseDb.ref(`users/${newPin}`).set(userData), firebaseDb.ref(`users/${oldPin}`).remove()];
+                        const updates = {
+                            [`users/${newPin}`]: userData,
+                            [`users/${oldPin}`]: null
+                        };
                         if (settlementSnap.exists()) {
-                            tasks.push(firebaseDb.ref(`settlements/${newPin}`).set(settlementSnap.val()));
-                            tasks.push(firebaseDb.ref(`settlements/${oldPin}`).remove());
+                            updates[`settlements/${newPin}`] = settlementSnap.val();
+                            updates[`settlements/${oldPin}`] = null;
                         }
-                        return Promise.all(tasks);
+                        AppState.appendAuditUpdate(updates, auditEvent);
+                        return firebaseDb.ref().update(updates);
                     });
                 });
             }).then(() => renderAdminDashboard())
@@ -5517,10 +6127,19 @@ document.addEventListener('DOMContentLoaded', () => {
         showConfirmModal(
             `'${name}' (${pin}) 회원을 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`,
             () => {
-                Promise.all([
-                    firebaseDb.ref(`users/${pin}`).remove(),
-                    firebaseDb.ref(`settlements/${pin}`).remove()
-                ]).then(() => {
+                const updates = {
+                    [`users/${pin}`]: null,
+                    [`settlements/${pin}`]: null
+                };
+                AppState.appendAuditUpdate(updates, {
+                    action: 'DELETE',
+                    targetType: '회원',
+                    targetId: pin,
+                    targetLabel: `${name} (${pin})`,
+                    summary: `회원 '${name} (${pin})' 및 개인 정산 데이터 삭제`,
+                    details: { 이름: name, PIN: pin }
+                });
+                firebaseDb.ref().update(updates).then(() => {
                     renderAdminDashboard();
                 }).catch(err => {
                     console.error('회원 삭제 실패:', err);
@@ -5577,14 +6196,38 @@ document.addEventListener('DOMContentLoaded', () => {
                 listContainer.querySelectorAll('.btn-mark-read').forEach(btn => {
                     btn.addEventListener('click', () => {
                         const key = btn.getAttribute('data-key');
-                        firebaseDb.ref(`requests/${key}/read`).set(true).then(() => renderFeedbackList());
+                        const request = requestsData[key] || {};
+                        const updates = { [`requests/${key}/read`]: true };
+                        AppState.appendAuditUpdate(updates, {
+                            action: 'UPDATE',
+                            targetType: '요청사항',
+                            targetId: key,
+                            targetLabel: (request.message || '').slice(0, 80),
+                            summary: `요청사항 확인 완료 처리: ${(request.message || '').slice(0, 120)}`,
+                            details: { 요청자: request.userName || '', 요청자PIN: request.pin || '' }
+                        });
+                        firebaseDb.ref().update(updates).then(() => {
+                            renderFeedbackList();
+                        });
                     });
                 });
                 listContainer.querySelectorAll('.btn-delete-feedback').forEach(btn => {
                     btn.addEventListener('click', () => {
                         const key = btn.getAttribute('data-key');
+                        const request = requestsData[key] || {};
                         if (!confirm('이 요청사항을 삭제하시겠습니까?')) return;
-                        firebaseDb.ref(`requests/${key}`).remove().then(() => renderFeedbackList());
+                        const updates = { [`requests/${key}`]: null };
+                        AppState.appendAuditUpdate(updates, {
+                            action: 'DELETE',
+                            targetType: '요청사항',
+                            targetId: key,
+                            targetLabel: (request.message || '').slice(0, 80),
+                            summary: `요청사항 삭제: ${(request.message || '').slice(0, 120)}`,
+                            details: { 요청자: request.userName || '', 요청자PIN: request.pin || '' }
+                        });
+                        firebaseDb.ref().update(updates).then(() => {
+                            renderFeedbackList();
+                        });
                     });
                 });
                 listContainer.querySelectorAll('.feedback-photo-img').forEach(img => {
@@ -5750,7 +6393,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const action = button.dataset.adminAction;
             if (action === 'club') return toggleAdminStartCard('club-management-card');
             if (action === 'rules') return toggleAdminStartCard('rules-management-card');
-            const tabId = 'tab-charts';
+            const tabId = action === 'audit' ? 'tab-audit-log' : 'tab-charts';
             const tabButton = document.querySelector(`.tab-nav .tab-btn[data-tab="${tabId}"]`);
             if (tabButton) tabButton.click();
         });
@@ -5885,6 +6528,24 @@ document.addEventListener('DOMContentLoaded', () => {
                             firebaseUpdates[`clubRegistry/${registryClubId}/usedBudget`] = firebase.database.ServerValue.increment(supportDelta);
                         }
                     }
+                    AppState.appendAuditUpdate(firebaseUpdates, {
+                        action: 'DELETE',
+                        targetType: '정산 이력',
+                        targetId: id,
+                        targetLabel: `${entry.clubName || '기본 클럽'} ${entry.settlementDate || ''}`.trim(),
+                        summary: `정산 이력 삭제: ${entry.clubName || '기본 클럽'} ${entry.settlementDate || ''}`.trim(),
+                        clubId: registryClubId || entry.clubId || '',
+                        clubName: entry.clubName || '',
+                        details: {
+                            작성자: `${entry.creatorName || '-'} (${entry.creatorPin || '-'})`,
+                            정산일: entry.settlementDate || '',
+                            총비용: entry.totalCost || 0,
+                            지원금: entry.finalSupportAmount || 0,
+                            자부담: entry.totalSelfPay || 0,
+                            상품비: getHistoryPrizeCost(entry),
+                            참석인원: entry.memberCount || 0
+                        }
+                    });
                     await firebaseDb.ref().update(firebaseUpdates);
 
                     cachedDeletedIds[String(id)] = true;
@@ -5971,9 +6632,30 @@ document.addEventListener('DOMContentLoaded', () => {
             // 공유 clubRegistry를 덮어써 다른 접속자에게 잔여예산이 잘못 표시되는 사고 방지
             const needsUpdate = (club.prizeUsed || 0) !== prizeUsed || (club.usedBudget || 0) !== usedBudget;
             if (needsUpdate && firebaseDb && historyLoaded) {
+                const previousPrizeUsed = club.prizeUsed || 0;
+                const previousUsedBudget = club.usedBudget || 0;
                 club.prizeUsed  = prizeUsed;
                 club.usedBudget = usedBudget;
-                firebaseDb.ref(`clubRegistry/${clubId}`).update({ prizeUsed, usedBudget }).catch(() => {});
+                const syncUpdates = {
+                    [`clubRegistry/${clubId}/prizeUsed`]: prizeUsed,
+                    [`clubRegistry/${clubId}/usedBudget`]: usedBudget
+                };
+                AppState.appendAuditUpdate(syncUpdates, {
+                    action: 'UPDATE',
+                    targetType: '클럽 누적액 자동 동기화',
+                    targetId: clubId,
+                    targetLabel: club.name,
+                    summary: `시스템이 '${club.name}' 누적 지원금·상품비를 공유 이력 기준으로 동기화`,
+                    clubId,
+                    clubName: club.name,
+                    details: {
+                        이전지원금누적: previousUsedBudget,
+                        변경지원금누적: usedBudget,
+                        이전상품비누적: previousPrizeUsed,
+                        변경상품비누적: prizeUsed
+                    }
+                }, { pin: 'system', name: '시스템 자동 동기화', role: '시스템' });
+                firebaseDb.ref().update(syncUpdates).catch(() => {});
             }
             const budget = club.budget || 0;
             const priorUsed = club.priorUsed || 0;
