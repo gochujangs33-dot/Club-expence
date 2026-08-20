@@ -29,8 +29,30 @@
     font-size: 0.86rem;
 }
 
-.audit-log-card {
+.audit-log-card,
+.audit-log-modal-card {
     padding: 1rem;
+}
+
+.audit-log-modal-card {
+    width: min(95vw, 860px);
+    max-height: min(88vh, 820px);
+    margin: auto;
+    background: var(--bg-dark);
+    border: 1px solid rgba(56, 189, 248, 0.35);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border-radius: var(--radius-card);
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6), 0 0 30px rgba(14, 165, 233, 0.12);
+    padding: 0;
+}
+
+.audit-log-modal-card .audit-log-list {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding-right: 0.35rem;
 }
 
 .audit-log-filters {
