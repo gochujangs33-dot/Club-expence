@@ -1,7 +1,7 @@
 /**
  * Club Expense Settlement App - Main JavaScript Logic
  */
-const APP_VERSION      = '1.6.270';
+const APP_VERSION      = '1.6.271';
 const APP_VERSION_DATE = '2026.08.21';
 
 // 인당 자부담 비용에 따라 강조 박스의 아이콘/색상을 전환 (100원 이상이면 🔥, 0이면 😊)
@@ -4185,7 +4185,6 @@ document.addEventListener('DOMContentLoaded', () => {
     window.closeAuditLogModal = closeAuditLogModal;
 
     document.getElementById('admin-audit-log-btn')?.addEventListener('click', openAuditLogModal);
-    document.getElementById('audit-log-open-btn')?.addEventListener('click', openAuditLogModal);
     document.getElementById('close-audit-log-modal')?.addEventListener('click', closeAuditLogModal);
     document.getElementById('audit-log-modal')?.addEventListener('click', (e) => {
         if (e.target.id === 'audit-log-modal') closeAuditLogModal();
@@ -5642,7 +5641,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const clubNameWrapperEl = document.querySelector('.club-name-wrapper');
         if (clubNameWrapperEl) clubNameWrapperEl.classList.toggle('hidden', isAdmin);
 
-        const adminOnlyIds = ['admin-tab-btn', 'club-history-tab-btn', 'charts-tab-btn', 'admin-audit-log-btn', 'audit-log-open-btn'];
+        const adminOnlyIds = ['admin-tab-btn', 'club-history-tab-btn', 'charts-tab-btn', 'admin-audit-log-btn'];
         const memberOnlyIds = ['settlement-tab-btn', 'attendees-tab-btn', 'history-tab-btn'];
         adminOnlyIds.forEach(id => {
             const el = document.getElementById(id);
@@ -5767,6 +5766,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 변경이력 모달
     const CHANGELOG = [
+        { ver: '1.6.271', date: '2026.08.21', items: ['헤더 최상단에 중복 표시되던 로그 버튼을 제거하고 관리자 대시보드 내 전용 버튼으로 단일화'] },
         { ver: '1.6.270', date: '2026.08.21', items: ['상단 메인 탭바에서 로그 기록 메뉴를 제거해 4개 주요 탭(명부·클럽이력·차트·대시보드)으로 정돈', '로그 기록 조회를 대시보드 상단·시작 가이드 및 헤더의 컴팩트 버튼으로 재배치하고 모달 팝업으로 즉시 확인/닫기 가능하도록 개선'] },
         { ver: '1.6.269', date: '2026.08.20', items: ['사용자·개발자·관리자의 주요 추가·수정·삭제 작업과 시스템 자동 복구를 Firebase 감사 로그에 기록', '관리자 전용 로그 기록 탭에서 날짜·작업자·권한·대상·변경값 조회 및 연월·작업·검색 필터 제공'] },
         { ver: '1.6.268', date: '2026.07.27', items: ['현재 클럽별 사용 요약으로 대체되어 실행되지 않던 구형 관리자 정산 이력 렌더링 코드 제거', '계산·데이터 출처 명세를 현재 실제 자부담 및 예산 산정 방식에 맞게 정비'] },
