@@ -1,8 +1,8 @@
 /**
  * Club Expense Settlement App - Main JavaScript Logic
  */
-const APP_VERSION      = '1.6.271';
-const APP_VERSION_DATE = '2026.08.21';
+const APP_VERSION      = '1.6.272';
+const APP_VERSION_DATE = '2026.08.25';
 
 // 인당 자부담 비용에 따라 강조 박스의 아이콘/색상을 전환 (100원 이상이면 🔥, 0이면 😊)
 function updatePerPersonSelfPayIcon(perPersonSelfPay) {
@@ -1234,6 +1234,8 @@ const AppState = {
             priorUsed: Math.max(0, priorUsed || 0),
             prizeUsed: prizeUsed !== undefined ? Math.max(0, prizeUsed) : (existing.prizeUsed || 0),
             usedBudget: existing.usedBudget || 0,
+            // 관리자 차트의 클럽 고유 색상 — 이름·예산 수정 시에도 유지
+            chartColor: existing.chartColor || '',
             // 인당 85,000원 초과 지원 승인 여부(관리자 전용 토글) — 이름/예산 수정 시 유실되지 않도록 보존
             allowOverLimitSupport: existing.allowOverLimitSupport || false
         };
@@ -1285,6 +1287,34 @@ const AppState = {
             });
             this.firebaseDb.ref().update(updates).catch(err => console.error("승인 설정 저장 실패:", err));
         }
+    },
+
+    // 관리자 전용: 모든 차트에서 공통으로 사용할 클럽 고유 색상 저장
+    setClubChartColor(clubId, color) {
+        const club = this.clubRegistry[clubId];
+        const normalized = /^#[0-9a-f]{6}$/i.test(String(color || '')) ? String(color).toLowerCase() : '';
+        if (!club || !normalized || club.chartColor === normalized) return Promise.resolve(false);
+        const previousColor = club.chartColor || '';
+        club.chartColor = normalized;
+        if (!this.firebaseDb) return Promise.resolve(true);
+        const updates = { [`clubRegistry/${clubId}/chartColor`]: normalized };
+        this.appendAuditUpdate(updates, {
+            action: 'UPDATE',
+            targetType: '클럽 차트 색상',
+            targetId: clubId,
+            targetLabel: club.name || '',
+            summary: `클럽 '${club.name || clubId}'의 차트 색상을 ${normalized}로 수정`,
+            clubId,
+            clubName: club.name || '',
+            details: { 이전색상: previousColor || '자동', 변경색상: normalized }
+        });
+        return this.firebaseDb.ref().update(updates)
+            .then(() => true)
+            .catch(err => {
+                club.chartColor = previousColor;
+                console.error('클럽 차트 색상 저장 실패:', err);
+                throw err;
+            });
     },
 
     deleteClub(clubId) {
@@ -5766,6 +5796,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 변경이력 모달
     const CHANGELOG = [
+        { ver: '1.6.272', date: '2026.08.25', items: ['관리자 차트를 KPI·월별 지출·예산 소진율·카테고리·참석·최근 정산 알림을 한 화면에 배치한 프리미엄 대시보드 디자인으로 개편', '클럽 ID 기반 고유 색상과 관리자 색상 선택기를 추가해 모든 클럽 차트·필터에서 동일 색상을 유지', '관리자 대시보드 Dark/Light 테마 전환 및 기기별 설정 기억, 모바일 1열 차트·2열 KPI·스와이프 필터 최적화'] },
         { ver: '1.6.271', date: '2026.08.21', items: ['헤더 최상단에 중복 표시되던 로그 버튼을 제거하고 관리자 대시보드 내 전용 버튼으로 단일화'] },
         { ver: '1.6.270', date: '2026.08.21', items: ['상단 메인 탭바에서 로그 기록 메뉴를 제거해 4개 주요 탭(명부·클럽이력·차트·대시보드)으로 정돈', '로그 기록 조회를 대시보드 상단·시작 가이드 및 헤더의 컴팩트 버튼으로 재배치하고 모달 팝업으로 즉시 확인/닫기 가능하도록 개선'] },
         { ver: '1.6.269', date: '2026.08.20', items: ['사용자·개발자·관리자의 주요 추가·수정·삭제 작업과 시스템 자동 복구를 Firebase 감사 로그에 기록', '관리자 전용 로그 기록 탭에서 날짜·작업자·권한·대상·변경값 조회 및 연월·작업·검색 필터 제공'] },
@@ -6691,12 +6722,17 @@ document.addEventListener('DOMContentLoaded', () => {
             const prizeLimit = AppState.rules.prizeLimit || 500000;
             const remaining = budget - priorUsed - usedBudget;
             const overLimitApproved = !!club.allowOverLimitSupport;
+            const chartColor = resolveClubBaseColor(clubId, club);
             const row = document.createElement('div');
             row.className = 'expense-row';
             row.style.cssText = 'padding:0.6rem 0.75rem; height:auto; align-items:center; flex-wrap:wrap;';
             row.innerHTML = `
                 <div class="expense-row-left" style="flex:1.4; min-width:90px;">
                     <span class="expense-row-title" style="font-size:0.9rem; white-space:normal; line-height:1.3;"><span style="color:var(--text-muted); margin-right:0.3em; font-weight:400;">${idx + 1}.</span>${AppState.escapeHtml(club.name)}</span>
+                    <label class="club-chart-color-wrap" data-tooltip="이 색상은 모든 관리자 차트에서 이 클럽에 동일하게 적용됩니다">
+                        <input type="color" class="club-chart-color-input" data-id="${AppState.escapeHtml(clubId)}" value="${chartColor}" aria-label="${AppState.escapeHtml(club.name)} 차트 색상">
+                        차트 색상
+                    </label>
                 </div>
                 <div style="flex:1.2; min-width:100px; text-align:center;">
                     <div style="font-size:0.7rem; color:var(--text-secondary);">${t('club.assigned_budget')}</div>
@@ -6761,6 +6797,20 @@ document.addEventListener('DOMContentLoaded', () => {
                     AppState.setClubOverLimitApproval(clubId, willAllow);
                     renderClubManagement();
                 }, willAllow ? '승인' : '승인 취소');
+            });
+        });
+        clubListContainer.querySelectorAll('.club-chart-color-input').forEach(input => {
+            input.addEventListener('change', () => {
+                const clubId = input.getAttribute('data-id');
+                input.disabled = true;
+                Promise.resolve(AppState.setClubChartColor(clubId, input.value)).then(() => {
+                    renderClubManagement();
+                    renderClubFilters();
+                    renderAllCharts(lastHistoryList);
+                }).catch(() => {
+                    alert('클럽 차트 색상을 저장하지 못했습니다. 네트워크 상태를 확인해 주세요.');
+                    renderClubManagement();
+                }).finally(() => { input.disabled = false; });
             });
         });
         clubListContainer.querySelectorAll('.btn-add-club-budget').forEach(btn => {
@@ -6925,6 +6975,51 @@ document.addEventListener('DOMContentLoaded', () => {
         cancelEditClubBtn.addEventListener('click', resetClubForm);
     }
 
+    // ── 관리자 화면 Dark / Light 테마 (기기별 UI 선호값) ───────────────
+    const ADMIN_THEME_STORAGE_KEY = 'club_expense_admin_theme';
+
+    function getAdminTheme() {
+        try {
+            return localStorage.getItem(ADMIN_THEME_STORAGE_KEY) === 'light' ? 'light' : 'dark';
+        } catch (_) {
+            return 'dark';
+        }
+    }
+
+    function getChartThemeColors() {
+        const isLight = getAdminTheme() === 'light';
+        return isLight
+            ? {
+                primary: '#25324a', secondary: '#62718a', muted: '#7d8ba1',
+                grid: 'rgba(72,91,128,0.12)', surface: '#ffffff', tooltip: '#17243b', tooltipText: '#f8fafc'
+            }
+            : {
+                primary: '#e2e8f0', secondary: '#94a3b8', muted: '#64748b',
+                grid: 'rgba(255,255,255,0.055)', surface: '#0f172a', tooltip: '#111827', tooltipText: '#f8fafc'
+            };
+    }
+
+    function applyAdminTheme(theme, rerenderCharts = true) {
+        const normalized = theme === 'light' ? 'light' : 'dark';
+        try { localStorage.setItem(ADMIN_THEME_STORAGE_KEY, normalized); } catch (_) {}
+        document.querySelectorAll('.admin-themed-pane').forEach(pane => {
+            pane.dataset.adminTheme = normalized;
+        });
+        document.querySelectorAll('.admin-theme-btn').forEach(button => {
+            const active = button.dataset.adminThemeValue === normalized;
+            button.classList.toggle('active', active);
+            button.setAttribute('aria-pressed', active ? 'true' : 'false');
+        });
+        if (rerenderCharts && typeof renderAllCharts === 'function') {
+            requestAnimationFrame(() => renderAllCharts(lastHistoryList || []));
+        }
+    }
+
+    document.querySelectorAll('.admin-theme-btn').forEach(button => {
+        button.addEventListener('click', () => applyAdminTheme(button.dataset.adminThemeValue));
+    });
+    applyAdminTheme(getAdminTheme(), false);
+
     // ── 차트 탭 - 클럽 선택 필터 칩 ──────────────────────────────────
     function renderClubFilters() {
         const container = document.getElementById('club-filter-container');
@@ -6932,6 +7027,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const clubs = Object.values(AppState.clubRegistry || {}).sort((a, b) => a.name.localeCompare(b.name));
         const allClubNames = clubs.map(c => c.name);
+        const clubColorMap = getClubColorMap();
 
         if (!selectedOverallClubs) {
             selectedOverallClubs = new Set(allClubNames);
@@ -6947,14 +7043,14 @@ document.addEventListener('DOMContentLoaded', () => {
         const allSelected = allClubNames.length > 0 && allClubNames.every(name => selectedOverallClubs.has(name));
 
         let html = `
-            <label class="club-filter-chip ${allSelected ? 'active' : ''}">
+            <label class="club-filter-chip select-all ${allSelected ? 'active' : ''}">
                 <input type="checkbox" data-overall-select-all ${allSelected ? 'checked' : ''}>
                 전체 선택
             </label>
         `;
         clubs.forEach(club => {
             html += `
-                <label class="club-filter-chip ${selectedOverallClubs.has(club.name) ? 'active' : ''}">
+                <label class="club-filter-chip ${selectedOverallClubs.has(club.name) ? 'active' : ''}" style="--club-color:${clubColorMap[club.name]};">
                     <input type="checkbox" data-overall-filter value="${AppState.escapeHtml(club.name)}" ${selectedOverallClubs.has(club.name) ? 'checked' : ''}>
                     ${AppState.escapeHtml(club.name)}
                 </label>
@@ -6994,6 +7090,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const usedBudgetEl = document.getElementById('charts-used-budget');
         const remainingBudgetEl = document.getElementById('charts-remaining-budget');
         const countEl = document.getElementById('charts-total-count');
+        const usageRateEl = document.getElementById('charts-usage-rate');
         if (!totalBudgetEl || !usedBudgetEl || !remainingBudgetEl) return;
 
         const currentYear = new Date().getFullYear();
@@ -7014,6 +7111,11 @@ document.addEventListener('DOMContentLoaded', () => {
         remainingBudgetEl.textContent = SettlementCalculator.formatCurrency(remaining);
         remainingBudgetEl.style.color = remaining < 0 ? '#f87171' : 'var(--color-secondary)';
         if (countEl) countEl.textContent = `${filtered.length}건`;
+        if (usageRateEl) {
+            const usageRate = totalBudget > 0 ? Math.round((usedBudget / totalBudget) * 1000) / 10 : 0;
+            usageRateEl.textContent = `예산 소진율 ${usageRate}%`;
+            usageRateEl.style.color = getUsageRiskColor(usageRate);
+        }
     }
 
     // 조각 채움색의 밝기에 따라 흰 글씨/잉크 글씨 중 대비가 되는 쪽을 선택
@@ -7110,29 +7212,89 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     if (typeof Chart !== 'undefined') Chart.register(chartValueLabelPlugin);
 
-    // 클럽 고유 색상 — 전체 클럽 레지스트리를 이름순으로 고정 정렬해 인덱스를 매기므로,
-    // 특정 차트의 정렬 순서나 필터 선택 상태와 무관하게 같은 클럽은 모든 차트에서 항상 같은 색을 씀
-    const CLUB_COLOR_PALETTE = [
-        'rgba(139, 92, 246, 0.85)', 'rgba(56, 189, 248, 0.85)', 'rgba(52, 211, 153, 0.85)',
-        'rgba(251, 191, 36, 0.85)', 'rgba(248, 113, 113, 0.85)', 'rgba(236, 72, 153, 0.85)',
-        'rgba(129, 140, 248, 0.85)', 'rgba(45, 212, 191, 0.85)', 'rgba(251, 146, 60, 0.85)',
-        'rgba(167, 139, 250, 0.85)'
-    ];
+    // 클럽 고유 색상 — clubRegistry.chartColor가 최우선이며, 미지정 클럽도 고정 ID 해시를 사용한다.
+    // 클럽 추가·삭제·차트 정렬 순서가 바뀌어도 기존 클럽의 색상은 변하지 않는다.
+    function normalizeClubHexColor(value) {
+        return /^#[0-9a-f]{6}$/i.test(String(value || '')) ? String(value).toLowerCase() : '';
+    }
+
+    function stableClubHexColor(value) {
+        const text = String(value || '기본 클럽');
+        let hash = 2166136261;
+        for (let i = 0; i < text.length; i++) {
+            hash ^= text.charCodeAt(i);
+            hash = Math.imul(hash, 16777619);
+        }
+        hash >>>= 0;
+        const hue = hash % 360;
+        const saturation = 66 + ((hash >>> 9) % 18);
+        const lightness = 52 + ((hash >>> 17) % 10);
+        const s = saturation / 100;
+        const l = lightness / 100;
+        const c = (1 - Math.abs(2 * l - 1)) * s;
+        const x = c * (1 - Math.abs((hue / 60) % 2 - 1));
+        const m = l - c / 2;
+        const [r1, g1, b1] = hue < 60 ? [c, x, 0]
+            : hue < 120 ? [x, c, 0]
+            : hue < 180 ? [0, c, x]
+            : hue < 240 ? [0, x, c]
+            : hue < 300 ? [x, 0, c]
+            : [c, 0, x];
+        return `#${[r1, g1, b1].map(channel => Math.round((channel + m) * 255).toString(16).padStart(2, '0')).join('')}`;
+    }
+
+    function resolveClubBaseColor(clubId, club) {
+        return normalizeClubHexColor(club?.chartColor)
+            || stableClubHexColor(clubId || club?.name);
+    }
+
     function getClubColorMap() {
-        const names = Object.values(AppState.clubRegistry || {})
-            .map(c => c.name)
-            .sort((a, b) => a.localeCompare(b, 'ko'));
         const map = {};
-        names.forEach((name, idx) => { map[name] = CLUB_COLOR_PALETTE[idx % CLUB_COLOR_PALETTE.length]; });
+        Object.entries(AppState.clubRegistry || {}).forEach(([clubId, club]) => {
+            if (club?.name) map[club.name] = resolveClubBaseColor(clubId, club);
+        });
         return map;
     }
-    // 클럽 레지스트리에 없는 이름(삭제된 클럽, "기본 클럽" 폴백 등)은 이름 해시로 그나마 고정된 색 배정
-    function clubColorFor(name, colorMap) {
-        if (colorMap[name]) return colorMap[name];
-        let hash = 0;
-        for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) >>> 0;
-        return CLUB_COLOR_PALETTE[hash % CLUB_COLOR_PALETTE.length];
+
+    function hexToRgba(hex, alpha = 0.88) {
+        const normalized = normalizeClubHexColor(hex) || '#8b5cf6';
+        const value = parseInt(normalized.slice(1), 16);
+        return `rgba(${(value >> 16) & 255}, ${(value >> 8) & 255}, ${value & 255}, ${alpha})`;
     }
+
+    // 클럽 레지스트리에 없는 과거 이력도 이름 해시로 일관된 색을 사용한다.
+    function clubColorFor(name, colorMap, alpha = 0.88) {
+        const baseColor = colorMap[name] || stableClubHexColor(name);
+        return hexToRgba(baseColor, alpha);
+    }
+
+    // 차트별 하드코딩 색을 두지 않고 현재 관리자 테마의 텍스트·격자·툴팁 색을 일괄 적용한다.
+    const dashboardChartThemePlugin = {
+        id: 'dashboardChartTheme',
+        beforeUpdate(chart) {
+            const colors = getChartThemeColors();
+            const plugins = chart.options.plugins || {};
+            if (plugins.legend?.labels) plugins.legend.labels.color = colors.primary;
+            if (plugins.tooltip) {
+                plugins.tooltip.backgroundColor = colors.tooltip;
+                plugins.tooltip.titleColor = colors.tooltipText;
+                plugins.tooltip.bodyColor = colors.tooltipText;
+                plugins.tooltip.borderColor = colors.grid;
+                plugins.tooltip.borderWidth = 1;
+            }
+            if (plugins.chartValueLabel) plugins.chartValueLabel.color = colors.primary;
+            Object.values(chart.options.scales || {}).forEach(scale => {
+                if (scale.ticks) scale.ticks.color = colors.secondary;
+                if (scale.grid && scale.grid.display !== false) scale.grid.color = colors.grid;
+                if (scale.title) scale.title.color = colors.secondary;
+            });
+            (chart.data.datasets || []).forEach(dataset => {
+                if (dataset.pointBorderColor) dataset.pointBorderColor = colors.surface;
+                if (chart.config.type === 'doughnut') dataset.borderColor = colors.surface;
+            });
+        }
+    };
+    if (typeof Chart !== 'undefined') Chart.register(dashboardChartThemePlugin);
     // 예산 소진율 위험도 색상 (안전/주의/초과) — 소진율 % 라벨 글씨색에만 사용
     function getUsageRiskColor(ratio) {
         return ratio >= 100 ? 'rgb(248, 113, 113)' : ratio >= 80 ? 'rgb(251, 191, 36)' : 'rgb(52, 211, 153)';
@@ -7178,7 +7340,7 @@ document.addEventListener('DOMContentLoaded', () => {
             label: club,
             data: labels.map(month => (spendByMonthClub[month] && spendByMonthClub[month][club]) || 0),
             backgroundColor: clubColorFor(club, clubColorMap),
-            borderColor: clubColorFor(club, clubColorMap).replace('0.85', '1'),
+            borderColor: clubColorFor(club, clubColorMap, 1),
             borderWidth: 0,
             borderRadius: 6,
             borderSkipped: false
@@ -7282,7 +7444,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     label: '예산 소진율',
                     data: usageRatio,
                     backgroundColor: usageColors,
-                    borderColor: usageColors.map(c => c.replace('0.85', '1')),
+                    borderColor: clubData.map(d => clubColorFor(d.name, clubColorMap, 1)),
                     borderWidth: 0,
                     borderRadius: 8
                 }]
@@ -7378,7 +7540,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                         text: `${label}  ${SettlementCalculator.formatCurrency(value)} (${pct}%)`,
                                         fillStyle: ds.backgroundColor[i],
                                         strokeStyle: ds.backgroundColor[i],
-                                        fontColor: '#cbd5e1', // Chart.js v4 범례는 항목별 fontColor로 텍스트색을 그림 — 누락 시 글씨가 안 보임
+                                        fontColor: getChartThemeColors().primary, // Chart.js v4 범례는 항목별 fontColor로 텍스트색을 그림 — 누락 시 글씨가 안 보임
                                         lineWidth: 0,
                                         index: i
                                     };
@@ -8121,8 +8283,41 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     initAttendanceRosterModal();
 
+    function renderRecentSettlements(historyList) {
+        const container = document.getElementById('recent-settlement-list');
+        if (!container) return;
+        const entries = (historyList || [])
+            .filter(entry => entry && (!selectedOverallClubs || selectedOverallClubs.has(entry.clubName || '기본 클럽')))
+            .slice()
+            .sort(compareHistoryEntriesNewestFirst)
+            .slice(0, 5);
+        if (entries.length === 0) {
+            container.innerHTML = '<div class="recent-settlement-empty">선택한 클럽의 정산 이력이 없습니다.</div>';
+            return;
+        }
+        const colorMap = getClubColorMap();
+        container.innerHTML = entries.map(entry => {
+            const clubName = entry.clubName || '기본 클럽';
+            const dateText = entry.settlementDate || (entry.date ? String(entry.date).slice(0, 10) : '날짜 없음');
+            const creator = entry.creatorName ? ` · ${AppState.escapeHtml(entry.creatorName)}` : '';
+            const support = Math.max(0, parseAmount(entry.finalSupportAmount));
+            const baseColor = colorMap[clubName] || stableClubHexColor(clubName);
+            return `
+                <div class="recent-settlement-item" style="--club-color:${baseColor};">
+                    <span class="recent-settlement-dot" aria-hidden="true"></span>
+                    <div class="recent-settlement-copy">
+                        <strong>${AppState.escapeHtml(clubName)} 정산 완료</strong>
+                        <small>${AppState.escapeHtml(dateText)}${creator}</small>
+                    </div>
+                    <span class="recent-settlement-amount">${SettlementCalculator.formatCurrency(support)}</span>
+                </div>
+            `;
+        }).join('');
+    }
+
     // 차트 탭의 모든 그래프를 한 번에 갱신
     function renderAllCharts(historyList) {
+        updateChartsBudgetStats(historyList);
         renderOverallMonthlyChart(historyList);
         renderClubUsageChart(historyList);
         renderCategoryPieChart(historyList);
@@ -8130,6 +8325,7 @@ document.addEventListener('DOMContentLoaded', () => {
         renderEventAttendanceChart(historyList);
         renderClubUniqueAttendeesChart(historyList);
         renderSelfPayTrendChart(historyList);
+        renderRecentSettlements(historyList);
     }
 
     // 클럽별 정산이력 탭 - 정산인(사용자) 선택 드롭다운

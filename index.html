@@ -571,147 +571,116 @@
         </div>
 
         <!-- Tab Content 6: 차트 (관리자 전용) -->
-        <div id="tab-charts" class="tab-pane hidden">
-
-            <!-- 공통 클럽 필터 -->
-            <div class="charts-filter-card">
-                <div class="charts-filter-label">클럽 필터</div>
-                <div id="club-filter-container" class="club-filter-row">
-                    <!-- Populated dynamically -->
-                </div>
-            </div>
-
-            <!-- 2-컬럼 그리드 차트 -->
-            <div class="charts-grid">
-                <!-- 월별 클럽 지출 현황 -->
-                <div class="card chart-card-glow">
-                    <div class="card-header">
-                        <span class="card-icon">📊</span>
+        <div id="tab-charts" class="tab-pane hidden admin-themed-pane" data-admin-theme="dark">
+            <section class="charts-dashboard-shell" aria-labelledby="charts-dashboard-title">
+                <header class="charts-dashboard-header">
+                    <div class="charts-dashboard-heading">
+                        <span class="charts-dashboard-badge" aria-hidden="true">📈</span>
                         <div>
-                            <h2>월별 지출 현황</h2>
-                            <div class="chart-subtitle">클럽별 월간 지출액 비교</div>
+                            <span class="charts-dashboard-eyebrow">ADMIN ANALYTICS</span>
+                            <h2 id="charts-dashboard-title">클럽 운영 대시보드</h2>
+                            <p>예산, 정산, 참석 현황을 한 화면에서 확인합니다.</p>
                         </div>
                     </div>
-                    <div class="card-body">
-                        <div class="chart-canvas-wrap">
-                            <canvas id="overall-monthly-chart"></canvas>
-                        </div>
+                    <div class="admin-theme-control" role="group" aria-label="대시보드 테마 선택">
+                        <span>테마</span>
+                        <button type="button" class="admin-theme-btn active" data-admin-theme-value="dark" aria-pressed="true">Dark</button>
+                        <button type="button" class="admin-theme-btn" data-admin-theme-value="light" aria-pressed="false">Light</button>
                     </div>
+                </header>
+
+                <div class="charts-kpi-row" aria-label="예산 주요 지표">
+                    <article class="charts-kpi-card kpi-budget">
+                        <div class="charts-kpi-top"><span class="charts-kpi-icon">💼</span><span class="charts-kpi-label">선택 클럽 총 예산</span></div>
+                        <strong class="charts-kpi-val" id="charts-total-budget">0원</strong>
+                        <span class="charts-kpi-foot">관리자 배정 예산 기준</span>
+                    </article>
+                    <article class="charts-kpi-card kpi-used">
+                        <div class="charts-kpi-top"><span class="charts-kpi-icon">💳</span><span class="charts-kpi-label">현재 사용 금액</span></div>
+                        <strong class="charts-kpi-val" id="charts-used-budget">0원</strong>
+                        <span class="charts-kpi-foot" id="charts-usage-rate">예산 소진율 0%</span>
+                    </article>
+                    <article class="charts-kpi-card kpi-remaining">
+                        <div class="charts-kpi-top"><span class="charts-kpi-icon">🪙</span><span class="charts-kpi-label">잔여 예산</span></div>
+                        <strong class="charts-kpi-val" id="charts-remaining-budget">0원</strong>
+                        <span class="charts-kpi-foot">기존 사용액 포함</span>
+                    </article>
+                    <article class="charts-kpi-card kpi-count">
+                        <div class="charts-kpi-top"><span class="charts-kpi-icon">✅</span><span class="charts-kpi-label">올해 정산 건수</span></div>
+                        <strong class="charts-kpi-val" id="charts-total-count">0건</strong>
+                        <span class="charts-kpi-foot">선택 클럽 합계</span>
+                    </article>
                 </div>
 
-                <!-- 클럽별 예산 소진율 -->
-                <div class="card chart-card-glow">
-                    <div class="card-header">
-                        <span class="card-icon">🎯</span>
-                        <div>
-                            <h2>예산 소진율</h2>
-                            <div class="chart-subtitle">클럽별 연간 예산 사용 비율</div>
-                        </div>
-                    </div>
-                    <div class="card-body">
-                        <div class="chart-canvas-wrap">
-                            <canvas id="club-usage-chart"></canvas>
-                        </div>
-                    </div>
+                <div class="charts-filter-card">
+                    <div class="charts-filter-label">클럽 필터</div>
+                    <div id="club-filter-container" class="club-filter-row"><!-- Populated dynamically --></div>
                 </div>
 
-                <!-- 카테고리별 비용 비중 -->
-                <div class="card chart-card-glow">
-                    <div class="card-header">
-                        <span class="card-icon">🥧</span>
-                        <div>
-                            <h2>카테고리별 비용 비중</h2>
-                            <div class="chart-subtitle">행사비 · 시설비 · 상품비 비율</div>
+                <div class="charts-premium-grid">
+                    <article class="card chart-card-glow chart-span-full chart-primary-card">
+                        <div class="card-header">
+                            <span class="card-icon">📊</span>
+                            <div><h2>월별 지출 현황</h2><div class="chart-subtitle">클럽별 월간 지출액 비교</div></div>
                         </div>
-                    </div>
-                    <div class="card-body">
-                        <div class="chart-canvas-wrap">
-                            <canvas id="category-pie-chart"></canvas>
-                        </div>
-                    </div>
-                </div>
+                        <div class="card-body"><div class="chart-canvas-wrap chart-canvas-primary"><canvas id="overall-monthly-chart"></canvas></div></div>
+                    </article>
 
-                <!-- 클럽별 정산 횟수 -->
-                <div class="card chart-card-glow">
-                <div class="card-header">
-                    <span class="card-icon">🏃</span>
-                    <div>
-                        <h2>클럽별 정산 횟수</h2>
-                        <div class="chart-subtitle">올해 정산 활동량 비교 · 막대를 클릭하면 클럽별 사용 요약을 확인할 수 있습니다</div>
-                        </div>
-                    </div>
-                    <div class="card-body">
-                        <div class="chart-canvas-wrap">
-                            <canvas id="club-activity-chart"></canvas>
-                        </div>
-                    </div>
-                </div>
+                    <article class="card chart-card-glow">
+                        <div class="card-header"><span class="card-icon">🎯</span><div><h2>클럽별 예산 소진율</h2><div class="chart-subtitle">클럽 고유 색상으로 연간 사용 비율 비교</div></div></div>
+                        <div class="card-body"><div class="chart-canvas-wrap"><canvas id="club-usage-chart"></canvas></div></div>
+                    </article>
 
-                <!-- 행사별 참석 인원 -->
-                <div class="card chart-card-glow">
-                    <div class="card-header">
-                        <span class="card-icon">🙋</span>
-                        <div>
-                            <h2>행사별 참석 인원</h2>
-                            <div class="chart-subtitle">최근 10건, 최신순 · 막대를 클릭하면 참석자 명단을 확인·복사할 수 있습니다</div>
-                        </div>
-                    </div>
-                    <div class="card-body">
-                        <div class="chart-canvas-wrap">
-                            <canvas id="event-attendance-chart"></canvas>
-                        </div>
-                    </div>
-                </div>
+                    <article class="card chart-card-glow">
+                        <div class="card-header"><span class="card-icon">🥧</span><div><h2>카테고리별 비용 비중</h2><div class="chart-subtitle">행사비 · 시설비 · 상품비 비율</div></div></div>
+                        <div class="card-body"><div class="chart-canvas-wrap"><canvas id="category-pie-chart"></canvas></div></div>
+                    </article>
 
-                <!-- 클럽별 참석 인원 (중복 제외) -->
-                <div class="card chart-card-glow">
-                    <div class="card-header">
-                        <span class="card-icon">👥</span>
-                        <div>
-                            <h2>클럽별 참석 인원 (중복 제외)</h2>
-                            <div class="chart-subtitle">올해 각 클럽 행사에 참석한 서로 다른 인원수 — 막대를 클릭하면 명단 확인·복사</div>
-                        </div>
-                    </div>
-                    <div class="card-body">
-                        <div class="chart-canvas-wrap">
-                            <canvas id="club-unique-attendees-chart"></canvas>
-                        </div>
-                    </div>
-                </div>
-            </div>
+                    <article class="card chart-card-glow chart-span-wide">
+                        <div class="card-header"><span class="card-icon">🏃</span><div><h2>클럽별 정산 횟수</h2><div class="chart-subtitle">올해 활동량 · 막대를 누르면 사용 요약을 확인합니다</div></div></div>
+                        <div class="card-body"><div class="chart-canvas-wrap"><canvas id="club-activity-chart"></canvas></div></div>
+                    </article>
 
-            <!-- 전폭: 자부담 vs 회사지원금 추이 -->
-            <div class="card chart-card-glow">
-                <div class="card-header">
-                    <span class="card-icon">📐</span>
-                    <div>
-                        <h2>자부담 / 회사지원금 추이</h2>
-                        <div class="chart-subtitle">월별 회사 지원금 vs 참석자 자부담 변화</div>
-                    </div>
-                </div>
-                <div class="card-body">
-                    <div class="trend-total-summary" aria-label="회사 지원금과 자부담 비용 누적 요약">
-                        <div class="trend-total-card support">
-                            <span>총 회사 지원금</span>
-                            <strong id="selfpay-trend-total-support">0원</strong>
+                    <aside class="card chart-card-glow recent-settlement-card">
+                        <div class="card-header"><span class="card-icon">🔔</span><div><h2>최근 정산 알림</h2><div class="chart-subtitle">최신 확정 이력 5건</div></div></div>
+                        <div class="card-body"><div id="recent-settlement-list" class="recent-settlement-list" aria-live="polite"></div></div>
+                    </aside>
+
+                    <article class="card chart-card-glow">
+                        <div class="card-header"><span class="card-icon">🙋</span><div><h2>행사별 참석 인원</h2><div class="chart-subtitle">최근 10건 · 막대를 누르면 명단 확인·복사</div></div></div>
+                        <div class="card-body"><div class="chart-canvas-wrap"><canvas id="event-attendance-chart"></canvas></div></div>
+                    </article>
+
+                    <article class="card chart-card-glow">
+                        <div class="card-header"><span class="card-icon">👥</span><div><h2>클럽별 참석 인원</h2><div class="chart-subtitle">올해 중복을 제외한 고유 참석자 수</div></div></div>
+                        <div class="card-body"><div class="chart-canvas-wrap"><canvas id="club-unique-attendees-chart"></canvas></div></div>
+                    </article>
+
+                    <article class="card chart-card-glow chart-span-full">
+                        <div class="card-header"><span class="card-icon">📐</span><div><h2>자부담 / 회사지원금 추이</h2><div class="chart-subtitle">월별 회사 지원금과 참석자 자부담 변화</div></div></div>
+                        <div class="card-body">
+                            <div class="trend-total-summary" aria-label="회사 지원금과 자부담 비용 누적 요약">
+                                <div class="trend-total-card support"><span>총 회사 지원금</span><strong id="selfpay-trend-total-support">0원</strong></div>
+                                <div class="trend-total-card selfpay"><span>총 자부담 비용</span><strong id="selfpay-trend-total-selfpay">0원</strong></div>
+                            </div>
+                            <div class="chart-canvas-wrap tall"><canvas id="selfpay-trend-chart"></canvas></div>
                         </div>
-                        <div class="trend-total-card selfpay">
-                            <span>총 자부담 비용</span>
-                            <strong id="selfpay-trend-total-selfpay">0원</strong>
-                        </div>
-                    </div>
-                    <div class="chart-canvas-wrap tall">
-                        <canvas id="selfpay-trend-chart"></canvas>
-                    </div>
+                    </article>
                 </div>
-            </div>
+            </section>
         </div>
 
         <!-- Tab Content 7: Admin Dashboard -->
-        <div id="tab-admin" class="tab-pane hidden">
+        <div id="tab-admin" class="tab-pane hidden admin-themed-pane" data-admin-theme="dark">
             <div class="admin-mode-header-wrap" style="display:flex; align-items:center; justify-content:space-between; margin-bottom:1rem; flex-wrap:wrap; gap:0.5rem;">
                 <h2 class="admin-mode-title" data-i18n="admin.mode_title" style="margin-bottom:0;">👑 전체 관리자 모드</h2>
-                <button type="button" id="admin-audit-log-btn" class="btn-secondary" style="padding:0.35rem 0.75rem; font-size:0.8rem; display:inline-flex; align-items:center; gap:0.35rem; border-color:rgba(56,189,248,0.35); background:rgba(14,165,233,0.12); color:#7dd3fc; border-radius:8px; cursor:pointer;">📜 로그 기록</button>
+                <div class="admin-mode-header-actions">
+                    <div class="admin-theme-control compact" role="group" aria-label="관리자 테마 선택">
+                        <button type="button" class="admin-theme-btn active" data-admin-theme-value="dark" aria-pressed="true">Dark</button>
+                        <button type="button" class="admin-theme-btn" data-admin-theme-value="light" aria-pressed="false">Light</button>
+                    </div>
+                    <button type="button" id="admin-audit-log-btn" class="btn-secondary" style="padding:0.35rem 0.75rem; font-size:0.8rem; display:inline-flex; align-items:center; gap:0.35rem; border-color:rgba(56,189,248,0.35); background:rgba(14,165,233,0.12); color:#7dd3fc; border-radius:8px; cursor:pointer;">📜 로그 기록</button>
+                </div>
             </div>
             <section class="admin-start-guide" aria-labelledby="admin-start-guide-title">
                 <div class="admin-start-guide-heading">
