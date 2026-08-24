@@ -1,7 +1,7 @@
 /**
  * Club Expense Settlement App - Main JavaScript Logic
  */
-const APP_VERSION      = '1.6.272';
+const APP_VERSION      = '1.6.273';
 const APP_VERSION_DATE = '2026.08.25';
 
 // 인당 자부담 비용에 따라 강조 박스의 아이콘/색상을 전환 (100원 이상이면 🔥, 0이면 😊)
@@ -5796,6 +5796,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 변경이력 모달
     const CHANGELOG = [
+        { ver: '1.6.273', date: '2026.08.25', items: ['클럽 자동 색상을 조화로운 선별 팔레트로 정돈하고 모든 클럽 막대 차트에 방향별 3단 그라데이션 적용', '관리자 Dark/Light 선택을 로그인·정산·명부·이력·모달을 포함한 전체 페이지 테마로 확장', '전체 테마의 기기별 저장·초기 로딩 복원과 모바일 가로 넘침 없는 반응형 표시 검증'] },
         { ver: '1.6.272', date: '2026.08.25', items: ['관리자 차트를 KPI·월별 지출·예산 소진율·카테고리·참석·최근 정산 알림을 한 화면에 배치한 프리미엄 대시보드 디자인으로 개편', '클럽 ID 기반 고유 색상과 관리자 색상 선택기를 추가해 모든 클럽 차트·필터에서 동일 색상을 유지', '관리자 대시보드 Dark/Light 테마 전환 및 기기별 설정 기억, 모바일 1열 차트·2열 KPI·스와이프 필터 최적화'] },
         { ver: '1.6.271', date: '2026.08.21', items: ['헤더 최상단에 중복 표시되던 로그 버튼을 제거하고 관리자 대시보드 내 전용 버튼으로 단일화'] },
         { ver: '1.6.270', date: '2026.08.21', items: ['상단 메인 탭바에서 로그 기록 메뉴를 제거해 4개 주요 탭(명부·클럽이력·차트·대시보드)으로 정돈', '로그 기록 조회를 대시보드 상단·시작 가이드 및 헤더의 컴팩트 버튼으로 재배치하고 모달 팝업으로 즉시 확인/닫기 가능하도록 개선'] },
@@ -6673,6 +6674,7 @@ document.addEventListener('DOMContentLoaded', () => {
             clubListContainer.innerHTML = `<div class="empty-state"><span class="empty-icon">🏷️</span><p>${t('empty.no_clubs')}</p></div>`;
             return;
         }
+        const clubColorMap = getClubColorMap();
         clubs.sort((a, b) => a[1].name.localeCompare(b[1].name)).forEach(([clubId, club], idx) => {
             const _thisYear = new Date().getFullYear();
             // 상품비: globalHistory 기준으로 올해 실제 사용액 계산 후 Firebase에도 동기화
@@ -6722,7 +6724,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const prizeLimit = AppState.rules.prizeLimit || 500000;
             const remaining = budget - priorUsed - usedBudget;
             const overLimitApproved = !!club.allowOverLimitSupport;
-            const chartColor = resolveClubBaseColor(clubId, club);
+            const chartColor = clubColorMap[club.name] || resolveClubBaseColor(clubId, club);
             const row = document.createElement('div');
             row.className = 'expense-row';
             row.style.cssText = 'padding:0.6rem 0.75rem; height:auto; align-items:center; flex-wrap:wrap;';
@@ -6975,7 +6977,7 @@ document.addEventListener('DOMContentLoaded', () => {
         cancelEditClubBtn.addEventListener('click', resetClubForm);
     }
 
-    // ── 관리자 화면 Dark / Light 테마 (기기별 UI 선호값) ───────────────
+    // ── 전체 앱 Dark / Light 테마 (기기별 UI 선호값) ──────────────────
     const ADMIN_THEME_STORAGE_KEY = 'club_expense_admin_theme';
 
     function getAdminTheme() {
@@ -7002,6 +7004,8 @@ document.addEventListener('DOMContentLoaded', () => {
     function applyAdminTheme(theme, rerenderCharts = true) {
         const normalized = theme === 'light' ? 'light' : 'dark';
         try { localStorage.setItem(ADMIN_THEME_STORAGE_KEY, normalized); } catch (_) {}
+        document.documentElement.dataset.appTheme = normalized;
+        document.querySelector('meta[name="theme-color"]')?.setAttribute('content', normalized === 'light' ? '#eef3fa' : '#8b5cf6');
         document.querySelectorAll('.admin-themed-pane').forEach(pane => {
             pane.dataset.adminTheme = normalized;
         });
@@ -7212,35 +7216,30 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     if (typeof Chart !== 'undefined') Chart.register(chartValueLabelPlugin);
 
-    // 클럽 고유 색상 — clubRegistry.chartColor가 최우선이며, 미지정 클럽도 고정 ID 해시를 사용한다.
-    // 클럽 추가·삭제·차트 정렬 순서가 바뀌어도 기존 클럽의 색상은 변하지 않는다.
+    // 클럽 고유 색상 — clubRegistry.chartColor가 최우선이며, 자동 색상은 조화로운 선별 팔레트 안에서
+    // 고정 ID 해시로 배정한다. 차트별 정렬·필터가 바뀌어도 같은 클럽은 항상 같은 계열을 유지한다.
+    const CLUB_COLOR_PALETTE = [
+        '#7c6ee6', '#9b6de3', '#586fd8', '#3f83e0', '#3aa5d9', '#2eafc2',
+        '#2eaa91', '#45a66f', '#76a84b', '#d2a23b', '#df8238', '#e46655',
+        '#db5e7e', '#d45aa6', '#a85ed0', '#6f66c8', '#4878b8', '#3f9d98'
+    ];
+
     function normalizeClubHexColor(value) {
         return /^#[0-9a-f]{6}$/i.test(String(value || '')) ? String(value).toLowerCase() : '';
     }
 
-    function stableClubHexColor(value) {
+    function stableClubColorIndex(value) {
         const text = String(value || '기본 클럽');
         let hash = 2166136261;
         for (let i = 0; i < text.length; i++) {
             hash ^= text.charCodeAt(i);
             hash = Math.imul(hash, 16777619);
         }
-        hash >>>= 0;
-        const hue = hash % 360;
-        const saturation = 66 + ((hash >>> 9) % 18);
-        const lightness = 52 + ((hash >>> 17) % 10);
-        const s = saturation / 100;
-        const l = lightness / 100;
-        const c = (1 - Math.abs(2 * l - 1)) * s;
-        const x = c * (1 - Math.abs((hue / 60) % 2 - 1));
-        const m = l - c / 2;
-        const [r1, g1, b1] = hue < 60 ? [c, x, 0]
-            : hue < 120 ? [x, c, 0]
-            : hue < 180 ? [0, c, x]
-            : hue < 240 ? [0, x, c]
-            : hue < 300 ? [x, 0, c]
-            : [c, 0, x];
-        return `#${[r1, g1, b1].map(channel => Math.round((channel + m) * 255).toString(16).padStart(2, '0')).join('')}`;
+        return (hash >>> 0) % CLUB_COLOR_PALETTE.length;
+    }
+
+    function stableClubHexColor(value) {
+        return CLUB_COLOR_PALETTE[stableClubColorIndex(value)];
     }
 
     function resolveClubBaseColor(clubId, club) {
@@ -7250,9 +7249,28 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function getClubColorMap() {
         const map = {};
-        Object.entries(AppState.clubRegistry || {}).forEach(([clubId, club]) => {
-            if (club?.name) map[club.name] = resolveClubBaseColor(clubId, club);
-        });
+        const claimedAutomaticColors = new Set();
+        Object.entries(AppState.clubRegistry || {})
+            .filter(([, club]) => club?.name)
+            .sort(([leftId], [rightId]) => String(leftId).localeCompare(String(rightId)))
+            .forEach(([clubId, club]) => {
+                const customColor = normalizeClubHexColor(club.chartColor);
+                if (customColor) {
+                    map[club.name] = customColor;
+                    return;
+                }
+                const startIndex = stableClubColorIndex(clubId || club.name);
+                let color = CLUB_COLOR_PALETTE[startIndex];
+                for (let offset = 0; offset < CLUB_COLOR_PALETTE.length; offset++) {
+                    const candidate = CLUB_COLOR_PALETTE[(startIndex + offset) % CLUB_COLOR_PALETTE.length];
+                    if (!claimedAutomaticColors.has(candidate)) {
+                        color = candidate;
+                        break;
+                    }
+                }
+                claimedAutomaticColors.add(color);
+                map[club.name] = color;
+            });
         return map;
     }
 
@@ -7260,6 +7278,30 @@ document.addEventListener('DOMContentLoaded', () => {
         const normalized = normalizeClubHexColor(hex) || '#8b5cf6';
         const value = parseInt(normalized.slice(1), 16);
         return `rgba(${(value >> 16) & 255}, ${(value >> 8) & 255}, ${value & 255}, ${alpha})`;
+    }
+
+    function mixHexColor(hex, targetHex = '#ffffff', amount = 0.25) {
+        const source = parseInt((normalizeClubHexColor(hex) || '#8b5cf6').slice(1), 16);
+        const target = parseInt((normalizeClubHexColor(targetHex) || '#ffffff').slice(1), 16);
+        const ratio = Math.min(1, Math.max(0, amount));
+        const channels = [16, 8, 0].map(shift => Math.round(
+            ((source >> shift) & 255) * (1 - ratio) + ((target >> shift) & 255) * ratio
+        ));
+        return `#${channels.map(channel => channel.toString(16).padStart(2, '0')).join('')}`;
+    }
+
+    // 막대 방향에 맞춰 클럽 고유색을 유지하는 은은한 3단 그라데이션을 만든다.
+    function clubBarGradient(context, baseHex, horizontal = false) {
+        const chart = context.chart;
+        const area = chart.chartArea;
+        if (!area) return hexToRgba(baseHex, 0.9);
+        const gradient = horizontal
+            ? chart.ctx.createLinearGradient(area.left, 0, area.right, 0)
+            : chart.ctx.createLinearGradient(0, area.bottom, 0, area.top);
+        gradient.addColorStop(0, hexToRgba(baseHex, 0.82));
+        gradient.addColorStop(0.58, hexToRgba(mixHexColor(baseHex, '#ffffff', 0.12), 0.94));
+        gradient.addColorStop(1, hexToRgba(mixHexColor(baseHex, '#ffffff', 0.34), 1));
+        return gradient;
     }
 
     // 클럽 레지스트리에 없는 과거 이력도 이름 해시로 일관된 색을 사용한다.
@@ -7339,7 +7381,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const datasets = sortedClubs.map((club) => ({
             label: club,
             data: labels.map(month => (spendByMonthClub[month] && spendByMonthClub[month][club]) || 0),
-            backgroundColor: clubColorFor(club, clubColorMap),
+            backgroundColor: context => clubBarGradient(context, clubColorMap[club] || stableClubHexColor(club), false),
             borderColor: clubColorFor(club, clubColorMap, 1),
             borderWidth: 0,
             borderRadius: 6,
@@ -7431,8 +7473,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const clubColorMap = getClubColorMap();
         const labels = clubData.map(d => d.name);
         const usageRatio = clubData.map(d => d.ratio);
-        const usageColors = clubData.map(d => clubColorFor(d.name, clubColorMap));
-
         if (clubUsageChartInstance) clubUsageChartInstance.destroy();
         if (labels.length === 0) return;
 
@@ -7443,7 +7483,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 datasets: [{
                     label: '예산 소진율',
                     data: usageRatio,
-                    backgroundColor: usageColors,
+                    backgroundColor: context => {
+                        const name = clubData[context.dataIndex]?.name || '기본 클럽';
+                        return clubBarGradient(context, clubColorMap[name] || stableClubHexColor(name), true);
+                    },
                     borderColor: clubData.map(d => clubColorFor(d.name, clubColorMap, 1)),
                     borderWidth: 0,
                     borderRadius: 8
@@ -7970,7 +8013,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 datasets: [{
                     label: '정산 횟수',
                     data: counts,
-                    backgroundColor: labels.map(name => clubColorFor(name, clubColorMap)),
+                    backgroundColor: context => {
+                        const name = labels[context.dataIndex] || '기본 클럽';
+                        return clubBarGradient(context, clubColorMap[name] || stableClubHexColor(name), true);
+                    },
+                    borderColor: labels.map(name => clubColorFor(name, clubColorMap, 1)),
                     borderWidth: 0,
                     borderRadius: 8
                 }]
@@ -8130,7 +8177,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 datasets: [{
                     label: '참석 인원',
                     data: counts,
-                    backgroundColor: entries.map(en => clubColorFor(en.club, clubColorMap)),
+                    backgroundColor: context => {
+                        const name = entries[context.dataIndex]?.club || '기본 클럽';
+                        return clubBarGradient(context, clubColorMap[name] || stableClubHexColor(name), true);
+                    },
+                    borderColor: entries.map(en => clubColorFor(en.club, clubColorMap, 1)),
                     borderWidth: 0,
                     borderRadius: 6
                 }]
@@ -8227,7 +8278,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 datasets: [{
                     label: '참석 인원 (중복 제외)',
                     data: counts,
-                    backgroundColor: labels.map(name => clubColorFor(name, clubColorMap)),
+                    backgroundColor: context => {
+                        const name = labels[context.dataIndex] || '기본 클럽';
+                        return clubBarGradient(context, clubColorMap[name] || stableClubHexColor(name), true);
+                    },
+                    borderColor: labels.map(name => clubColorFor(name, clubColorMap, 1)),
                     borderWidth: 0,
                     borderRadius: 8
                 }]

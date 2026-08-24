@@ -177,4 +177,4 @@
 - [`CHANGES.md`](CHANGES.md) — 버전별 변경 이력
 - [`CODE_REVIEW.md`](CODE_REVIEW.md) — **매 작업 시작 전 필독**: v1.6.201 검증 결과, 재수정 금지 항목 상세, 승인된 백로그(사용자 명시 요청 시에만 착수)
 
-현재 버전: **v1.6.272** (`sw.js` `APP_VERSION`)
+현재 버전: **v1.6.273** (`sw.js` `APP_VERSION`)

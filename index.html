@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ko">
+<html lang="ko" data-app-theme="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
@@ -13,6 +13,13 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="정산기">
+
+    <!-- 저장된 전체 앱 테마를 CSS 로드 전에 복원해 화면 깜빡임을 방지 -->
+    <script>
+        try {
+            document.documentElement.dataset.appTheme = localStorage.getItem('club_expense_admin_theme') === 'light' ? 'light' : 'dark';
+        } catch (_) {}
+    </script>
 
     <!-- Premium Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -582,8 +589,8 @@
                             <p>예산, 정산, 참석 현황을 한 화면에서 확인합니다.</p>
                         </div>
                     </div>
-                    <div class="admin-theme-control" role="group" aria-label="대시보드 테마 선택">
-                        <span>테마</span>
+                    <div class="admin-theme-control" role="group" aria-label="전체 페이지 테마 선택">
+                        <span>전체 테마</span>
                         <button type="button" class="admin-theme-btn active" data-admin-theme-value="dark" aria-pressed="true">Dark</button>
                         <button type="button" class="admin-theme-btn" data-admin-theme-value="light" aria-pressed="false">Light</button>
                     </div>
@@ -675,7 +682,7 @@
             <div class="admin-mode-header-wrap" style="display:flex; align-items:center; justify-content:space-between; margin-bottom:1rem; flex-wrap:wrap; gap:0.5rem;">
                 <h2 class="admin-mode-title" data-i18n="admin.mode_title" style="margin-bottom:0;">👑 전체 관리자 모드</h2>
                 <div class="admin-mode-header-actions">
-                    <div class="admin-theme-control compact" role="group" aria-label="관리자 테마 선택">
+                    <div class="admin-theme-control compact" role="group" aria-label="전체 페이지 테마 선택">
                         <button type="button" class="admin-theme-btn active" data-admin-theme-value="dark" aria-pressed="true">Dark</button>
                         <button type="button" class="admin-theme-btn" data-admin-theme-value="light" aria-pressed="false">Light</button>
                     </div>
