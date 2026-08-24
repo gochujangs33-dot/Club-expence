@@ -1,7 +1,7 @@
 /**
  * Club Expense Settlement App - Main JavaScript Logic
  */
-const APP_VERSION      = '1.6.273';
+const APP_VERSION      = '1.6.274';
 const APP_VERSION_DATE = '2026.08.25';
 
 // 인당 자부담 비용에 따라 강조 박스의 아이콘/색상을 전환 (100원 이상이면 🔥, 0이면 😊)
@@ -5796,6 +5796,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 변경이력 모달
     const CHANGELOG = [
+        { ver: '1.6.274', date: '2026.08.25', items: ['Windows 데스크톱에서 글자가 번져 보이던 카드 GPU 블러와 목록 강제 합성 레이어 제거', '한글 전용 대체 글꼴을 명시하고 Light/Dark 보조 글자 명암·굵기·최소 크기를 높여 전체 페이지 가독성 개선', '차트 축·값 라벨을 12px 이상으로 확대하고 고해상도 캔버스 및 모바일 가로 넘침 없음 재검증'] },
         { ver: '1.6.273', date: '2026.08.25', items: ['클럽 자동 색상을 조화로운 선별 팔레트로 정돈하고 모든 클럽 막대 차트에 방향별 3단 그라데이션 적용', '관리자 Dark/Light 선택을 로그인·정산·명부·이력·모달을 포함한 전체 페이지 테마로 확장', '전체 테마의 기기별 저장·초기 로딩 복원과 모바일 가로 넘침 없는 반응형 표시 검증'] },
         { ver: '1.6.272', date: '2026.08.25', items: ['관리자 차트를 KPI·월별 지출·예산 소진율·카테고리·참석·최근 정산 알림을 한 화면에 배치한 프리미엄 대시보드 디자인으로 개편', '클럽 ID 기반 고유 색상과 관리자 색상 선택기를 추가해 모든 클럽 차트·필터에서 동일 색상을 유지', '관리자 대시보드 Dark/Light 테마 전환 및 기기별 설정 기억, 모바일 1열 차트·2열 KPI·스와이프 필터 최적화'] },
         { ver: '1.6.271', date: '2026.08.21', items: ['헤더 최상단에 중복 표시되던 로그 버튼을 제거하고 관리자 대시보드 내 전용 버튼으로 단일화'] },
@@ -6992,7 +6993,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const isLight = getAdminTheme() === 'light';
         return isLight
             ? {
-                primary: '#25324a', secondary: '#62718a', muted: '#7d8ba1',
+                primary: '#17243b', secondary: '#53647e', muted: '#65748a',
                 grid: 'rgba(72,91,128,0.12)', surface: '#ffffff', tooltip: '#17243b', tooltipText: '#f8fafc'
             }
             : {
@@ -7139,7 +7140,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!opts || !opts.getLabel) return;
             const { ctx } = chart;
             ctx.save();
-            ctx.font = "600 11px -apple-system, 'Malgun Gothic', sans-serif";
+            ctx.font = "600 12px 'Malgun Gothic', '맑은 고딕', 'Segoe UI', sans-serif";
             ctx.textBaseline = 'middle';
 
             if (chart.config.type === 'doughnut') {
@@ -7431,11 +7432,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 },
                 scales: {
-                    x: { stacked, ticks: { color: '#94a3b8', font: { size: 11 } }, grid: { color: 'rgba(255,255,255,0.04)' } },
+                    x: { stacked, ticks: { color: '#94a3b8', font: { size: 12, weight: '500' } }, grid: { color: 'rgba(255,255,255,0.04)' } },
                     y: {
                         stacked,
                         suggestedMax: maxTotal * 1.15 || undefined,
-                        title: { display: true, text: '금액 (원)', color: '#94a3b8', font: { size: 11, weight: '600' } },
+                        title: { display: true, text: '금액 (원)', color: '#94a3b8', font: { size: 12, weight: '600' } },
                         ticks: { color: '#94a3b8', callback: value => formatKoreanWon(value) },
                         grid: { color: 'rgba(255,255,255,0.05)' },
                         beginAtZero: true
@@ -7520,7 +7521,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 },
                 scales: {
                     x: { ticks: { color: '#94a3b8', callback: (v) => v + '%' }, grid: { color: 'rgba(255,255,255,0.04)' }, beginAtZero: true, max: 120 },
-                    y: { ticks: { color: '#cbd5e1', font: { size: 11 } }, grid: { display: false } }
+                    y: { ticks: { color: '#cbd5e1', font: { size: 12, weight: '500' } }, grid: { display: false } }
                 }
             }
         });
@@ -7695,7 +7696,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 },
                 scales: {
-                    x: { ticks: { color: '#94a3b8', font: { size: 11 } }, grid: { color: 'rgba(255,255,255,0.04)' } },
+                    x: { ticks: { color: '#94a3b8', font: { size: 12, weight: '500' } }, grid: { color: 'rgba(255,255,255,0.04)' } },
                     y: { ticks: { color: '#94a3b8', callback: v => v >= 1000000 ? (v/1000000).toFixed(1)+'M' : v >= 1000 ? (v/1000).toFixed(0)+'K' : v }, grid: { color: 'rgba(255,255,255,0.05)' }, beginAtZero: true }
                 }
             }
@@ -8037,7 +8038,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 scales: {
                     // 끝(tip) 라벨이 잘리지 않도록 최대치에 여유 확보
                     x: { ticks: { color: '#94a3b8', stepSize: 1 }, grid: { color: 'rgba(255,255,255,0.04)' }, beginAtZero: true, suggestedMax: Math.max(...counts, 1) + 1 },
-                    y: { ticks: { color: '#cbd5e1', font: { size: 11 } }, grid: { display: false } }
+                    y: { ticks: { color: '#cbd5e1', font: { size: 12, weight: '500' } }, grid: { display: false } }
                 },
                 onHover: (_event, elements) => { canvas.style.cursor = elements.length ? 'pointer' : 'default'; },
                 onClick: (_event, elements) => {
@@ -8212,7 +8213,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 },
                 scales: {
                     x: { ticks: { color: '#94a3b8', stepSize: 1 }, grid: { color: 'rgba(255,255,255,0.04)' }, beginAtZero: true, suggestedMax: Math.max(...counts, 1) + 2 },
-                    y: { ticks: { color: '#cbd5e1', font: { size: 11 }, autoSkip: false }, grid: { display: false } }
+                    y: { ticks: { color: '#cbd5e1', font: { size: 12, weight: '500' }, autoSkip: false }, grid: { display: false } }
                 },
                 onHover: (_event, elements) => { canvas.style.cursor = elements.length ? 'pointer' : 'default'; },
                 onClick: (_event, elements) => {
@@ -8310,7 +8311,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 },
                 scales: {
                     x: { ticks: { color: '#94a3b8', stepSize: 1 }, grid: { color: 'rgba(255,255,255,0.04)' }, beginAtZero: true, suggestedMax: Math.max(...counts, 1) + 1 },
-                    y: { ticks: { color: '#cbd5e1', font: { size: 11 } }, grid: { display: false } }
+                    y: { ticks: { color: '#cbd5e1', font: { size: 12, weight: '500' } }, grid: { display: false } }
                 },
                 onHover: (_event, elements) => { canvas.style.cursor = elements.length ? 'pointer' : 'default'; },
                 onClick: (_event, elements) => {
