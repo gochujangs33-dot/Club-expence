@@ -2793,11 +2793,15 @@ body:has(.update-banner:not(.hidden)) {
 .trend-total-card span { color: var(--dashboard-subtext); }
 .recent-settlement-card .card-body { height: calc(285px + 1.5rem); }
 .recent-settlement-list { display: flex; height: 100%; flex-direction: column; gap: 0.46rem; overflow-y: auto; }
-.recent-settlement-item { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; gap: 0.55rem; align-items: center; padding: 0.58rem 0.62rem; border: 1px solid var(--dashboard-border); border-radius: 10px; background: var(--dashboard-panel-strong); }
+.recent-settlement-item { display: grid; width: 100%; grid-template-columns: 10px minmax(0, 1fr) auto; gap: 0.55rem; align-items: center; padding: 0.58rem 0.62rem; border: 1px solid var(--dashboard-border); border-radius: 10px; background: var(--dashboard-panel-strong); color: inherit; font: inherit; text-align: left; cursor: pointer; transition: border-color 0.18s ease, background-color 0.18s ease, transform 0.18s ease; }
+.recent-settlement-item:hover,
+.recent-settlement-item:focus-visible { border-color: color-mix(in srgb, var(--club-color, #8b5cf6) 58%, transparent); background: color-mix(in srgb, var(--club-color, #8b5cf6) 9%, var(--dashboard-panel-strong)); outline: none; }
+.recent-settlement-item:active { transform: scale(0.99); }
 .recent-settlement-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--club-color); box-shadow: 0 0 9px var(--club-color); }
 .recent-settlement-copy { min-width: 0; }
 .recent-settlement-copy strong { display: block; overflow: hidden; color: var(--dashboard-text); font-size: 0.8rem; text-overflow: ellipsis; white-space: nowrap; }
-.recent-settlement-copy small { display: block; margin-top: 0.12rem; color: var(--dashboard-muted); font-size: 0.75rem; font-weight: 500; }
+.recent-settlement-meta { display: flex; flex-wrap: wrap; gap: 0.12rem 0.42rem; margin-top: 0.12rem; color: var(--dashboard-muted); font-size: 0.75rem; font-weight: 500; }
+.recent-settlement-attendees { color: var(--dashboard-subtext); font-weight: 700; }
 .recent-settlement-amount { color: var(--dashboard-subtext); font-size: 0.75rem; font-weight: 800; white-space: nowrap; }
 .recent-settlement-empty { display: grid; height: 100%; place-items: center; color: var(--dashboard-muted); font-size: 0.78rem; text-align: center; }
 
@@ -2983,6 +2987,8 @@ html[data-app-theme="light"] .audit-log-details { border-top-color: rgba(72, 91,
     .charts-kpi-foot { font-size: 0.75rem; }
     .charts-premium-grid { gap: 0.7rem; }
     .chart-card-glow .card-body { padding: 0.65rem; }
+    .recent-settlement-card .card-body { max-height: none; }
+    .recent-settlement-list { overflow-y: visible; }
     .recent-settlement-item { grid-template-columns: 9px minmax(0, 1fr); }
     .recent-settlement-amount { grid-column: 2; }
     .admin-theme-control.compact { width: 100%; }
@@ -3262,7 +3268,6 @@ html[data-app-theme="light"] .audit-log-details { border-top-color: rgba(72, 91,
     .diff-popup { width: min(calc(100vw - 1.5rem), 340px); min-width: 0; padding: 0.75rem 1rem; }
 
     .chart-canvas-wrap:has(#club-activity-chart),
-    .chart-canvas-wrap:has(#event-attendance-chart),
     .chart-canvas-wrap:has(#club-unique-attendees-chart) { height: 350px; }
 }
 
@@ -3270,6 +3275,5 @@ html[data-app-theme="light"] .audit-log-details { border-top-color: rgba(72, 91,
     #club-list-container .expense-row { grid-template-columns: 1fr; }
     .club-usage-summary-totals { grid-template-columns: 1fr; }
     .chart-canvas-wrap:has(#club-activity-chart),
-    .chart-canvas-wrap:has(#event-attendance-chart),
     .chart-canvas-wrap:has(#club-unique-attendees-chart) { height: 390px; }
 }

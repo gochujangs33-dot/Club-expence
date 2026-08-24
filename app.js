@@ -1,7 +1,7 @@
 /**
  * Club Expense Settlement App - Main JavaScript Logic
  */
-const APP_VERSION      = '1.6.274';
+const APP_VERSION      = '1.6.275';
 const APP_VERSION_DATE = '2026.08.25';
 
 // 인당 자부담 비용에 따라 강조 박스의 아이콘/색상을 전환 (100원 이상이면 🔥, 0이면 😊)
@@ -5796,6 +5796,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 변경이력 모달
     const CHANGELOG = [
+        { ver: '1.6.275', date: '2026.08.25', items: ['역할이 겹치던 행사별 참석 인원 차트를 제거하고 최근 정산 알림으로 통합', '최근 정산 5건에 참석 인원·정산인·지원금을 함께 표시하고 항목 클릭 시 참석자 명단 확인·복사 제공', '클럽별 고유 참석 인원 차트를 전체 폭으로 재배치하고 모바일에서는 최근 5건을 중첩 스크롤 없이 표시'] },
         { ver: '1.6.274', date: '2026.08.25', items: ['Windows 데스크톱에서 글자가 번져 보이던 카드 GPU 블러와 목록 강제 합성 레이어 제거', '한글 전용 대체 글꼴을 명시하고 Light/Dark 보조 글자 명암·굵기·최소 크기를 높여 전체 페이지 가독성 개선', '차트 축·값 라벨을 12px 이상으로 확대하고 고해상도 캔버스 및 모바일 가로 넘침 없음 재검증'] },
         { ver: '1.6.273', date: '2026.08.25', items: ['클럽 자동 색상을 조화로운 선별 팔레트로 정돈하고 모든 클럽 막대 차트에 방향별 3단 그라데이션 적용', '관리자 Dark/Light 선택을 로그인·정산·명부·이력·모달을 포함한 전체 페이지 테마로 확장', '전체 테마의 기기별 저장·초기 로딩 복원과 모바일 가로 넘침 없는 반응형 표시 검증'] },
         { ver: '1.6.272', date: '2026.08.25', items: ['관리자 차트를 KPI·월별 지출·예산 소진율·카테고리·참석·최근 정산 알림을 한 화면에 배치한 프리미엄 대시보드 디자인으로 개편', '클럽 ID 기반 고유 색상과 관리자 색상 선택기를 추가해 모든 클럽 차트·필터에서 동일 색상을 유지', '관리자 대시보드 Dark/Light 테마 전환 및 기기별 설정 기억, 모바일 1열 차트·2열 KPI·스와이프 필터 최적화'] },
@@ -8051,13 +8052,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    let eventAttendanceChartInstance = null;
-
-    // ── 행사별 참석 인원 (행사 1건 = 1줄 가로 목록형, "클럽명 날짜" 라벨 + 클럽 고유 색) ──
-    // 사용자가 원하는 읽기: "어떤 클럽이 · 며칠 행사에 · 몇 명 참석" — 세 정보가 호버 없이
-    // 한 줄에서 바로 읽히도록 세로 막대 → 가로 목록형으로 변경 (v1.6.236). 최근 행사가 위.
-    const EVENT_ATTENDANCE_MAX_ROWS = 10;
-
     function normalizeChartAttendees(attendees) {
         return (attendees || [])
             .map(attendee => ({
@@ -8143,91 +8137,6 @@ document.addEventListener('DOMContentLoaded', () => {
             console.error('참석자 명단 복사 실패:', error);
             if (statusEl) statusEl.textContent = '복사하지 못했습니다. 다시 시도해 주세요.';
         }
-    }
-
-    function renderEventAttendanceChart(historyList) {
-        const canvas = document.getElementById('event-attendance-chart');
-        if (!canvas || typeof Chart === 'undefined') return;
-
-        const entries = (historyList || [])
-            .filter(e => e && (!selectedOverallClubs || selectedOverallClubs.has(e.clubName || '기본 클럽')))
-            .map(e => ({
-                club: e.clubName || '기본 클럽',
-                dateKey: e.settlementDate || (e.date ? e.date.slice(0, 10) : ''),
-                members: e.memberCount || (e.attendees ? e.attendees.length : 0),
-                attendees: Array.isArray(e.attendees) ? e.attendees : []
-            }))
-            .sort((a, b) => b.dateKey.localeCompare(a.dateKey))
-            .slice(0, EVENT_ATTENDANCE_MAX_ROWS);
-
-        if (eventAttendanceChartInstance) eventAttendanceChartInstance.destroy();
-        if (entries.length === 0) return;
-
-        const clubColorMap = getClubColorMap();
-        const labels = entries.map(en => {
-            const d = en.dateKey ? new Date(en.dateKey + 'T00:00:00') : null;
-            const dateLabel = d && !isNaN(d) ? `${d.getMonth() + 1}/${d.getDate()}` : '?';
-            return `${en.club} ${dateLabel}`;
-        });
-        const counts = entries.map(en => en.members);
-
-        eventAttendanceChartInstance = new Chart(canvas.getContext('2d'), {
-            type: 'bar',
-            data: {
-                labels,
-                datasets: [{
-                    label: '참석 인원',
-                    data: counts,
-                    backgroundColor: context => {
-                        const name = entries[context.dataIndex]?.club || '기본 클럽';
-                        return clubBarGradient(context, clubColorMap[name] || stableClubHexColor(name), true);
-                    },
-                    borderColor: entries.map(en => clubColorFor(en.club, clubColorMap, 1)),
-                    borderWidth: 0,
-                    borderRadius: 6
-                }]
-            },
-            options: {
-                indexAxis: 'y',
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: { display: false },
-                    tooltip: {
-                        callbacks: {
-                            title: (items) => {
-                                const en = entries[items[0].dataIndex];
-                                return `${en.club} · ${en.dateKey}`;
-                            },
-                            label: ctx => {
-                                const entry = entries[ctx.dataIndex];
-                                return [`참석 ${ctx.parsed.x}명`, ...formatChartAttendeeTooltipLines(entry.attendees)];
-                            },
-                            footer: () => '막대를 클릭하면 명단 팝업에서 전체 확인·복사가 가능합니다.'
-                        }
-                    },
-                    chartValueLabel: {
-                        color: '#e2e8f0',
-                        getLabel: (i) => `${counts[i]}명`
-                    }
-                },
-                scales: {
-                    x: { ticks: { color: '#94a3b8', stepSize: 1 }, grid: { color: 'rgba(255,255,255,0.04)' }, beginAtZero: true, suggestedMax: Math.max(...counts, 1) + 2 },
-                    y: { ticks: { color: '#cbd5e1', font: { size: 12, weight: '500' }, autoSkip: false }, grid: { display: false } }
-                },
-                onHover: (_event, elements) => { canvas.style.cursor = elements.length ? 'pointer' : 'default'; },
-                onClick: (_event, elements) => {
-                    const selected = elements[0];
-                    if (!selected) return;
-                    const entry = entries[selected.index];
-                    openAttendanceRosterModal(
-                        `${entry.club} ${entry.dateKey || ''} 참석자 명단`.trim(),
-                        `참석 ${entry.members}명`,
-                        entry.attendees
-                    );
-                }
-            }
-        });
     }
 
     let clubUniqueAttendeesChartInstance = null;
@@ -8352,23 +8261,38 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         const colorMap = getClubColorMap();
-        container.innerHTML = entries.map(entry => {
+        container.innerHTML = entries.map((entry, index) => {
             const clubName = entry.clubName || '기본 클럽';
             const dateText = entry.settlementDate || (entry.date ? String(entry.date).slice(0, 10) : '날짜 없음');
-            const creator = entry.creatorName ? ` · ${AppState.escapeHtml(entry.creatorName)}` : '';
+            const creator = entry.creatorName ? `<span>정산인 ${AppState.escapeHtml(entry.creatorName)}</span>` : '';
             const support = Math.max(0, parseAmount(entry.finalSupportAmount));
+            const memberCount = getHistoryUsageBreakdown(entry).memberCount;
             const baseColor = colorMap[clubName] || stableClubHexColor(clubName);
             return `
-                <div class="recent-settlement-item" style="--club-color:${baseColor};">
+                <button type="button" class="recent-settlement-item" data-recent-index="${index}" style="--club-color:${baseColor};" aria-label="${AppState.escapeHtml(clubName)} ${AppState.escapeHtml(dateText)} 참석 ${memberCount}명 명단 확인">
                     <span class="recent-settlement-dot" aria-hidden="true"></span>
                     <div class="recent-settlement-copy">
                         <strong>${AppState.escapeHtml(clubName)} 정산 완료</strong>
-                        <small>${AppState.escapeHtml(dateText)}${creator}</small>
+                        <small class="recent-settlement-meta"><span>${AppState.escapeHtml(dateText)}</span><span class="recent-settlement-attendees">👥 참석 ${memberCount}명</span>${creator}</small>
                     </div>
                     <span class="recent-settlement-amount">${SettlementCalculator.formatCurrency(support)}</span>
-                </div>
+                </button>
             `;
         }).join('');
+        container.querySelectorAll('.recent-settlement-item').forEach(button => {
+            button.addEventListener('click', () => {
+                const entry = entries[Number(button.dataset.recentIndex)];
+                if (!entry) return;
+                const clubName = entry.clubName || '기본 클럽';
+                const dateText = entry.settlementDate || (entry.date ? String(entry.date).slice(0, 10) : '날짜 없음');
+                const memberCount = getHistoryUsageBreakdown(entry).memberCount;
+                openAttendanceRosterModal(
+                    `${clubName} ${dateText} 참석자 명단`,
+                    `참석 ${memberCount}명`,
+                    Array.isArray(entry.attendees) ? entry.attendees : []
+                );
+            });
+        });
     }
 
     // 차트 탭의 모든 그래프를 한 번에 갱신
@@ -8378,7 +8302,6 @@ document.addEventListener('DOMContentLoaded', () => {
         renderClubUsageChart(historyList);
         renderCategoryPieChart(historyList);
         renderClubActivityChart(historyList);
-        renderEventAttendanceChart(historyList);
         renderClubUniqueAttendeesChart(historyList);
         renderSelfPayTrendChart(historyList);
         renderRecentSettlements(historyList);
