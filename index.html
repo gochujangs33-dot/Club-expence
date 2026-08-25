@@ -862,20 +862,23 @@
     </main>
 
     <!-- 관리자 감사 로그 모달 -->
-    <div id="audit-log-modal" class="modal hidden">
+    <div id="audit-log-modal" class="modal audit-log-modal hidden" role="dialog" aria-modal="true" aria-labelledby="audit-log-modal-title">
         <div class="modal-content-card card audit-log-modal-card">
-            <div class="card-header" style="justify-content:space-between; align-items:center; border-bottom:1px solid var(--card-border); padding:0.85rem 1.1rem;">
-                <div style="display:flex; align-items:center; gap:0.5rem;">
-                    <span class="card-icon" style="font-size:1.25rem;">📜</span>
-                    <h2 style="font-size:1.15rem; margin:0; display:flex; align-items:center; gap:0.4rem;">전체 로그 기록 <small style="font-size:0.75rem; color:var(--text-muted); font-weight:normal;">(관리자 전용)</small></h2>
+            <div class="card-header audit-log-modal-header">
+                <div class="audit-log-title-wrap">
+                    <span class="card-icon">📜</span>
+                    <div>
+                        <h2 id="audit-log-modal-title">전체 작업 로그</h2>
+                        <small>관리자 전용 · 로그인 이력 제외</small>
+                    </div>
                 </div>
-                <div style="display:flex; align-items:center; gap:0.5rem;">
-                    <button type="button" id="audit-log-refresh-btn" class="btn-secondary" style="padding:0.25rem 0.6rem; font-size:0.78rem;">↻ 새로고침</button>
-                    <span class="modal-close" id="close-audit-log-modal" style="position:static; font-size:24px; cursor:pointer; color:var(--text-secondary); line-height:1; display:flex; align-items:center;">&times;</span>
+                <div class="audit-log-header-actions">
+                    <button type="button" id="audit-log-refresh-btn" class="btn-secondary">↻ 새로고침</button>
+                    <button type="button" class="audit-log-close-btn" id="close-audit-log-modal" aria-label="전체 작업 로그 닫기">&times;</button>
                 </div>
             </div>
-            <div class="card-body" style="padding:1rem; display:flex; flex-direction:column; gap:0.75rem; overflow:hidden; flex:1; min-height:0;">
-                <p style="font-size:0.78rem; color:var(--text-muted); margin:0;">추가·수정·삭제 작업을 최신순으로 표시합니다. 로그 자체는 화면에서 수정하거나 삭제할 수 없습니다.</p>
+            <div class="card-body audit-log-modal-body">
+                <p class="audit-log-helper">값 입력·추가·수정·업데이트·삭제 작업을 최신순으로 표시합니다. 각 항목을 누르면 변경 전후 값을 확인할 수 있습니다.</p>
                 <div class="audit-log-filters">
                     <div class="input-group">
                         <label for="audit-log-month-filter">연·월</label>
@@ -885,8 +888,8 @@
                         <label for="audit-log-action-filter">작업</label>
                         <select id="audit-log-action-filter">
                             <option value="">전체 작업</option>
-                            <option value="CREATE">추가</option>
-                            <option value="UPDATE">수정</option>
+                            <option value="CREATE">입력·추가</option>
+                            <option value="UPDATE">수정·업데이트</option>
                             <option value="DELETE">삭제</option>
                         </select>
                     </div>

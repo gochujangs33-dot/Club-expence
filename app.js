@@ -1,7 +1,7 @@
 /**
  * Club Expense Settlement App - Main JavaScript Logic
  */
-const APP_VERSION      = '1.6.275';
+const APP_VERSION      = '1.6.276';
 const APP_VERSION_DATE = '2026.08.25';
 
 // 인당 자부담 비용에 따라 강조 박스의 아이콘/색상을 전환 (100원 이상이면 🔥, 0이면 😊)
@@ -366,6 +366,14 @@ const AppState = {
         return { pin, name, role };
     },
 
+    // 로그인/접속 자체는 감사 로그 대상이 아니다. 감사 로그에는 실제 자료 변경만 남긴다.
+    isLoginAuditEvent(event = {}) {
+        const action = String(event.action || '').trim().toUpperCase();
+        const targetType = String(event.targetType || '').replace(/\s+/g, '').toLowerCase();
+        return action === 'LOGIN' || action === 'SIGNIN'
+            || ['로그인', '로그인이력', '로그인기록', '접속', '접속이력', '접속기록', 'login', 'signin'].includes(targetType);
+    },
+
     buildAuditEntry(event = {}, actorOverride = null) {
         const actor = this.getAuditActor(actorOverride);
         const cleanText = (value, max = 500) => String(value ?? '').replace(/\s+/g, ' ').trim().slice(0, max);
@@ -398,7 +406,7 @@ const AppState = {
     },
 
     appendAuditUpdate(updates, event, actorOverride = null) {
-        if (!this.firebaseDb || !updates || !event) return null;
+        if (!this.firebaseDb || !updates || !event || this.isLoginAuditEvent(event)) return null;
         const logKey = this.firebaseDb.ref('auditLogs').push().key;
         if (!logKey) return null;
         updates[`auditLogs/${logKey}`] = this.buildAuditEntry(event, actorOverride);
@@ -406,7 +414,7 @@ const AppState = {
     },
 
     writeAuditLog(event, actorOverride = null) {
-        if (!this.firebaseDb || !event) return Promise.resolve(false);
+        if (!this.firebaseDb || !event || this.isLoginAuditEvent(event)) return Promise.resolve(false);
         const logKey = this.firebaseDb.ref('auditLogs').push().key;
         if (!logKey) return Promise.resolve(false);
         return this.firebaseDb.ref(`auditLogs/${logKey}`).set(this.buildAuditEntry(event, actorOverride))
@@ -4098,10 +4106,47 @@ document.addEventListener('DOMContentLoaded', () => {
     function getAuditLogDateParts(timestamp) {
         const date = new Date(Number(timestamp) || 0);
         if (!Number.isFinite(date.getTime())) return { date: '-', time: '-' };
+        const pad = value => String(value).padStart(2, '0');
         return {
-            date: date.toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }),
-            time: date.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+            date: `${date.getFullYear()}년 ${pad(date.getMonth() + 1)}월 ${pad(date.getDate())}일`,
+            time: `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
         };
+    }
+
+    function getAuditActionGroup(action) {
+        const normalized = String(action || 'UPDATE').trim().toUpperCase();
+        if (['CREATE', 'INPUT', 'INSERT', 'SAVE'].includes(normalized)) return 'CREATE';
+        if (['DELETE', 'REMOVE'].includes(normalized)) return 'DELETE';
+        return 'UPDATE';
+    }
+
+    function isLoginAuditEntry(entry) {
+        return AppState.isLoginAuditEvent(entry);
+    }
+
+    function formatAuditDetailValue(value) {
+        if (value === true) return '예';
+        if (value === false) return '아니요';
+        if (value === null || value === undefined || value === '') return '-';
+        return String(value);
+    }
+
+    function bindAuditLogItemDetails(listEl) {
+        listEl.querySelectorAll('.audit-log-item').forEach(item => {
+            const toggle = () => {
+                const detail = item.querySelector('.audit-log-expanded-detail');
+                const expanded = item.getAttribute('aria-expanded') === 'true';
+                item.setAttribute('aria-expanded', String(!expanded));
+                item.classList.toggle('expanded', !expanded);
+                if (detail) detail.hidden = expanded;
+            };
+            item.addEventListener('click', toggle);
+            item.addEventListener('keydown', event => {
+                if (event.key !== 'Enter' && event.key !== ' ') return;
+                event.preventDefault();
+                toggle();
+            });
+        });
     }
 
     function renderAuditLogList() {
@@ -4113,7 +4158,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const month = document.getElementById('audit-log-month-filter')?.value || '';
         const action = document.getElementById('audit-log-action-filter')?.value || '';
         const keyword = (document.getElementById('audit-log-search-input')?.value || '').trim().toLowerCase();
-        const filtered = auditLogEntries.filter(entry => {
+        const visibleEntries = auditLogEntries.filter(entry => !isLoginAuditEntry(entry));
+        const filtered = visibleEntries.filter(entry => {
             const timestamp = Number(entry.timestamp || entry.clientTimestamp || 0);
             if (month) {
                 const date = new Date(timestamp);
@@ -4122,7 +4168,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     : '';
                 if (entryMonth !== month) return false;
             }
-            if (action && entry.action !== action) return false;
+            if (action && getAuditActionGroup(entry.action) !== action) return false;
             if (keyword) {
                 const haystack = [entry.actorName, entry.actorPin, entry.actorRole, entry.targetType,
                     entry.targetLabel, entry.summary, entry.clubName, ...Object.values(entry.details || {})]
@@ -4132,30 +4178,45 @@ document.addEventListener('DOMContentLoaded', () => {
             return true;
         });
 
-        countEl.textContent = `표시 ${filtered.length}건 · 불러온 기록 ${auditLogEntries.length}건`;
+        countEl.textContent = `표시 ${filtered.length}건 · 불러온 작업 기록 ${visibleEntries.length}건`;
         if (filtered.length === 0) {
             listEl.innerHTML = `<div class="empty-state"><span class="empty-icon">📜</span><p>${auditLogEntries.length ? '조건에 맞는 로그 기록이 없습니다.' : '아직 저장된 로그 기록이 없습니다.'}</p></div>`;
         } else {
-            const actionText = { CREATE: '추가', UPDATE: '수정', DELETE: '삭제' };
+            const actionText = { CREATE: '입력·추가', UPDATE: '수정·업데이트', DELETE: '삭제' };
             listEl.innerHTML = filtered.map(entry => {
                 const dateParts = getAuditLogDateParts(entry.timestamp || entry.clientTimestamp);
                 const detailPairs = Object.entries(entry.details || {});
                 const detailsHtml = detailPairs.length
-                    ? `<details class="audit-log-details"><summary>변경값 상세 보기</summary><dl>${detailPairs.map(([key, value]) => `<dt>${AppState.escapeHtml(key)}</dt><dd>${AppState.escapeHtml(value)}</dd>`).join('')}</dl></details>`
-                    : '';
-                const actionClass = String(entry.action || 'UPDATE').toLowerCase();
+                    ? `<dl>${detailPairs.map(([key, value]) => `<dt>${AppState.escapeHtml(key)}</dt><dd>${AppState.escapeHtml(formatAuditDetailValue(value))}</dd>`).join('')}</dl>`
+                    : '<p class="audit-log-no-detail">별도로 저장된 변경값이 없습니다.</p>';
+                const actionGroup = getAuditActionGroup(entry.action);
+                const actionClass = actionGroup.toLowerCase();
                 return `
-                    <article class="audit-log-item" data-log-key="${AppState.escapeHtml(entry.key || '')}">
-                        <div class="audit-log-time"><strong>${AppState.escapeHtml(dateParts.date)}</strong><small>${AppState.escapeHtml(dateParts.time)}</small></div>
-                        <div class="audit-log-actor"><strong>${AppState.escapeHtml(entry.actorName || '알 수 없음')}</strong><small>${AppState.escapeHtml(entry.actorRole || '')} · PIN ${AppState.escapeHtml(entry.actorPin || '-')}</small></div>
-                        <div><span class="audit-log-action-badge ${actionClass}">${AppState.escapeHtml(actionText[entry.action] || entry.action || '수정')}</span></div>
-                        <div class="audit-log-target">
-                            <strong>${AppState.escapeHtml(entry.summary || entry.targetLabel || '-')}</strong>
-                            <small>${AppState.escapeHtml(entry.targetType || '기타')}${entry.clubName ? ` · ${AppState.escapeHtml(entry.clubName)}` : ''}</small>
-                            ${detailsHtml}
+                    <article class="audit-log-item" data-log-key="${AppState.escapeHtml(entry.key || '')}" role="button" tabindex="0" aria-expanded="false">
+                        <div class="audit-log-item-summary">
+                            <time class="audit-log-time"><strong>${AppState.escapeHtml(dateParts.date)}</strong><small>${AppState.escapeHtml(dateParts.time)}</small></time>
+                            <div class="audit-log-actor"><strong>${AppState.escapeHtml(entry.actorName || '알 수 없음')}</strong><small>${AppState.escapeHtml(entry.actorRole || '')} · PIN ${AppState.escapeHtml(entry.actorPin || '-')}</small></div>
+                            <div class="audit-log-action"><span class="audit-log-action-badge ${actionClass}">${AppState.escapeHtml(actionText[actionGroup])}</span></div>
+                            <div class="audit-log-target">
+                                <strong>${AppState.escapeHtml(entry.summary || entry.targetLabel || '-')}</strong>
+                                <small>${AppState.escapeHtml(entry.targetType || '기타')}${entry.clubName ? ` · ${AppState.escapeHtml(entry.clubName)}` : ''}</small>
+                            </div>
+                            <span class="audit-log-expand-icon" aria-hidden="true">⌄</span>
+                        </div>
+                        <div class="audit-log-expanded-detail" hidden>
+                            <div class="audit-log-detail-context">
+                                <span><b>작업자</b>${AppState.escapeHtml(entry.actorName || '알 수 없음')} · ${AppState.escapeHtml(entry.actorRole || '')} · PIN ${AppState.escapeHtml(entry.actorPin || '-')}</span>
+                                <span><b>작업 시각</b>${AppState.escapeHtml(dateParts.date)} ${AppState.escapeHtml(dateParts.time)}</span>
+                                <span><b>대상</b>${AppState.escapeHtml(entry.targetType || '기타')}${entry.targetLabel ? ` · ${AppState.escapeHtml(entry.targetLabel)}` : ''}${entry.clubName ? ` · ${AppState.escapeHtml(entry.clubName)}` : ''}</span>
+                            </div>
+                            <div class="audit-log-details">
+                                <h3>상세 변경 내용</h3>
+                                ${detailsHtml}
+                            </div>
                         </div>
                     </article>`;
             }).join('');
+            bindAuditLogItemDetails(listEl);
         }
         if (loadMoreBtn) loadMoreBtn.classList.toggle('hidden', !auditLogHasMore || auditLogLoading);
     }
@@ -5796,6 +5857,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 변경이력 모달
     const CHANGELOG = [
+        { ver: '1.6.276', date: '2026.08.25', items: ['로그인·접속 이력은 감사 로그 저장 단계에서 제외하고 실제 자료 입력·추가·수정·업데이트·삭제 작업만 표시', '전체 작업 로그를 PC 전체 화면으로 확대하고 연월일·시분초·작업자·권한·PIN·작업 대상을 한눈에 확인하도록 개편', '모바일은 핵심 정보만 간략 표시하고 항목 클릭 시 변경 전후 값과 상세 작업 내용을 펼쳐보도록 최적화'] },
         { ver: '1.6.275', date: '2026.08.25', items: ['역할이 겹치던 행사별 참석 인원 차트를 제거하고 최근 정산 알림으로 통합', '최근 정산 5건에 참석 인원·정산인·지원금을 함께 표시하고 항목 클릭 시 참석자 명단 확인·복사 제공', '클럽별 고유 참석 인원 차트를 전체 폭으로 재배치하고 모바일에서는 최근 5건을 중첩 스크롤 없이 표시'] },
         { ver: '1.6.274', date: '2026.08.25', items: ['Windows 데스크톱에서 글자가 번져 보이던 카드 GPU 블러와 목록 강제 합성 레이어 제거', '한글 전용 대체 글꼴을 명시하고 Light/Dark 보조 글자 명암·굵기·최소 크기를 높여 전체 페이지 가독성 개선', '차트 축·값 라벨을 12px 이상으로 확대하고 고해상도 캔버스 및 모바일 가로 넘침 없음 재검증'] },
         { ver: '1.6.273', date: '2026.08.25', items: ['클럽 자동 색상을 조화로운 선별 팔레트로 정돈하고 모든 클럽 막대 차트에 방향별 3단 그라데이션 적용', '관리자 Dark/Light 선택을 로그인·정산·명부·이력·모달을 포함한 전체 페이지 테마로 확장', '전체 테마의 기기별 저장·초기 로딩 복원과 모바일 가로 넘침 없는 반응형 표시 검증'] },
