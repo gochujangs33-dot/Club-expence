@@ -1,7 +1,7 @@
 /**
  * Club Expense Settlement App - Main JavaScript Logic
  */
-const APP_VERSION      = '1.6.279';
+const APP_VERSION      = '1.6.280';
 const APP_VERSION_DATE = '2026.08.27';
 
 // 인당 자부담 비용에 따라 강조 박스의 아이콘/색상을 전환 (100원 이상이면 🔥, 0이면 😊)
@@ -5910,6 +5910,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 변경이력 모달
     const CHANGELOG = [
+        { ver: '1.6.280', date: '2026.08.27', items: ['관리자 시작 안내의 중복된 4번 로그 기록 확인 항목 제거', '클럽·예산 설정, 정산 기준 확인, 정산 현황 확인 3개 안내를 한 줄로 정돈', '대시보드 상단의 실제 로그 기록 버튼과 전체 작업 로그 기능은 그대로 유지'] },
         { ver: '1.6.279', date: '2026.08.27', items: ['클럽 추가 배정을 일반 예산 수정과 구분해 전체 작업 로그에 별도 기록', '로그 요약과 상세에 기존 배정액·추가 배정액·변경 후 총 배정액·추가 배정 후 잔여금을 함께 표시', '작업 일시·관리자와 기존 사용액·확정 지원금 누적을 보존해 잔여금 산정 근거 확인 가능'] },
         { ver: '1.6.278', date: '2026.08.27', items: ['자부담·회사지원금 추이 곡선을 점별 재생이 아닌 왼쪽부터 오른쪽까지 이어지는 연속 노출 방식으로 개선', 'Light 테마의 페이지·카드·입력창 순백색을 저채도 블루그레이로 낮춰 눈부심 완화', 'PC·모바일에서 차트 좌표·필터·툴팁과 기존 Dark 테마 동작 유지'] },
         { ver: '1.6.277', date: '2026.08.27', items: ['차트 탭 진입 시 세로·가로 막대가 0에서 목표값까지 순차적으로 증가하는 애니메이션 추가', '자부담·회사지원금 추이 곡선을 왼쪽부터 오른쪽으로 그리는 효과와 도넛 차트 회전 효과 적용', '필터·테마·데이터 갱신 때는 모션을 반복하지 않고 모바일 재생시간 단축 및 동작 최소화 설정 지원'] },
@@ -6585,7 +6586,6 @@ document.addEventListener('DOMContentLoaded', () => {
             const action = button.dataset.adminAction;
             if (action === 'club') return toggleAdminStartCard('club-management-card');
             if (action === 'rules') return toggleAdminStartCard('rules-management-card');
-            if (action === 'audit') return openAuditLogModal();
             const tabButton = document.querySelector('.tab-nav .tab-btn[data-tab="tab-charts"]');
             if (tabButton) tabButton.click();
         });
