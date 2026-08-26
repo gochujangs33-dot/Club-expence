@@ -1,0 +1,6 @@
+# UI 검수용 Playwright MCP는 이 프로젝트에서만 실행한다.
+[mcp_servers.playwright]
+command = "npx"
+args = ["-y", "@playwright/mcp@latest", "--headless", "--isolated"]
+startup_timeout_sec = 120
+tool_timeout_sec = 120
