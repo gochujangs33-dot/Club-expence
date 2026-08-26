@@ -2729,9 +2729,9 @@ body:has(.update-banner:not(.hidden)) {
 }
 
 .admin-themed-pane[data-admin-theme="light"] {
-    --dashboard-bg: #f2f6fc;
-    --dashboard-panel: #ffffff;
-    --dashboard-panel-strong: #f8faff;
+    --dashboard-bg: #e7ecf3;
+    --dashboard-panel: #f2f5f8;
+    --dashboard-panel-strong: #edf1f6;
     --dashboard-border: rgba(72, 91, 128, 0.18);
     --dashboard-text: #17243b;
     --dashboard-subtext: #53647e;
@@ -2943,9 +2943,9 @@ body:has(.update-banner:not(.hidden)) {
 #tab-admin[data-admin-theme="light"] .stat-card { background: var(--dashboard-panel); border-color: var(--dashboard-border); box-shadow: var(--dashboard-shadow); }
 #tab-admin[data-admin-theme="light"] input,
 #tab-admin[data-admin-theme="light"] select,
-#tab-admin[data-admin-theme="light"] textarea { background: #f8faff; border-color: rgba(72,91,128,0.22); color: #17243b; }
-#tab-admin[data-admin-theme="light"] .expense-row { background: #f8faff; border-color: rgba(72,91,128,0.16); }
-#tab-admin[data-admin-theme="light"] .admin-start-action { background: #f8faff; border-color: rgba(72,91,128,0.16); color: #17243b; }
+#tab-admin[data-admin-theme="light"] textarea { background: #e9eef4; border-color: rgba(72,91,128,0.22); color: #17243b; }
+#tab-admin[data-admin-theme="light"] .expense-row { background: #edf1f6; border-color: rgba(72,91,128,0.16); }
+#tab-admin[data-admin-theme="light"] .admin-start-action { background: #edf1f6; border-color: rgba(72,91,128,0.16); color: #17243b; }
 #tab-admin[data-admin-theme="light"] .admin-start-action.is-open { background: rgba(20,184,166,0.09); border-color: rgba(13,148,136,0.34); }
 #tab-admin[data-admin-theme="light"] .admin-start-action:hover,
 #tab-admin[data-admin-theme="light"] .admin-start-action:focus-visible { background: rgba(139,92,246,0.09); }
@@ -2954,9 +2954,9 @@ body:has(.update-banner:not(.hidden)) {
    관리자에서 선택한 테마는 로그인·정산·명부·이력·모달까지 같은 기기에서 공통 적용된다. */
 html[data-app-theme="light"] {
     color-scheme: light;
-    --bg-dark: #eef3fa;
-    --bg-darker: #e5edf7;
-    --card-bg: rgba(255, 255, 255, 0.9);
+    --bg-dark: #e7ecf3;
+    --bg-darker: #dfe6ef;
+    --card-bg: rgba(242, 245, 248, 0.94);
     --card-border: rgba(72, 91, 128, 0.17);
     --card-border-hover: rgba(105, 85, 210, 0.34);
     --text-primary: #17243b;
@@ -2969,7 +2969,7 @@ html[data-app-theme="light"] {
 }
 
 html[data-app-theme="light"] body {
-    background: linear-gradient(145deg, #f7f9fd 0%, #eef3fa 48%, #e9f1fa 100%);
+    background: linear-gradient(145deg, #edf1f6 0%, #e7ecf3 48%, #e1e8f1 100%);
 }
 
 html[data-app-theme="light"] .blur-circle { opacity: 0.1; }
@@ -2990,25 +2990,25 @@ html[data-app-theme="light"] select,
 html[data-app-theme="light"] textarea,
 html[data-app-theme="light"] .search-box,
 html[data-app-theme="light"] .register-form-container input {
-    background-color: #f8faff;
+    background-color: #e9eef4;
     border-color: rgba(72, 91, 128, 0.2);
     color: #17243b;
 }
 html[data-app-theme="light"] input:focus,
 html[data-app-theme="light"] select:focus,
 html[data-app-theme="light"] textarea:focus {
-    background-color: #ffffff;
+    background-color: #f3f6f9;
     border-color: var(--color-primary);
 }
 html[data-app-theme="light"] select {
     background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2353647e' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
 }
-html[data-app-theme="light"] select option { background: #ffffff; color: #17243b; }
+html[data-app-theme="light"] select option { background: #f2f5f8; color: #17243b; }
 html[data-app-theme="light"] input:-webkit-autofill,
 html[data-app-theme="light"] input:-webkit-autofill:hover,
 html[data-app-theme="light"] input:-webkit-autofill:focus,
 html[data-app-theme="light"] input:-webkit-autofill:active {
-    -webkit-box-shadow: 0 0 0 9999px #f8faff inset !important;
+    -webkit-box-shadow: 0 0 0 9999px #e9eef4 inset !important;
     -webkit-text-fill-color: #17243b !important;
     caret-color: #17243b;
 }
@@ -3017,14 +3017,14 @@ html[data-app-theme="light"] .btn-secondary,
 html[data-app-theme="light"] .tab-btn,
 html[data-app-theme="light"] .pin-key,
 html[data-app-theme="light"] .settle-date-btn {
-    background: rgba(255, 255, 255, 0.78);
+    background: rgba(238, 242, 247, 0.92);
     border-color: rgba(72, 91, 128, 0.18);
     color: #263650;
 }
 html[data-app-theme="light"] .btn-secondary:hover,
 html[data-app-theme="light"] .tab-btn:hover,
 html[data-app-theme="light"] .pin-key:hover,
-html[data-app-theme="light"] .settle-date-btn:hover { background: #ffffff; }
+html[data-app-theme="light"] .settle-date-btn:hover { background: #f6f8fa; }
 html[data-app-theme="light"] .tab-nav { border-bottom-color: rgba(72, 91, 128, 0.15); }
 html[data-app-theme="light"] .tab-btn.active {
     color: #ffffff;
@@ -3039,14 +3039,14 @@ html[data-app-theme="light"] .attendance-roster-person,
 html[data-app-theme="light"] .club-usage-summary-table tbody tr,
 html[data-app-theme="light"] .history-item,
 html[data-app-theme="light"] .directory-item {
-    background: rgba(248, 250, 255, 0.92);
+    background: rgba(237, 241, 246, 0.94);
     border-color: rgba(72, 91, 128, 0.14);
 }
-html[data-app-theme="light"] .expense-row:hover { background: #ffffff; }
+html[data-app-theme="light"] .expense-row:hover { background: #f6f8fa; }
 html[data-app-theme="light"] .audit-log-item:hover,
 html[data-app-theme="light"] .audit-log-item:focus-visible,
 html[data-app-theme="light"] .audit-log-item.expanded {
-    background: #ffffff;
+    background: #f6f8fa;
     border-color: rgba(75, 112, 196, 0.34);
 }
 html[data-app-theme="light"] .audit-log-expanded-detail { background: rgba(235, 241, 252, 0.72); }
@@ -3054,7 +3054,7 @@ html[data-app-theme="light"] .expense-category-badge,
 html[data-app-theme="light"] .card-toggle-track { background: rgba(72, 91, 128, 0.1); }
 html[data-app-theme="light"] .divider { background: rgba(72, 91, 128, 0.14); }
 html[data-app-theme="light"] .result-card {
-    background: linear-gradient(135deg, rgba(104, 91, 218, 0.1), rgba(255, 255, 255, 0.92));
+    background: linear-gradient(135deg, rgba(104, 91, 218, 0.1), rgba(241, 244, 248, 0.94));
 }
 
 html[data-app-theme="light"] .modal { background-color: rgba(226, 234, 246, 0.9); }
@@ -3063,7 +3063,7 @@ html[data-app-theme="light"] .attendance-roster-modal-card,
 html[data-app-theme="light"] .club-usage-summary-modal-card,
 html[data-app-theme="light"] .audit-log-modal-card,
 html[data-app-theme="light"] .pin-modal-card {
-    background: #f9fbff !important;
+    background: #f1f4f8 !important;
     border-color: rgba(72, 91, 128, 0.2);
     box-shadow: 0 20px 50px rgba(49, 69, 108, 0.22) !important;
 }
@@ -3071,14 +3071,14 @@ html[data-app-theme="light"] .pin-dot { border-color: rgba(72, 91, 128, 0.32); }
 html[data-app-theme="light"] .custom-calendar,
 html[data-app-theme="light"] .attendee-dropdown,
 html[data-app-theme="light"] #global-tooltip {
-    background: #ffffff;
+    background: #f4f6f9;
     border-color: rgba(72, 91, 128, 0.2);
     color: #17243b;
     box-shadow: 0 12px 30px rgba(49, 69, 108, 0.2);
 }
 html[data-app-theme="light"] .attendee-dropdown-item:hover { background: rgba(112, 93, 220, 0.08); }
 html[data-app-theme="light"] #edit-user-pin-input {
-    background: #f8faff !important;
+    background: #e9eef4 !important;
     border-color: rgba(72, 91, 128, 0.2) !important;
     color: #17243b !important;
 }

@@ -1,7 +1,7 @@
 /**
  * Club Expense Settlement App - Main JavaScript Logic
  */
-const APP_VERSION      = '1.6.277';
+const APP_VERSION      = '1.6.278';
 const APP_VERSION_DATE = '2026.08.27';
 
 // 인당 자부담 비용에 따라 강조 박스의 아이콘/색상을 전환 (100원 이상이면 🔥, 0이면 😊)
@@ -5863,6 +5863,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 변경이력 모달
     const CHANGELOG = [
+        { ver: '1.6.278', date: '2026.08.27', items: ['자부담·회사지원금 추이 곡선을 점별 재생이 아닌 왼쪽부터 오른쪽까지 이어지는 연속 노출 방식으로 개선', 'Light 테마의 페이지·카드·입력창 순백색을 저채도 블루그레이로 낮춰 눈부심 완화', 'PC·모바일에서 차트 좌표·필터·툴팁과 기존 Dark 테마 동작 유지'] },
         { ver: '1.6.277', date: '2026.08.27', items: ['차트 탭 진입 시 세로·가로 막대가 0에서 목표값까지 순차적으로 증가하는 애니메이션 추가', '자부담·회사지원금 추이 곡선을 왼쪽부터 오른쪽으로 그리는 효과와 도넛 차트 회전 효과 적용', '필터·테마·데이터 갱신 때는 모션을 반복하지 않고 모바일 재생시간 단축 및 동작 최소화 설정 지원'] },
         { ver: '1.6.276', date: '2026.08.25', items: ['로그인·접속 이력은 감사 로그 저장 단계에서 제외하고 실제 자료 입력·추가·수정·업데이트·삭제 작업만 표시', '전체 작업 로그를 PC 전체 화면으로 확대하고 연월일·시분초·작업자·권한·PIN·작업 대상을 한눈에 확인하도록 개편', '모바일은 핵심 정보만 간략 표시하고 항목 클릭 시 변경 전후 값과 상세 작업 내용을 펼쳐보도록 최적화'] },
         { ver: '1.6.275', date: '2026.08.25', items: ['역할이 겹치던 행사별 참석 인원 차트를 제거하고 최근 정산 알림으로 통합', '최근 정산 5건에 참석 인원·정산인·지원금을 함께 표시하고 항목 클릭 시 참석자 명단 확인·복사 제공', '클럽별 고유 참석 인원 차트를 전체 폭으로 재배치하고 모바일에서는 최근 5건을 중첩 스크롤 없이 표시'] },
@@ -7075,7 +7076,7 @@ document.addEventListener('DOMContentLoaded', () => {
         return isLight
             ? {
                 primary: '#17243b', secondary: '#53647e', muted: '#65748a',
-                grid: 'rgba(72,91,128,0.12)', surface: '#ffffff', tooltip: '#17243b', tooltipText: '#f8fafc'
+                grid: 'rgba(72,91,128,0.12)', surface: '#f2f5f9', tooltip: '#17243b', tooltipText: '#f8fafc'
             }
             : {
                 primary: '#e2e8f0', secondary: '#94a3b8', muted: '#64748b',
@@ -7087,7 +7088,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const normalized = theme === 'light' ? 'light' : 'dark';
         try { localStorage.setItem(ADMIN_THEME_STORAGE_KEY, normalized); } catch (_) {}
         document.documentElement.dataset.appTheme = normalized;
-        document.querySelector('meta[name="theme-color"]')?.setAttribute('content', normalized === 'light' ? '#eef3fa' : '#8b5cf6');
+        document.querySelector('meta[name="theme-color"]')?.setAttribute('content', normalized === 'light' ? '#e7ecf3' : '#8b5cf6');
         document.querySelectorAll('.admin-themed-pane').forEach(pane => {
             pane.dataset.adminTheme = normalized;
         });
@@ -7284,47 +7285,64 @@ document.addEventListener('DOMContentLoaded', () => {
         };
     }
 
-    function lineChartEntranceOptions(enabled, pointCount) {
-        if (!enabled) return { animation: false };
+    function lineChartEntranceOptions() {
+        // 좌표별 기본 애니메이션은 끄고 lineReveal 플러그인이 완성된 곡선을 연속적으로 노출한다.
+        return { animation: false };
+    }
 
-        const compact = compactChartMotion();
-        const totalDuration = compact ? 900 : 1200;
-        const delayBetweenPoints = totalDuration / Math.max(Number(pointCount) || 1, 1);
-        const previousY = context => {
-            const zeroY = context.chart.scales.y.getPixelForValue(0);
-            if (context.index === 0) return zeroY;
-            const previousPoint = context.chart
-                .getDatasetMeta(context.datasetIndex)
-                .data[context.index - 1];
-            return previousPoint ? previousPoint.getProps(['y'], true).y : zeroY;
-        };
-        const pointDelay = axis => context => {
-            if (context.type !== 'data') return 0;
-            const marker = `_chart${axis}Started`;
-            if (context[marker]) return 0;
-            context[marker] = true;
-            return context.index * delayBetweenPoints;
-        };
-
+    function lineChartRevealOptions(enabled) {
         return {
-            animations: {
-                x: {
-                    type: 'number',
-                    easing: 'linear',
-                    duration: delayBetweenPoints,
-                    from: NaN,
-                    delay: pointDelay('X')
-                },
-                y: {
-                    type: 'number',
-                    easing: 'easeOutQuart',
-                    duration: delayBetweenPoints,
-                    from: previousY,
-                    delay: pointDelay('Y')
-                }
-            }
+            enabled: Boolean(enabled),
+            duration: compactChartMotion() ? 850 : 1200
         };
     }
+
+    // 완성된 선의 좌표는 움직이지 않고 차트 영역만 왼쪽→오른쪽으로 부드럽게 드러낸다.
+    // 데이터 점을 하나씩 재생하던 방식의 지점별 멈춤 현상을 피하기 위한 공용 플러그인이다.
+    const lineRevealPlugin = {
+        id: 'lineReveal',
+        afterInit(chart, _args, options) {
+            const enabled = Boolean(options?.enabled);
+            chart.$lineRevealProgress = enabled ? 0 : 1;
+            if (!enabled) return;
+
+            const duration = Math.max(1, Number(options.duration) || 1200);
+            const startAt = performance.now();
+            const drawFrame = now => {
+                if (!chart.canvas || !chart.canvas.isConnected) return;
+                const elapsed = Math.min(1, Math.max(0, (now - startAt) / duration));
+                chart.$lineRevealProgress = 1 - Math.pow(1 - elapsed, 3);
+                chart.draw();
+                if (elapsed < 1) {
+                    chart.$lineRevealFrame = requestAnimationFrame(drawFrame);
+                } else {
+                    chart.$lineRevealFrame = null;
+                }
+            };
+            chart.$lineRevealFrame = requestAnimationFrame(drawFrame);
+        },
+        beforeDatasetsDraw(chart, _args, options) {
+            chart.$lineRevealClipApplied = false;
+            if (!options?.enabled || !chart.chartArea) return;
+
+            const { left, right, top, bottom } = chart.chartArea;
+            const progress = Math.min(1, Math.max(0, Number(chart.$lineRevealProgress) || 0));
+            chart.ctx.save();
+            chart.ctx.beginPath();
+            chart.ctx.rect(left - 8, top - 8, ((right - left) * progress) + 8, (bottom - top) + 16);
+            chart.ctx.clip();
+            chart.$lineRevealClipApplied = true;
+        },
+        afterDatasetsDraw(chart) {
+            if (!chart.$lineRevealClipApplied) return;
+            chart.ctx.restore();
+            chart.$lineRevealClipApplied = false;
+        },
+        beforeDestroy(chart) {
+            if (chart.$lineRevealFrame) cancelAnimationFrame(chart.$lineRevealFrame);
+            chart.$lineRevealFrame = null;
+        }
+    };
 
     // 조각 채움색의 밝기에 따라 흰 글씨/잉크 글씨 중 대비가 되는 쪽을 선택
     function pickTextColorForBg(bgColor) {
@@ -7418,7 +7436,7 @@ document.addEventListener('DOMContentLoaded', () => {
             ctx.restore();
         }
     };
-    if (typeof Chart !== 'undefined') Chart.register(chartValueLabelPlugin);
+    if (typeof Chart !== 'undefined') Chart.register(chartValueLabelPlugin, lineRevealPlugin);
 
     // 클럽 고유 색상 — clubRegistry.chartColor가 최우선이며, 자동 색상은 조화로운 선별 팔레트 안에서
     // 고정 ID 해시로 배정한다. 차트별 정렬·필터가 바뀌어도 같은 클럽은 항상 같은 계열을 유지한다.
@@ -7892,9 +7910,10 @@ document.addEventListener('DOMContentLoaded', () => {
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
-                ...lineChartEntranceOptions(animateEntrance, labels.length),
+                ...lineChartEntranceOptions(),
                 interaction: { mode: 'index', intersect: false },
                 plugins: {
+                    lineReveal: lineChartRevealOptions(animateEntrance),
                     legend: { labels: { color: '#cbd5e1', boxWidth: 12, boxHeight: 12, borderRadius: 4, padding: 14 } },
                     tooltip: {
                         callbacks: {
