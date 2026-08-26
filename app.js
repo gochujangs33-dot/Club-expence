@@ -1,8 +1,8 @@
 /**
  * Club Expense Settlement App - Main JavaScript Logic
  */
-const APP_VERSION      = '1.6.276';
-const APP_VERSION_DATE = '2026.08.25';
+const APP_VERSION      = '1.6.277';
+const APP_VERSION_DATE = '2026.08.27';
 
 // 인당 자부담 비용에 따라 강조 박스의 아이콘/색상을 전환 (100원 이상이면 🔥, 0이면 😊)
 function updatePerPersonSelfPayIcon(perPersonSelfPay) {
@@ -4315,9 +4315,15 @@ document.addEventListener('DOMContentLoaded', () => {
             const tabId = btn.getAttribute('data-tab');
             document.getElementById(tabId).classList.remove('hidden');
 
+            // 차트 탭을 직접 선택한 경우에만 진입 애니메이션을 1회 예약한다.
+            // 데이터·테마 갱신에 따른 재렌더에서는 반복 재생하지 않아 화면 피로와 깜빡임을 줄인다.
+            if (tabId === 'tab-charts' && typeof requestChartEntranceAnimation === 'function') {
+                requestChartEntranceAnimation();
+            }
+
             // 관리자 탭 전환 시: globalHistory 최신화 (대시보드·클럽이력·차트 공통)
             if ((tabId === 'tab-admin' || tabId === 'tab-club-history' || tabId === 'tab-charts') && typeof renderAdminDashboard === 'function') {
-                renderAdminDashboard();
+                renderAdminDashboard({ animateChartsOnLoad: tabId === 'tab-charts' });
             }
             // 이력 탭 전환 시: 동일 클럽의 전체 사용자 이력 로드
             if (tabId === 'tab-history') {
@@ -5857,6 +5863,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 변경이력 모달
     const CHANGELOG = [
+        { ver: '1.6.277', date: '2026.08.27', items: ['차트 탭 진입 시 세로·가로 막대가 0에서 목표값까지 순차적으로 증가하는 애니메이션 추가', '자부담·회사지원금 추이 곡선을 왼쪽부터 오른쪽으로 그리는 효과와 도넛 차트 회전 효과 적용', '필터·테마·데이터 갱신 때는 모션을 반복하지 않고 모바일 재생시간 단축 및 동작 최소화 설정 지원'] },
         { ver: '1.6.276', date: '2026.08.25', items: ['로그인·접속 이력은 감사 로그 저장 단계에서 제외하고 실제 자료 입력·추가·수정·업데이트·삭제 작업만 표시', '전체 작업 로그를 PC 전체 화면으로 확대하고 연월일·시분초·작업자·권한·PIN·작업 대상을 한눈에 확인하도록 개편', '모바일은 핵심 정보만 간략 표시하고 항목 클릭 시 변경 전후 값과 상세 작업 내용을 펼쳐보도록 최적화'] },
         { ver: '1.6.275', date: '2026.08.25', items: ['역할이 겹치던 행사별 참석 인원 차트를 제거하고 최근 정산 알림으로 통합', '최근 정산 5건에 참석 인원·정산인·지원금을 함께 표시하고 항목 클릭 시 참석자 명단 확인·복사 제공', '클럽별 고유 참석 인원 차트를 전체 폭으로 재배치하고 모바일에서는 최근 5건을 중첩 스크롤 없이 표시'] },
         { ver: '1.6.274', date: '2026.08.25', items: ['Windows 데스크톱에서 글자가 번져 보이던 카드 GPU 블러와 목록 강제 합성 레이어 제거', '한글 전용 대체 글꼴을 명시하고 Light/Dark 보조 글자 명암·굵기·최소 크기를 높여 전체 페이지 가독성 개선', '차트 축·값 라벨을 12px 이상으로 확대하고 고해상도 캔버스 및 모바일 가로 넘침 없음 재검증'] },
@@ -6376,8 +6383,11 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    function renderAdminDashboard() {
+    let adminDashboardRenderRequestId = 0;
+
+    function renderAdminDashboard({ animateChartsOnLoad = false } = {}) {
         if (!firebaseDb) return;
+        const renderRequestId = ++adminDashboardRenderRequestId;
 
         renderFeedbackList();
         updateAdminStartGuide();
@@ -6459,7 +6469,15 @@ document.addEventListener('DOMContentLoaded', () => {
             const chartTabActive = document.getElementById('tab-charts') &&
                 !document.getElementById('tab-charts').classList.contains('hidden');
             if (chartTabActive && typeof renderClubFilters === 'function') renderClubFilters();
-            renderAllCharts(historyList);
+            // 탭 진입 직후 rAF 렌더가 먼저 화면 크기를 잡고, 최신 Firebase 데이터가 도착한 이 최종 렌더에서만
+            // 예약된 애니메이션을 소비한다. 두 렌더 모두 유지하되 모션이 중간에 덮어써지는 현상을 방지한다.
+            // 앞 탭에서 시작된 오래된 요청이 뒤늦게 완료되면 최신 차트 모션을 덮어쓸 수 있으므로 차트만 재생성하지 않는다.
+            const isLatestDashboardRequest = renderRequestId === adminDashboardRenderRequestId;
+            if (!chartTabActive || isLatestDashboardRequest) {
+                renderAllCharts(historyList, {
+                    allowEntranceAnimation: chartTabActive && animateChartsOnLoad
+                });
+            }
         });
 
         // 3. 클럽 관리 UI 갱신 — loadClubRegistry()는 로그인 시 1회만 호출(실시간 리스너 유지)
@@ -7186,6 +7204,128 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    // ── 차트 탭 진입 모션 ────────────────────────────────────────────────
+    // 차트 탭 버튼을 누른 직후의 renderAllCharts 1회에만 모션을 적용한다.
+    // 필터·테마·Firebase 재동기화에 따른 차트 재생성은 즉시 표시해 중복 애니메이션을 방지한다.
+    let chartEntranceAnimationRequested = false;
+
+    function requestChartEntranceAnimation() {
+        chartEntranceAnimationRequested = true;
+    }
+
+    function prefersReducedChartMotion() {
+        return typeof window.matchMedia === 'function'
+            && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    }
+
+    function compactChartMotion() {
+        return typeof window.matchMedia === 'function'
+            && window.matchMedia('(max-width: 768px)').matches;
+    }
+
+    function consumeChartEntranceAnimation() {
+        const shouldAnimate = chartEntranceAnimationRequested && !prefersReducedChartMotion();
+        chartEntranceAnimationRequested = false;
+        return shouldAnimate;
+    }
+
+    function barChartEntranceOptions(enabled, indexAxis = 'x') {
+        if (!enabled) return { animation: false };
+        const compact = compactChartMotion();
+        const stagger = compact ? 30 : 50;
+        const datasetStagger = compact ? 18 : 32;
+        const maxDelay = compact ? 240 : 420;
+        const duration = compact ? 720 : 960;
+        const valueProperty = indexAxis === 'y' ? 'x' : 'y';
+        const valueScale = indexAxis === 'y' ? 'x' : 'y';
+        const zeroPixel = context => context.chart.scales[valueScale].getPixelForValue(0);
+        const delay = context => {
+            if (context.type !== 'data') return 0;
+            const dataIndex = Number(context.dataIndex) || 0;
+            const datasetIndex = Number(context.datasetIndex) || 0;
+            return Math.min((dataIndex * stagger) + (datasetIndex * datasetStagger), maxDelay);
+        };
+        return {
+            animation: {
+                duration,
+                easing: 'easeOutQuart',
+                delay
+            },
+            // Chart.js가 같은 캔버스에 차트를 재생성해도 이전 위치를 시작점으로 삼지 않도록
+            // 값 좌표와 스택 기준점을 모두 0축 픽셀에서 명시적으로 출발시킨다.
+            animations: {
+                [valueProperty]: {
+                    type: 'number',
+                    from: zeroPixel,
+                    duration,
+                    easing: 'easeOutQuart',
+                    delay
+                },
+                base: {
+                    type: 'number',
+                    from: zeroPixel,
+                    duration,
+                    easing: 'easeOutQuart',
+                    delay
+                }
+            }
+        };
+    }
+
+    function doughnutChartEntranceOptions(enabled) {
+        if (!enabled) return { animation: false };
+        return {
+            animation: {
+                animateRotate: true,
+                animateScale: false,
+                duration: compactChartMotion() ? 700 : 900,
+                easing: 'easeOutQuart'
+            }
+        };
+    }
+
+    function lineChartEntranceOptions(enabled, pointCount) {
+        if (!enabled) return { animation: false };
+
+        const compact = compactChartMotion();
+        const totalDuration = compact ? 900 : 1200;
+        const delayBetweenPoints = totalDuration / Math.max(Number(pointCount) || 1, 1);
+        const previousY = context => {
+            const zeroY = context.chart.scales.y.getPixelForValue(0);
+            if (context.index === 0) return zeroY;
+            const previousPoint = context.chart
+                .getDatasetMeta(context.datasetIndex)
+                .data[context.index - 1];
+            return previousPoint ? previousPoint.getProps(['y'], true).y : zeroY;
+        };
+        const pointDelay = axis => context => {
+            if (context.type !== 'data') return 0;
+            const marker = `_chart${axis}Started`;
+            if (context[marker]) return 0;
+            context[marker] = true;
+            return context.index * delayBetweenPoints;
+        };
+
+        return {
+            animations: {
+                x: {
+                    type: 'number',
+                    easing: 'linear',
+                    duration: delayBetweenPoints,
+                    from: NaN,
+                    delay: pointDelay('X')
+                },
+                y: {
+                    type: 'number',
+                    easing: 'easeOutQuart',
+                    duration: delayBetweenPoints,
+                    from: previousY,
+                    delay: pointDelay('Y')
+                }
+            }
+        };
+    }
+
     // 조각 채움색의 밝기에 따라 흰 글씨/잉크 글씨 중 대비가 되는 쪽을 선택
     function pickTextColorForBg(bgColor) {
         const m = /rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)/.exec(bgColor || '');
@@ -7411,7 +7551,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // ── 월별 클럽 지출 현황 (막대 그래프) ────────────────────────────────
     // 전체 클럽 선택 시: 월별 x축, 클럽별 막대로 그룹화하여 비교
     // 특정 클럽 선택 시: 해당 클럽의 월별 지출액만 표시
-    function renderOverallMonthlyChart(historyList) {
+    function renderOverallMonthlyChart(historyList, animateEntrance = false) {
         const canvas = document.getElementById('overall-monthly-chart');
         if (!canvas || typeof Chart === 'undefined') return;
 
@@ -7481,6 +7621,7 @@ document.addEventListener('DOMContentLoaded', () => {
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
+                ...barChartEntranceOptions(animateEntrance),
                 layout: { padding: { top: 22 } },
                 plugins: {
                     legend: { labels: { color: '#cbd5e1', boxWidth: 12, boxHeight: 12, borderRadius: 4, padding: 12 } },
@@ -7512,7 +7653,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let clubUsageChartInstance = null;
 
     // ── 클럽별 예산 소진율 (가로 막대, 공통 필터 사용) ────────────────────
-    function renderClubUsageChart(historyList) {
+    function renderClubUsageChart(historyList, animateEntrance = false) {
         const canvas = document.getElementById('club-usage-chart');
         if (!canvas || typeof Chart === 'undefined') return;
 
@@ -7560,6 +7701,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 indexAxis: 'y',
                 responsive: true,
                 maintainAspectRatio: false,
+                ...barChartEntranceOptions(animateEntrance, 'y'),
                 plugins: {
                     legend: { display: false },
                     tooltip: {
@@ -7593,7 +7735,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let categoryPieChartInstance = null;
 
     // ── 카테고리별(행사비/시설비/상품) 누적 비용 비중 (도넛, 클럽 필터 적용) ─
-    function renderCategoryPieChart(historyList) {
+    function renderCategoryPieChart(historyList, animateEntrance = false) {
         const canvas = document.getElementById('category-pie-chart');
         if (!canvas || typeof Chart === 'undefined') return;
 
@@ -7630,6 +7772,7 @@ document.addEventListener('DOMContentLoaded', () => {
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
+                ...doughnutChartEntranceOptions(animateEntrance),
                 cutout: '62%',
                 plugins: {
                     legend: {
@@ -7679,7 +7822,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let selfPayTrendChartInstance = null;
 
     // ── 자부담 vs 회사지원금 추이 (월별 영역 그래프, 클럽 필터 적용) ─────────
-    function renderSelfPayTrendChart(historyList) {
+    function renderSelfPayTrendChart(historyList, animateEntrance = false) {
         const canvas = document.getElementById('selfpay-trend-chart');
         if (!canvas || typeof Chart === 'undefined') return;
 
@@ -7749,6 +7892,7 @@ document.addEventListener('DOMContentLoaded', () => {
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
+                ...lineChartEntranceOptions(animateEntrance, labels.length),
                 interaction: { mode: 'index', intersect: false },
                 plugins: {
                     legend: { labels: { color: '#cbd5e1', boxWidth: 12, boxHeight: 12, borderRadius: 4, padding: 14 } },
@@ -8039,7 +8183,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let clubActivityChartInstance = null;
 
     // ── 클럽별 정산 횟수 (올해 활동량, 가로 막대) ─────────────────────────
-    function renderClubActivityChart(historyList) {
+    function renderClubActivityChart(historyList, animateEntrance = false) {
         const canvas = document.getElementById('club-activity-chart');
         if (!canvas || typeof Chart === 'undefined') return;
 
@@ -8090,6 +8234,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 indexAxis: 'y',
                 responsive: true,
                 maintainAspectRatio: false,
+                ...barChartEntranceOptions(animateEntrance, 'y'),
                 plugins: {
                     legend: { display: false },
                     tooltip: { callbacks: { label: ctx => `정산 ${ctx.parsed.x}건 · 막대를 클릭해 사용 요약 확인` } },
@@ -8204,7 +8349,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let clubUniqueAttendeesChartInstance = null;
 
     // ── 클럽별 참석 인원(중복 제외) — 올해 각 클럽 행사에 참석한 "서로 다른 사람" 수, 많은 순 ──
-    function renderClubUniqueAttendeesChart(historyList) {
+    function renderClubUniqueAttendeesChart(historyList, animateEntrance = false) {
         const canvas = document.getElementById('club-unique-attendees-chart');
         if (!canvas || typeof Chart === 'undefined') return;
 
@@ -8263,6 +8408,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 indexAxis: 'y',
                 responsive: true,
                 maintainAspectRatio: false,
+                ...barChartEntranceOptions(animateEntrance, 'y'),
                 plugins: {
                     legend: { display: false },
                     tooltip: {
@@ -8358,14 +8504,15 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // 차트 탭의 모든 그래프를 한 번에 갱신
-    function renderAllCharts(historyList) {
+    function renderAllCharts(historyList, { allowEntranceAnimation = false } = {}) {
+        const animateEntrance = allowEntranceAnimation ? consumeChartEntranceAnimation() : false;
         updateChartsBudgetStats(historyList);
-        renderOverallMonthlyChart(historyList);
-        renderClubUsageChart(historyList);
-        renderCategoryPieChart(historyList);
-        renderClubActivityChart(historyList);
-        renderClubUniqueAttendeesChart(historyList);
-        renderSelfPayTrendChart(historyList);
+        renderOverallMonthlyChart(historyList, animateEntrance);
+        renderClubUsageChart(historyList, animateEntrance);
+        renderCategoryPieChart(historyList, animateEntrance);
+        renderClubActivityChart(historyList, animateEntrance);
+        renderClubUniqueAttendeesChart(historyList, animateEntrance);
+        renderSelfPayTrendChart(historyList, animateEntrance);
         renderRecentSettlements(historyList);
     }
 
