@@ -1,7 +1,7 @@
 /**
  * Club Expense Settlement App - Main JavaScript Logic
  */
-const APP_VERSION      = '1.6.278';
+const APP_VERSION      = '1.6.279';
 const APP_VERSION_DATE = '2026.08.27';
 
 // 인당 자부담 비용에 따라 강조 박스의 아이콘/색상을 전환 (100원 이상이면 🔥, 0이면 😊)
@@ -1274,6 +1274,49 @@ const AppState = {
             });
             this.firebaseDb.ref().update(updates).catch(err => console.error("클럽 저장 실패:", err));
         }
+    },
+
+    // 관리자 전용 추가 배정 — 일반 예산 수정과 구분하고 잔여금 산정 근거까지 한 로그에 남긴다.
+    addClubBudgetAllocation(clubId, addAmount) {
+        const club = this.clubRegistry[clubId];
+        const allocation = Math.max(0, Number(addAmount) || 0);
+        if (!club || allocation <= 0) return Promise.resolve(false);
+
+        const previousBudget = Math.max(0, Number(club.budget) || 0);
+        const priorUsed = Math.max(0, Number(club.priorUsed) || 0);
+        const usedBudget = Math.max(0, Number(club.usedBudget) || 0);
+        const totalBudget = previousBudget + allocation;
+        const remainingBudget = totalBudget - priorUsed - usedBudget;
+        const clubName = club.name || '이름 없는 클럽';
+
+        this.clubRegistry[clubId] = { ...club, budget: totalBudget };
+        if (!this.firebaseDb) return Promise.resolve(true);
+
+        const updates = { [`clubRegistry/${clubId}`]: this.clubRegistry[clubId] };
+        this.appendAuditUpdate(updates, {
+            action: 'UPDATE',
+            targetType: '클럽 추가 배정',
+            targetId: clubId,
+            targetLabel: clubName,
+            summary: `클럽 '${clubName}' 추가 배정 · 기존 ${SettlementCalculator.formatCurrency(previousBudget)} + 추가 ${SettlementCalculator.formatCurrency(allocation)} = 총 ${SettlementCalculator.formatCurrency(totalBudget)} · 잔여 ${SettlementCalculator.formatCurrency(remainingBudget)}`,
+            clubId,
+            clubName,
+            details: {
+                '기존 배정 금액': previousBudget,
+                '추가 배정 금액': allocation,
+                '총 배정 금액': totalBudget,
+                '올해 기존 사용 금액': priorUsed,
+                '확정 지원금 누적': usedBudget,
+                '추가 배정 후 잔여금': remainingBudget
+            }
+        });
+        return this.firebaseDb.ref().update(updates)
+            .then(() => true)
+            .catch(err => {
+                this.clubRegistry[clubId] = club;
+                console.error('클럽 추가 배정 저장 실패:', err);
+                return false;
+            });
     },
 
     // 관리자 전용: 이 클럽의 인당 85,000원 초과 지원 승인 여부 토글 (다른 필드는 건드리지 않음)
@@ -4124,10 +4167,14 @@ document.addEventListener('DOMContentLoaded', () => {
         return AppState.isLoginAuditEvent(entry);
     }
 
-    function formatAuditDetailValue(value) {
+    function formatAuditDetailValue(value, key = '') {
         if (value === true) return '예';
         if (value === false) return '아니요';
         if (value === null || value === undefined || value === '') return '-';
+        if (typeof value === 'number' && Number.isFinite(value)
+            && /(금액|예산|지원금|잔여|누적)/.test(String(key))) {
+            return SettlementCalculator.formatCurrency(value);
+        }
         return String(value);
     }
 
@@ -4187,7 +4234,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const dateParts = getAuditLogDateParts(entry.timestamp || entry.clientTimestamp);
                 const detailPairs = Object.entries(entry.details || {});
                 const detailsHtml = detailPairs.length
-                    ? `<dl>${detailPairs.map(([key, value]) => `<dt>${AppState.escapeHtml(key)}</dt><dd>${AppState.escapeHtml(formatAuditDetailValue(value))}</dd>`).join('')}</dl>`
+                    ? `<dl>${detailPairs.map(([key, value]) => `<dt>${AppState.escapeHtml(key)}</dt><dd>${AppState.escapeHtml(formatAuditDetailValue(value, key))}</dd>`).join('')}</dl>`
                     : '<p class="audit-log-no-detail">별도로 저장된 변경값이 없습니다.</p>';
                 const actionGroup = getAuditActionGroup(entry.action);
                 const actionClass = actionGroup.toLowerCase();
@@ -5863,6 +5910,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 변경이력 모달
     const CHANGELOG = [
+        { ver: '1.6.279', date: '2026.08.27', items: ['클럽 추가 배정을 일반 예산 수정과 구분해 전체 작업 로그에 별도 기록', '로그 요약과 상세에 기존 배정액·추가 배정액·변경 후 총 배정액·추가 배정 후 잔여금을 함께 표시', '작업 일시·관리자와 기존 사용액·확정 지원금 누적을 보존해 잔여금 산정 근거 확인 가능'] },
         { ver: '1.6.278', date: '2026.08.27', items: ['자부담·회사지원금 추이 곡선을 점별 재생이 아닌 왼쪽부터 오른쪽까지 이어지는 연속 노출 방식으로 개선', 'Light 테마의 페이지·카드·입력창 순백색을 저채도 블루그레이로 낮춰 눈부심 완화', 'PC·모바일에서 차트 좌표·필터·툴팁과 기존 Dark 테마 동작 유지'] },
         { ver: '1.6.277', date: '2026.08.27', items: ['차트 탭 진입 시 세로·가로 막대가 0에서 목표값까지 순차적으로 증가하는 애니메이션 추가', '자부담·회사지원금 추이 곡선을 왼쪽부터 오른쪽으로 그리는 효과와 도넛 차트 회전 효과 적용', '필터·테마·데이터 갱신 때는 모션을 반복하지 않고 모바일 재생시간 단축 및 동작 최소화 설정 지원'] },
         { ver: '1.6.276', date: '2026.08.25', items: ['로그인·접속 이력은 감사 로그 저장 단계에서 제외하고 실제 자료 입력·추가·수정·업데이트·삭제 작업만 표시', '전체 작업 로그를 PC 전체 화면으로 확대하고 연월일·시분초·작업자·권한·PIN·작업 대상을 한눈에 확인하도록 개편', '모바일은 핵심 정보만 간략 표시하고 항목 클릭 시 변경 전후 값과 상세 작업 내용을 펼쳐보도록 최적화'] },
@@ -6905,8 +6953,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (!club) return;
                 openAddClubBudgetModal(club.name, (addAmount) => {
                     if (addAmount <= 0) return;
-                    const newBudget = (club.budget || 0) + addAmount;
-                    AppState.addOrUpdateClub(clubId, club.name, newBudget, club.priorUsed || 0);
+                    AppState.addClubBudgetAllocation(clubId, addAmount);
                     renderClubManagement();
                 });
             });
