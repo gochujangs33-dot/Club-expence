@@ -1,7 +1,7 @@
 /**
  * Club Expense Settlement App - Main JavaScript Logic
  */
-const APP_VERSION      = '1.6.280';
+const APP_VERSION      = '1.6.281';
 const APP_VERSION_DATE = '2026.08.27';
 
 // 인당 자부담 비용에 따라 강조 박스의 아이콘/색상을 전환 (100원 이상이면 🔥, 0이면 😊)
@@ -5910,6 +5910,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 변경이력 모달
     const CHANGELOG = [
+        { ver: '1.6.281', date: '2026.08.27', items: ['카테고리별 비용 비중 도넛을 12시 방향에서 시작해 시계방향으로 연속 노출하는 애니메이션 적용', '도넛 조각별 동시 확대 대신 전체 원을 하나의 부드러운 각도 마스크로 표시', '모바일 재생시간 단축·동작 최소화 설정과 기존 비율·색상·범례·필터 유지'] },
         { ver: '1.6.280', date: '2026.08.27', items: ['관리자 시작 안내의 중복된 4번 로그 기록 확인 항목 제거', '클럽·예산 설정, 정산 기준 확인, 정산 현황 확인 3개 안내를 한 줄로 정돈', '대시보드 상단의 실제 로그 기록 버튼과 전체 작업 로그 기능은 그대로 유지'] },
         { ver: '1.6.279', date: '2026.08.27', items: ['클럽 추가 배정을 일반 예산 수정과 구분해 전체 작업 로그에 별도 기록', '로그 요약과 상세에 기존 배정액·추가 배정액·변경 후 총 배정액·추가 배정 후 잔여금을 함께 표시', '작업 일시·관리자와 기존 사용액·확정 지원금 누적을 보존해 잔여금 산정 근거 확인 가능'] },
         { ver: '1.6.278', date: '2026.08.27', items: ['자부담·회사지원금 추이 곡선을 점별 재생이 아닌 왼쪽부터 오른쪽까지 이어지는 연속 노출 방식으로 개선', 'Light 테마의 페이지·카드·입력창 순백색을 저채도 블루그레이로 낮춰 눈부심 완화', 'PC·모바일에서 차트 좌표·필터·툴팁과 기존 Dark 테마 동작 유지'] },
@@ -7320,15 +7321,15 @@ document.addEventListener('DOMContentLoaded', () => {
         };
     }
 
-    function doughnutChartEntranceOptions(enabled) {
-        if (!enabled) return { animation: false };
+    function doughnutChartEntranceOptions() {
+        // 조각별 기본 확대는 끄고 clockwiseReveal 플러그인이 완성된 도넛을 한 방향으로 노출한다.
+        return { animation: false };
+    }
+
+    function doughnutClockwiseRevealOptions(enabled) {
         return {
-            animation: {
-                animateRotate: true,
-                animateScale: false,
-                duration: compactChartMotion() ? 700 : 900,
-                easing: 'easeOutQuart'
-            }
+            enabled: Boolean(enabled),
+            duration: compactChartMotion() ? 850 : 1150
         };
     }
 
@@ -7388,6 +7389,61 @@ document.addEventListener('DOMContentLoaded', () => {
         beforeDestroy(chart) {
             if (chart.$lineRevealFrame) cancelAnimationFrame(chart.$lineRevealFrame);
             chart.$lineRevealFrame = null;
+        }
+    };
+
+    // 도넛 전체를 12시 방향부터 시계방향으로 한 번에 드러내는 각도 마스크.
+    // 각 조각이 따로 커지지 않아 카테고리 비중의 순서와 연결감이 자연스럽게 보인다.
+    const doughnutClockwiseRevealPlugin = {
+        id: 'clockwiseReveal',
+        afterInit(chart, _args, options) {
+            const enabled = Boolean(options?.enabled);
+            chart.$clockwiseRevealProgress = enabled ? 0 : 1;
+            if (!enabled) return;
+
+            const duration = Math.max(1, Number(options.duration) || 1150);
+            const startAt = performance.now();
+            const drawFrame = now => {
+                if (!chart.canvas || !chart.canvas.isConnected) return;
+                const elapsed = Math.min(1, Math.max(0, (now - startAt) / duration));
+                chart.$clockwiseRevealProgress = elapsed < 0.5
+                    ? 4 * elapsed * elapsed * elapsed
+                    : 1 - Math.pow(-2 * elapsed + 2, 3) / 2;
+                chart.draw();
+                if (elapsed < 1) {
+                    chart.$clockwiseRevealFrame = requestAnimationFrame(drawFrame);
+                } else {
+                    chart.$clockwiseRevealFrame = null;
+                }
+            };
+            chart.$clockwiseRevealFrame = requestAnimationFrame(drawFrame);
+        },
+        beforeDatasetsDraw(chart, _args, options) {
+            chart.$clockwiseRevealClipApplied = false;
+            if (!options?.enabled) return;
+
+            const firstArc = chart.getDatasetMeta(0)?.data?.[0];
+            if (!firstArc) return;
+            const progress = Math.min(1, Math.max(0, Number(chart.$clockwiseRevealProgress) || 0));
+            const radius = Math.max(firstArc.outerRadius || 0, chart.width, chart.height) + 4;
+            const startAngle = -Math.PI / 2;
+
+            chart.ctx.save();
+            chart.ctx.beginPath();
+            chart.ctx.moveTo(firstArc.x, firstArc.y);
+            chart.ctx.arc(firstArc.x, firstArc.y, radius, startAngle, startAngle + (Math.PI * 2 * progress), false);
+            chart.ctx.closePath();
+            chart.ctx.clip();
+            chart.$clockwiseRevealClipApplied = true;
+        },
+        afterDatasetsDraw(chart) {
+            if (!chart.$clockwiseRevealClipApplied) return;
+            chart.ctx.restore();
+            chart.$clockwiseRevealClipApplied = false;
+        },
+        beforeDestroy(chart) {
+            if (chart.$clockwiseRevealFrame) cancelAnimationFrame(chart.$clockwiseRevealFrame);
+            chart.$clockwiseRevealFrame = null;
         }
     };
 
@@ -7483,7 +7539,7 @@ document.addEventListener('DOMContentLoaded', () => {
             ctx.restore();
         }
     };
-    if (typeof Chart !== 'undefined') Chart.register(chartValueLabelPlugin, lineRevealPlugin);
+    if (typeof Chart !== 'undefined') Chart.register(chartValueLabelPlugin, lineRevealPlugin, doughnutClockwiseRevealPlugin);
 
     // 클럽 고유 색상 — clubRegistry.chartColor가 최우선이며, 자동 색상은 조화로운 선별 팔레트 안에서
     // 고정 ID 해시로 배정한다. 차트별 정렬·필터가 바뀌어도 같은 클럽은 항상 같은 계열을 유지한다.
@@ -7837,9 +7893,13 @@ document.addEventListener('DOMContentLoaded', () => {
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
-                ...doughnutChartEntranceOptions(animateEntrance),
+                ...doughnutChartEntranceOptions(),
+                // Chart.js의 rotation 0이 캔버스 12시 방향(-90°)에 해당한다.
+                rotation: 0,
+                circumference: 360,
                 cutout: '62%',
                 plugins: {
+                    clockwiseReveal: doughnutClockwiseRevealOptions(animateEntrance),
                     legend: {
                         position: 'bottom',
                         labels: {
